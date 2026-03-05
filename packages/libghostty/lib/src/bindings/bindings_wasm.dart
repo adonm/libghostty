@@ -494,6 +494,10 @@ class WasmBindings implements GhosttyBindings {
       _fn.call3('ghostty_terminal_get_mode', handle, mode, isAnsi ? 1 : 0) != 0;
 
   @override
+  int terminalGetMouseShape(int handle) =>
+      _fn.call1('ghostty_terminal_get_mouse_shape', handle);
+
+  @override
   int terminalGetScrollbackLength(int handle) =>
       _fn.call1('ghostty_terminal_get_scrollback_length', handle);
 

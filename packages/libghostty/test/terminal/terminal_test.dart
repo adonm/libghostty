@@ -43,9 +43,102 @@ void main() {
       expect(terminal.cursor.visible, isTrue);
     });
 
-    test('modes track terminal state', () {
-      terminal.write(.fromList('\x1b[?2004h'.codeUnits));
-      expect(terminal.modes.bracketedPaste, isTrue);
+    group('modes', () {
+      test('bracketedPaste tracks DECSET 2004', () {
+        terminal.write(.fromList('\x1b[?2004h'.codeUnits));
+        expect(terminal.modes.bracketedPaste, isTrue);
+
+        terminal.write(.fromList('\x1b[?2004l'.codeUnits));
+        expect(terminal.modes.bracketedPaste, isFalse);
+      });
+
+      test('cursorKeyApplication tracks DECSET 1', () {
+        expect(terminal.modes.cursorKeyApplication, isFalse);
+
+        terminal.write(.fromList('\x1b[?1h'.codeUnits));
+        expect(terminal.modes.cursorKeyApplication, isTrue);
+
+        terminal.write(.fromList('\x1b[?1l'.codeUnits));
+        expect(terminal.modes.cursorKeyApplication, isFalse);
+      });
+
+      test('autoWrap tracks DECSET 7', () {
+        expect(terminal.modes.autoWrap, isTrue);
+
+        terminal.write(.fromList('\x1b[?7l'.codeUnits));
+        expect(terminal.modes.autoWrap, isFalse);
+
+        terminal.write(.fromList('\x1b[?7h'.codeUnits));
+        expect(terminal.modes.autoWrap, isTrue);
+      });
+
+      test('insertMode tracks SM 4', () {
+        expect(terminal.modes.insertMode, isFalse);
+
+        terminal.write(.fromList('\x1b[4h'.codeUnits));
+        expect(terminal.modes.insertMode, isTrue);
+
+        terminal.write(.fromList('\x1b[4l'.codeUnits));
+        expect(terminal.modes.insertMode, isFalse);
+      });
+
+      group('mouseTracking', () {
+        test('default is none', () {
+          expect(terminal.modes.mouseEvent, MouseEvent.none);
+        });
+
+        test('DECSET 9 activates x10', () {
+          terminal.write(.fromList('\x1b[?9h'.codeUnits));
+          expect(terminal.modes.mouseEvent, MouseEvent.x10);
+        });
+
+        test('DECSET 1000 activates normal', () {
+          terminal.write(.fromList('\x1b[?1000h'.codeUnits));
+          expect(terminal.modes.mouseEvent, MouseEvent.normal);
+        });
+
+        test('DECSET 1002 activates buttonEvent', () {
+          terminal.write(.fromList('\x1b[?1002h'.codeUnits));
+          expect(terminal.modes.mouseEvent, MouseEvent.button);
+        });
+
+        test('DECSET 1003 activates anyEvent', () {
+          terminal.write(.fromList('\x1b[?1003h'.codeUnits));
+          expect(terminal.modes.mouseEvent, MouseEvent.any);
+        });
+
+        test('DECRST disables mouse tracking', () {
+          terminal.write(.fromList('\x1b[?1000h'.codeUnits));
+          expect(terminal.modes.mouseEvent, MouseEvent.normal);
+
+          terminal.write(.fromList('\x1b[?1000l'.codeUnits));
+          expect(terminal.modes.mouseEvent, MouseEvent.none);
+        });
+      });
+    });
+
+    group('mouseShape', () {
+      test('defaults to text', () {
+        expect(terminal.mouseShape, MouseShape.text);
+      });
+
+      test('OSC 22 sets pointer', () {
+        terminal.write(.fromList('\x1b]22;pointer\x1b\\'.codeUnits));
+        expect(terminal.mouseShape, MouseShape.pointer);
+      });
+
+      test('OSC 22 sets crosshair', () {
+        terminal.write(.fromList('\x1b]22;crosshair\x1b\\'.codeUnits));
+        expect(terminal.mouseShape, MouseShape.crosshair);
+      });
+
+      test('OSC 22 sets default', () {
+        terminal.write(.fromList('\x1b]22;pointer\x1b\\'.codeUnits));
+        expect(terminal.mouseShape, MouseShape.pointer);
+
+        terminal.write(.fromList('\x1b]22;default\x1b\\'.codeUnits));
+        expect(terminal.mouseShape, MouseShape.defaultCursor);
+      });
     });
 
     test('alternate screen switch', () {
@@ -485,6 +578,7 @@ void main() {
           'screen': () => terminal.screen,
           'cursor': () => terminal.cursor,
           'modes': () => terminal.modes,
+          'mouseShape': () => terminal.mouseShape,
           'scrollback': () => terminal.scrollback,
           'hasContentChanges': () => terminal.hasContentChanges,
           'clearContentChanges': () => terminal.clearContentChanges(),

@@ -1,5 +1,7 @@
 import 'package:meta/meta.dart';
 
+import 'mouse.dart';
+
 /// Terminal mode flags set by DECSET/DECRST and SM/RM sequences.
 @immutable
 class TerminalModes {
@@ -25,6 +27,9 @@ class TerminalModes {
   /// Characters insert and shift text right instead of overwriting (SM 4).
   final bool insertMode;
 
+  /// Which mouse events the terminal reports to the application.
+  final MouseEvent mouseEvent;
+
   const TerminalModes({
     this.bracketedPaste = false,
     this.alternateScreen = false,
@@ -33,6 +38,7 @@ class TerminalModes {
     this.autoWrap = true,
     this.originMode = false,
     this.insertMode = false,
+    this.mouseEvent = MouseEvent.none,
   });
 
   @override
@@ -44,6 +50,7 @@ class TerminalModes {
     autoWrap,
     originMode,
     insertMode,
+    mouseEvent,
   );
 
   @override
@@ -55,7 +62,8 @@ class TerminalModes {
       other.keypadApplication == keypadApplication &&
       other.autoWrap == autoWrap &&
       other.originMode == originMode &&
-      other.insertMode == insertMode;
+      other.insertMode == insertMode &&
+      other.mouseEvent == mouseEvent;
 
   TerminalModes copyWith({
     bool? bracketedPaste,
@@ -65,6 +73,7 @@ class TerminalModes {
     bool? autoWrap,
     bool? originMode,
     bool? insertMode,
+    MouseEvent? mouseEvent,
   }) {
     return TerminalModes(
       bracketedPaste: bracketedPaste ?? this.bracketedPaste,
@@ -74,6 +83,7 @@ class TerminalModes {
       autoWrap: autoWrap ?? this.autoWrap,
       originMode: originMode ?? this.originMode,
       insertMode: insertMode ?? this.insertMode,
+      mouseEvent: mouseEvent ?? this.mouseEvent,
     );
   }
 
@@ -87,6 +97,7 @@ class TerminalModes {
     if (autoWrap) flags.add('autoWrap');
     if (originMode) flags.add('originMode');
     if (insertMode) flags.add('insertMode');
+    if (mouseEvent != .none) flags.add('mouseEvent:${mouseEvent.name}');
     return 'TerminalModes(${flags.join(', ')})';
   }
 }

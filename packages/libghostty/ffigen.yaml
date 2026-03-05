@@ -11,6 +11,8 @@
 name: GhosttyBindings
 description: Raw FFI bindings to libghostty-vt.
 output: 'lib/src/ffi/bindings.g.dart'
+preamble: |
+  // ignore_for_file: unused_field
 headers:
   entry-points:
     - '../../ghostty/include/ghostty/vt.h'

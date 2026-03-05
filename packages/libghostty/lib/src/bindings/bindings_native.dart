@@ -467,6 +467,10 @@ class NativeBindings implements GhosttyBindings {
       .ghostty_terminal_get_mode(ffi.Pointer.fromAddress(handle), mode, isAnsi);
 
   @override
+  int terminalGetMouseShape(int handle) =>
+      native.ghostty_terminal_get_mouse_shape(ffi.Pointer.fromAddress(handle));
+
+  @override
   int terminalGetScrollbackLength(int handle) => native
       .ghostty_terminal_get_scrollback_length(ffi.Pointer.fromAddress(handle));
 

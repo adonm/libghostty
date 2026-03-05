@@ -172,6 +172,9 @@ abstract interface class GhosttyBindings {
   // ghostty_terminal_get_mode
   bool terminalGetMode(int handle, int mode, {required bool isAnsi});
 
+  // ghostty_terminal_get_mouse_shape
+  int terminalGetMouseShape(int handle);
+
   // ghostty_terminal_get_bell_count
   int terminalGetBellCount(int handle);
 

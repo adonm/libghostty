@@ -15,6 +15,7 @@ void main() {
       expect(modes.autoWrap, isTrue);
       expect(modes.originMode, isFalse);
       expect(modes.insertMode, isFalse);
+      expect(modes.mouseEvent, MouseEvent.none);
     });
 
     test('equality with same values', () {
@@ -42,6 +43,32 @@ void main() {
       const original = TerminalModes(bracketedPaste: true);
       final modified = original.copyWith(bracketedPaste: false);
       expect(modified.bracketedPaste, isFalse);
+    });
+
+    test('equality includes mouseEvent', () {
+      const a = TerminalModes(mouseEvent: MouseEvent.normal);
+      const b = TerminalModes(mouseEvent: MouseEvent.normal);
+      const c = TerminalModes(mouseEvent: MouseEvent.x10);
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+      expect(a, isNot(equals(c)));
+    });
+
+    test('copyWith mouseEvent', () {
+      const original = TerminalModes();
+      final modified = original.copyWith(mouseEvent: .any);
+      expect(modified.mouseEvent, MouseEvent.any);
+      expect(modified.autoWrap, isTrue);
+    });
+
+    test('toString includes mouseEvent when active', () {
+      const modes = TerminalModes(mouseEvent: .button);
+      expect(modes.toString(), contains('mouseEvent'));
+    });
+
+    test('toString excludes mouseEvent when none', () {
+      const modes = TerminalModes();
+      expect(modes.toString(), isNot(contains('mouseEvent')));
     });
   });
 }

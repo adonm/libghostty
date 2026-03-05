@@ -6,6 +6,7 @@ import '../color.dart';
 import '../exceptions.dart' show DisposedException;
 import 'cursor.dart';
 import 'modes.dart';
+import 'mouse.dart';
 import 'screen.dart';
 import 'scrollback.dart';
 
@@ -26,12 +27,18 @@ import 'scrollback.dart';
 /// terminal.dispose();
 /// ```
 class Terminal {
-  // ANSI / DEC private mode numbers used by terminalGetMode.
-  static const _modeBracketedPaste = 2004;
+  // DEC private mode numbers (DECSET/DECRST, isAnsi: false).
   static const _modeCursorKeys = 1;
-  static const _modeKeypadApplication = 66;
-  static const _modeAutoWrap = 7;
   static const _modeOrigin = 6;
+  static const _modeAutoWrap = 7;
+  static const _modeMouseX10 = 9;
+  static const _modeKeypadApplication = 66;
+  static const _modeMouseNormal = 1000;
+  static const _modeMouseButtonEvent = 1002;
+  static const _modeMouseAnyEvent = 1003;
+  static const _modeBracketedPaste = 2004;
+
+  // ANSI mode numbers (SM/RM, isAnsi: true).
   static const _modeInsert = 4;
 
   static final _ris = Uint8List.fromList('\x1bc'.codeUnits);
@@ -106,19 +113,33 @@ class Terminal {
   TerminalModes get modes {
     _ensureNotDisposed();
 
-    bool mode(int id, {required bool isAnsi}) {
-      return bindings.terminalGetMode(_handle, id, isAnsi: isAnsi);
+    bool dec(int id) => bindings.terminalGetMode(_handle, id, isAnsi: false);
+    bool ansi(int id) => bindings.terminalGetMode(_handle, id, isAnsi: true);
+
+    MouseEvent mouseTracking() {
+      if (dec(_modeMouseAnyEvent)) return MouseEvent.any;
+      if (dec(_modeMouseButtonEvent)) return MouseEvent.button;
+      if (dec(_modeMouseNormal)) return MouseEvent.normal;
+      if (dec(_modeMouseX10)) return MouseEvent.x10;
+      return MouseEvent.none;
     }
 
     return TerminalModes(
       alternateScreen: bindings.terminalIsAlternateScreen(_handle),
-      bracketedPaste: mode(_modeBracketedPaste, isAnsi: false),
-      cursorKeyApplication: mode(_modeCursorKeys, isAnsi: true),
-      keypadApplication: mode(_modeKeypadApplication, isAnsi: true),
-      autoWrap: mode(_modeAutoWrap, isAnsi: true),
-      originMode: mode(_modeOrigin, isAnsi: true),
-      insertMode: mode(_modeInsert, isAnsi: false),
+      bracketedPaste: dec(_modeBracketedPaste),
+      cursorKeyApplication: dec(_modeCursorKeys),
+      keypadApplication: dec(_modeKeypadApplication),
+      autoWrap: dec(_modeAutoWrap),
+      originMode: dec(_modeOrigin),
+      insertMode: ansi(_modeInsert),
+      mouseEvent: mouseTracking(),
     );
+  }
+
+  /// The current mouse pointer shape requested by the application via OSC 22.
+  MouseShape get mouseShape {
+    _ensureNotDisposed();
+    return MouseShape.fromNative(bindings.terminalGetMouseShape(_handle));
   }
 
   /// Fires when BEL (0x07) is received.

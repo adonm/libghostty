@@ -1,19 +1,3 @@
-From bedce2994790b9fc798ca75ab2958931ee59a4ce Mon Sep 17 00:00:00 2001
-From: Elias Andualem <eliasandualem8@gmail.com>
-Date: Sun, 22 Feb 2026 19:47:14 +0800
-Subject: [PATCH] wip: add terminal support with new API functions
-
----
- include/ghostty/vt.h                         |   1 +
- include/ghostty/vt/terminal.h                | 511 +++++++++++++++
- src/lib_vt.zig                               |  27 +
- src/terminal/c/main.zig                      |  29 +
- src/terminal/c/terminal.zig                  | 652 +++++++++++++++++++
- src/terminal/osc/parsers/semantic_prompt.zig |  14 +
- 6 files changed, 1234 insertions(+)
- create mode 100644 include/ghostty/vt/terminal.h
- create mode 100644 src/terminal/c/terminal.zig
-
 diff --git a/include/ghostty/vt.h b/include/ghostty/vt.h
 index 4f8fef88e..1a4656385 100644
 --- a/include/ghostty/vt.h
@@ -28,10 +12,10 @@ index 4f8fef88e..1a4656385 100644
  #ifdef __cplusplus
 diff --git a/include/ghostty/vt/terminal.h b/include/ghostty/vt/terminal.h
 new file mode 100644
-index 000000000..56285c7d2
+index 000000000..6c1d0d9bc
 --- /dev/null
 +++ b/include/ghostty/vt/terminal.h
-@@ -0,0 +1,511 @@
+@@ -0,0 +1,524 @@
 +/**
 + * @file terminal.h
 + *
@@ -536,6 +520,19 @@ index 000000000..56285c7d2
 +    uint8_t *out,
 +    int out_size);
 +
++/**
++ * Returns the current mouse pointer shape set by the terminal application.
++ *
++ * Maps to the W3C CSS cursor specification values. Returns 8 (text) when
++ * no shape has been set by the application.
++ *
++ * @param terminal The terminal handle, must not be NULL
++ * @return The mouse shape as a uint8 value from the MouseShape enum
++ *
++ * @ingroup terminal
++ */
++uint8_t ghostty_terminal_get_mouse_shape(GhosttyTerminal terminal);
++
 +#ifdef __cplusplus
 +}
 +#endif
@@ -544,10 +541,10 @@ index 000000000..56285c7d2
 +
 +#endif /* GHOSTTY_VT_TERMINAL_H */
 diff --git a/src/lib_vt.zig b/src/lib_vt.zig
-index 03a883e20..70ded6d0a 100644
+index 426660621..e6697a4dd 100644
 --- a/src/lib_vt.zig
 +++ b/src/lib_vt.zig
-@@ -141,6 +141,33 @@ comptime {
+@@ -144,6 +144,34 @@ comptime {
          @export(&c.sgr_attribute_tag, .{ .name = "ghostty_sgr_attribute_tag" });
          @export(&c.sgr_attribute_value, .{ .name = "ghostty_sgr_attribute_value" });
  
@@ -573,6 +570,7 @@ index 03a883e20..70ded6d0a 100644
 +        @export(&c.terminal_get_scrollback_line, .{ .name = "ghostty_terminal_get_scrollback_line" });
 +        @export(&c.terminal_is_alternate_screen, .{ .name = "ghostty_terminal_is_alternate_screen" });
 +        @export(&c.terminal_get_mode, .{ .name = "ghostty_terminal_get_mode" });
++        @export(&c.terminal_get_mouse_shape, .{ .name = "ghostty_terminal_get_mouse_shape" });
 +        @export(&c.terminal_get_bell_count, .{ .name = "ghostty_terminal_get_bell_count" });
 +        @export(&c.terminal_reset_bell_count, .{ .name = "ghostty_terminal_reset_bell_count" });
 +        @export(&c.terminal_has_title_changed, .{ .name = "ghostty_terminal_has_title_changed" });
@@ -582,7 +580,7 @@ index 03a883e20..70ded6d0a 100644
          if (builtin.target.cpu.arch.isWasm()) {
              const alloc = @import("lib/allocator/convenience.zig");
 diff --git a/src/terminal/c/main.zig b/src/terminal/c/main.zig
-index bc92597f5..4fdb7c8f1 100644
+index bc92597f5..64d133061 100644
 --- a/src/terminal/c/main.zig
 +++ b/src/terminal/c/main.zig
 @@ -4,6 +4,7 @@ pub const key_event = @import("key_event.zig");
@@ -593,7 +591,7 @@ index bc92597f5..4fdb7c8f1 100644
  
  // The full C API, unexported.
  pub const osc_new = osc.new;
-@@ -52,6 +53,33 @@ pub const key_encoder_encode = key_encode.encode;
+@@ -52,6 +53,34 @@ pub const key_encoder_encode = key_encode.encode;
  
  pub const paste_is_safe = paste.is_safe;
  
@@ -619,6 +617,7 @@ index bc92597f5..4fdb7c8f1 100644
 +pub const terminal_get_scrollback_line = terminal.get_scrollback_line;
 +pub const terminal_is_alternate_screen = terminal.is_alternate_screen;
 +pub const terminal_get_mode = terminal.get_mode;
++pub const terminal_get_mouse_shape = terminal.get_mouse_shape;
 +pub const terminal_get_bell_count = terminal.get_bell_count;
 +pub const terminal_reset_bell_count = terminal.reset_bell_count;
 +pub const terminal_has_title_changed = terminal.has_title_changed;
@@ -627,7 +626,7 @@ index bc92597f5..4fdb7c8f1 100644
  test {
      _ = color;
      _ = osc;
-@@ -59,6 +87,7 @@ test {
+@@ -59,6 +88,7 @@ test {
      _ = key_encode;
      _ = paste;
      _ = sgr;
@@ -637,10 +636,10 @@ index bc92597f5..4fdb7c8f1 100644
      _ = @import("../../lib/allocator.zig");
 diff --git a/src/terminal/c/terminal.zig b/src/terminal/c/terminal.zig
 new file mode 100644
-index 000000000..5b42a4eb6
+index 000000000..f25e12a69
 --- /dev/null
 +++ b/src/terminal/c/terminal.zig
-@@ -0,0 +1,652 @@
+@@ -0,0 +1,657 @@
 +const std = @import("std");
 +const Allocator = std.mem.Allocator;
 +const lib_alloc = @import("../../lib/allocator.zig");
@@ -1101,6 +1100,11 @@ index 000000000..5b42a4eb6
 +    return wrapper.terminal.modes.get(mode);
 +}
 +
++pub fn get_mouse_shape(handle: Handle) callconv(.c) u8 {
++    const wrapper = handle orelse return 8; // .text
++    return @intCast(@intFromEnum(wrapper.terminal.mouse_shape));
++}
++
 +pub fn get_bell_count(handle: Handle) callconv(.c) u32 {
 +    const wrapper = handle orelse return 0;
 +    return wrapper.bell_count;
@@ -1293,11 +1297,34 @@ index 000000000..5b42a4eb6
 +    try std.testing.expectEqual(@as(u32, 0), get_bell_count(null));
 +    try std.testing.expect(!has_title_changed(null));
 +}
+diff --git a/src/terminal/color.zig b/src/terminal/color.zig
+index 3b806f8b8..a3d4b63b8 100644
+--- a/src/terminal/color.zig
++++ b/src/terminal/color.zig
+@@ -97,12 +97,12 @@ pub fn generate256Color(
+     const base8_lab: [8]LAB = base8: {
+         var base8: [8]LAB = .{
+             .fromRgb(bg),
+-            LAB.fromRgb(base[1]),
+-            LAB.fromRgb(base[2]),
+-            LAB.fromRgb(base[3]),
+-            LAB.fromRgb(base[4]),
+-            LAB.fromRgb(base[5]),
+-            LAB.fromRgb(base[6]),
++            .fromRgb(base[1]),
++            .fromRgb(base[2]),
++            .fromRgb(base[3]),
++            .fromRgb(base[4]),
++            .fromRgb(base[5]),
++            .fromRgb(base[6]),
+             .fromRgb(fg),
+         };
+ 
 diff --git a/src/terminal/osc/parsers/semantic_prompt.zig b/src/terminal/osc/parsers/semantic_prompt.zig
-index c2872b28d..d5282a34a 100644
+index d3a117515..2ea7fd91c 100644
 --- a/src/terminal/osc/parsers/semantic_prompt.zig
 +++ b/src/terminal/osc/parsers/semantic_prompt.zig
-@@ -15,6 +15,20 @@ pub const Command = struct {
+@@ -17,6 +17,20 @@ pub const Command = struct {
      action: Action,
      options_unvalidated: []const u8,
  
@@ -1318,6 +1345,3 @@ index c2872b28d..d5282a34a 100644
      pub const Action = enum {
          fresh_line, // 'L'
          fresh_line_new_prompt, // 'A'
--- 
-2.40.1
-
