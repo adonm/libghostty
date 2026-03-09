@@ -4,12 +4,12 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/widgets.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:libghostty/libghostty.dart';
 import 'package:flterm/foundation.dart';
 import 'package:flterm/rendering.dart';
 import 'package:flterm/src/rendering/terminal_renderer.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:libghostty/libghostty.dart';
 
 void main() {
   group('TerminalRenderBox layout', () {

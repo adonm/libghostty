@@ -4,11 +4,11 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flterm/foundation.dart';
+import 'package:flterm/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart';
-import 'package:flterm/foundation.dart';
-import 'package:flterm/rendering.dart';
 
 void main() {
   group('Cursor shape goldens', () {

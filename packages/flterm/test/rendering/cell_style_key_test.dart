@@ -1,7 +1,7 @@
+import 'package:flterm/src/rendering/cell_style_key.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart';
-import 'package:flterm/src/rendering/cell_style_key.dart';
 
 void main() {
   const fg = Color(0xFFD8D8D8);

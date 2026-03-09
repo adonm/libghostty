@@ -1,6 +1,6 @@
+import 'package:flterm/src/rendering/color_run.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flterm/src/rendering/color_run.dart';
 
 void main() {
   group('ColorRun', () {
