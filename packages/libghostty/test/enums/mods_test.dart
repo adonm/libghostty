@@ -81,6 +81,31 @@ void main() {
       expect((Mods.ctrl | Mods.alt).isEmpty, isFalse);
     });
 
+    test('^ operator toggles flags', () {
+      final mods = Mods.ctrl | Mods.shift;
+      final toggled = mods ^ Mods.ctrl;
+
+      expect(toggled.hasCtrl, isFalse);
+      expect(toggled.hasShift, isTrue);
+    });
+
+    test('^ operator sets flags that are absent', () {
+      final toggled = Mods.ctrl ^ Mods.alt;
+
+      expect(toggled.hasCtrl, isTrue);
+      expect(toggled.hasAlt, isTrue);
+    });
+
+    test('^ with same value produces none', () {
+      final toggled = Mods.ctrl ^ Mods.ctrl;
+      expect(toggled.isEmpty, isTrue);
+    });
+
+    test('^ with none is identity', () {
+      final toggled = Mods.shift ^ Mods.none;
+      expect(toggled, equals(Mods.shift));
+    });
+
     test('equality compares by value', () {
       expect(Mods.ctrl | Mods.shift, equals(Mods.shift | Mods.ctrl));
       expect(Mods.ctrl, isNot(equals(Mods.alt)));

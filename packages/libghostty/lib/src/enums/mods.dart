@@ -74,6 +74,16 @@ final class Mods {
   @override
   bool operator ==(Object other) => other is Mods && other.value == value;
 
+  /// Toggles the flags in the right operand.
+  ///
+  /// ```dart
+  /// final mods = Mods.ctrl | Mods.shift;
+  /// final toggled = mods ^ Mods.ctrl;
+  /// print(toggled.hasCtrl);  // false
+  /// print(toggled.hasShift); // true
+  /// ```
+  Mods operator ^(Mods other) => Mods(value ^ other.value);
+
   @override
   String toString() {
     if (isEmpty) return 'Mods.none';
