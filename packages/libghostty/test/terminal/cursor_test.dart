@@ -25,6 +25,7 @@ void main() {
       expect(cursor.row, 0);
       expect(cursor.col, 0);
       expect(cursor.visible, isTrue);
+      expect(cursor.blinking, isTrue);
       expect(cursor.shape, CursorShape.block);
     });
 
@@ -44,6 +45,10 @@ void main() {
       );
       expect(
         base,
+        isNot(equals(const Cursor(row: 5, col: 10, blinking: false))),
+      );
+      expect(
+        base,
         isNot(
           equals(const Cursor(row: 5, col: 10, shape: CursorShape.underline)),
         ),
@@ -57,6 +62,11 @@ void main() {
       expect(moved.col, 11);
       expect(moved.shape, CursorShape.bar);
       expect(moved.visible, isTrue);
+      expect(moved.blinking, isTrue);
+
+      final nonBlinking = cursor.copyWith(blinking: false);
+      expect(nonBlinking.blinking, isFalse);
+      expect(nonBlinking.row, 5);
     });
   });
 }
