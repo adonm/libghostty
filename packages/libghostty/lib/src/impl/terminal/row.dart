@@ -7,6 +7,8 @@ part of 'terminal.dart';
 /// become invalid after the next [RenderState.update] call.
 class Row {
   final int _handle;
+  var _cachedRawRow = 0;
+  var _rawRowValid = false;
 
   Row._(this._handle);
 
@@ -44,5 +46,15 @@ class Row {
   /// previous row.
   bool get wrapContinuation => check(bindings.rowGetWrapContinuation(_rawRow));
 
-  int get _rawRow => check(bindings.rowIteratorGetRawRow(_handle));
+  int get _rawRow {
+    if (!_rawRowValid) {
+      _cachedRawRow = check(bindings.rowIteratorGetRawRow(_handle));
+      _rawRowValid = true;
+    }
+    return _cachedRawRow;
+  }
+
+  /// Invalidate the cached raw row pointer. Called when the iterator
+  /// advances to a new row.
+  void _invalidate() => _rawRowValid = false;
 }

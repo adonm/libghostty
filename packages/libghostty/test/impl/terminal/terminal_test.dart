@@ -625,6 +625,71 @@ void main() {
         terminal.renderState.nextCell();
         expect(terminal.renderState.cell.hasStyling, isTrue);
       });
+
+      test('codepoint returns value for text and 0 for empty cell', () {
+        terminal.write(Uint8List.fromList('Z'.codeUnits));
+        terminal.renderState.update();
+        terminal.renderState.nextRow();
+
+        terminal.renderState.nextCell();
+        expect(terminal.renderState.cell.codepoint, 0x5A);
+
+        // Skip to an empty cell beyond the written content.
+        terminal.renderState.nextCell();
+        expect(terminal.renderState.cell.codepoint, 0);
+      });
+
+      test('graphemeLength is 1 for single codepoint and 0 for empty', () {
+        terminal.write(Uint8List.fromList('A'.codeUnits));
+        terminal.renderState.update();
+        terminal.renderState.nextRow();
+
+        terminal.renderState.nextCell();
+        expect(terminal.renderState.cell.graphemeLength, 1);
+
+        terminal.renderState.nextCell();
+        expect(terminal.renderState.cell.graphemeLength, 0);
+      });
+
+      test('backgroundArgb returns default when no background is set', () {
+        const defaultBg = 0xFF000000;
+        terminal.write(Uint8List.fromList('A'.codeUnits));
+        terminal.renderState.update();
+        terminal.renderState.nextRow();
+        terminal.renderState.nextCell();
+        expect(terminal.renderState.cell.backgroundArgb(defaultBg), defaultBg);
+      });
+
+      test('backgroundArgb returns packed ARGB for RGB background', () {
+        terminal.write(Uint8List.fromList('\x1b[48;2;255;128;0mX'.codeUnits));
+        terminal.renderState.update();
+        terminal.renderState.nextRow();
+        terminal.renderState.nextCell();
+        expect(
+          terminal.renderState.cell.backgroundArgb(0xFF000000),
+          0xFFFF8000,
+        );
+      });
+
+      test('foregroundArgb returns default when no foreground is set', () {
+        const defaultFg = 0xFFFFFFFF;
+        terminal.write(Uint8List.fromList('A'.codeUnits));
+        terminal.renderState.update();
+        terminal.renderState.nextRow();
+        terminal.renderState.nextCell();
+        expect(terminal.renderState.cell.foregroundArgb(defaultFg), defaultFg);
+      });
+
+      test('foregroundArgb returns packed ARGB for RGB foreground', () {
+        terminal.write(Uint8List.fromList('\x1b[38;2;0;255;64mY'.codeUnits));
+        terminal.renderState.update();
+        terminal.renderState.nextRow();
+        terminal.renderState.nextCell();
+        expect(
+          terminal.renderState.cell.foregroundArgb(0xFFFFFFFF),
+          0xFF00FF40,
+        );
+      });
     });
 
     group('Cursor properties', () {

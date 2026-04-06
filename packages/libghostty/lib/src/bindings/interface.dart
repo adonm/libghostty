@@ -197,6 +197,8 @@ abstract interface class GhosttyBindings {
   CResult<List<int>> rowCellsGetGraphemes(int cells, int len);
   CResult<RgbColor> rowCellsGetBgColor(int cells);
   CResult<RgbColor> rowCellsGetFgColor(int cells);
+  CResult<int> rowCellsGetBgColorArgb(int cells);
+  CResult<int> rowCellsGetFgColorArgb(int cells);
 
   CResult<int> cellGetCodepoint(int cell);
   CResult<CellContentTag> cellGetContentTag(int cell);

@@ -1585,6 +1585,44 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<int> rowCellsGetBgColorArgb(int cells) {
+    final outPtr = _exports.ghostty_wasm_alloc_u8_array(3);
+    final result = Result.fromValue(
+      _exports.ghostty_render_state_row_cells_get(
+        cells,
+        RenderStateRowCellsData.bgColor.value,
+        outPtr,
+      ),
+    );
+    final argb =
+        0xFF000000 |
+        (_mem.readU8(outPtr) << 16) |
+        (_mem.readU8(outPtr + _layout.colorRgbG) << 8) |
+        _mem.readU8(outPtr + _layout.colorRgbB);
+    _exports.ghostty_wasm_free_u8_array(outPtr, 3);
+    return (result, argb);
+  }
+
+  @override
+  CResult<int> rowCellsGetFgColorArgb(int cells) {
+    final outPtr = _exports.ghostty_wasm_alloc_u8_array(3);
+    final result = Result.fromValue(
+      _exports.ghostty_render_state_row_cells_get(
+        cells,
+        RenderStateRowCellsData.fgColor.value,
+        outPtr,
+      ),
+    );
+    final argb =
+        0xFF000000 |
+        (_mem.readU8(outPtr) << 16) |
+        (_mem.readU8(outPtr + _layout.colorRgbG) << 8) |
+        _mem.readU8(outPtr + _layout.colorRgbB);
+    _exports.ghostty_wasm_free_u8_array(outPtr, 3);
+    return (result, argb);
+  }
+
+  @override
   CResult<int> cellGetCodepoint(int cell) => _cellGetU32(cell, .codepoint);
 
   @override

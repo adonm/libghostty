@@ -190,7 +190,10 @@ class RenderState {
       checkCode(bindings.rowIteratorInit(_rowIterator, _handle));
     }
     final hasNext = bindings.rowIteratorNext(_rowIterator);
-    if (hasNext) _cellStarted = false;
+    if (hasNext) {
+      _cellStarted = false;
+      row._invalidate();
+    }
     return hasNext;
   }
 

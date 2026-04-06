@@ -9,9 +9,11 @@ class Cell {
   final int _handle;
   var _rawCell = 0;
   var _graphemeLen = 0;
+  var _codepoint = 0;
   var _styleId = -1;
   var _prevStyleId = -1;
   var _cachedStyle = const Style();
+  var _wide = CellWide.narrow;
 
   Cell._(this._handle);
 
@@ -24,17 +26,15 @@ class Cell {
   }
 
   /// The cell's primary codepoint, or 0 if the cell has no text.
-  int get codepoint {
-    if (_graphemeLen == 0) return 0;
-    return check(bindings.cellGetCodepoint(_rawCell));
-  }
+  /// Cached during [_refresh] to avoid redundant FFI calls. Accessed
+  /// by both the renderer hot loop and [content].
+  int get codepoint => _codepoint;
 
   /// The cell's full grapheme cluster as a string, or empty if the cell
   /// has no text.
   String get content {
     if (_graphemeLen == 0) return '';
-    final cp = check(bindings.cellGetCodepoint(_rawCell));
-    if (_graphemeLen == 1 && cp < 128) return String.fromCharCode(cp);
+    if (_graphemeLen == 1) return String.fromCharCode(_codepoint);
     return String.fromCharCodes(
       check(bindings.rowCellsGetGraphemes(_handle, _graphemeLen)),
     );
@@ -49,11 +49,14 @@ class Cell {
     return code == .success ? rgb : null;
   }
 
+  /// Number of codepoints in this cell's grapheme cluster (0 = empty).
+  int get graphemeLength => _graphemeLen;
+
   /// Whether the cell has a hyperlink (OSC 8).
-  bool get hasHyperlink => check(bindings.cellGetHasHyperlink(_rawCell));
+  bool get hasHyperlink => bindings.cellGetHasHyperlink(_rawCell).$2;
 
   /// Whether the cell has non-default styling attributes.
-  bool get hasStyling => check(bindings.cellGetHasStyling(_rawCell));
+  bool get hasStyling => bindings.cellGetHasStyling(_rawCell).$2;
 
   /// Whether the cell contains any text.
   bool get hasText => _graphemeLen > 0;
@@ -80,9 +83,24 @@ class Cell {
   /// share identical styling attributes.
   int get styleId => _styleId;
 
-  /// The cell's width: [CellWidth.normal], [CellWidth.wide], or
-  /// [CellWidth.spacerTail] (second cell of a wide character).
-  CellWidth get wide => check(bindings.cellGetWide(_rawCell));
+  /// The cell's width: [CellWide.narrow], [CellWide.wide], or
+  /// [CellWide.spacerTail] (second cell of a wide character).
+  /// Cached during [_refresh] to avoid per-access FFI calls.
+  CellWide get wide => _wide;
+
+  /// Resolved background as packed ARGB int, or [defaultArgb] if unset.
+  /// Avoids [RgbColor] allocation on the hot path.
+  int backgroundArgb(int defaultArgb) {
+    final (code, argb) = bindings.rowCellsGetBgColorArgb(_handle);
+    return code == .success ? argb : defaultArgb;
+  }
+
+  /// Resolved foreground as packed ARGB int, or [defaultArgb] if unset.
+  /// Avoids [RgbColor] allocation on the hot path.
+  int foregroundArgb(int defaultArgb) {
+    final (code, argb) = bindings.rowCellsGetFgColorArgb(_handle);
+    return code == .success ? argb : defaultArgb;
+  }
 
   bool _advance() {
     if (!bindings.rowCellsNext(_handle)) return false;
@@ -94,5 +112,39 @@ class Cell {
     _rawCell = check(bindings.rowCellsGetRawCell(_handle));
     _graphemeLen = check(bindings.rowCellsGetGraphemeLen(_handle));
     _styleId = check(bindings.cellGetStyleId(_rawCell));
+    _codepoint = _graphemeLen > 0
+        ? check(bindings.cellGetCodepoint(_rawCell))
+        : 0;
+    // Non-empty cells with narrow codepoints (ASCII, Latin, Cyrillic) are
+    // always narrow. Empty cells and wide-range codepoints need the FFI
+    // query: empty cells can be spacer tails of wide characters.
+    _wide = _graphemeLen > 0 && !_couldBeWide(_codepoint)
+        ? .narrow
+        : bindings.cellGetWide(_rawCell).$2;
+  }
+
+  /// Fast heuristic: returns false for codepoints that are definitively
+  /// narrow (< U+1100), avoiding the FFI call to [cellGetWide].
+  static bool _couldBeWide(int codepoint) {
+    if (codepoint < 0x1100) return false;
+    if (codepoint < 0x1160) return true;
+    if (codepoint < 0x2329) return false;
+    if (codepoint <= 0x232A) return true;
+    if (codepoint < 0x2E80) return false;
+    if (codepoint <= 0x9FFF) return true;
+    if (codepoint < 0xA960) return false;
+    if (codepoint <= 0xA97F) return true;
+    if (codepoint < 0xAC00) return false;
+    if (codepoint <= 0xD7FF) return true;
+    if (codepoint < 0xF900) return false;
+    if (codepoint <= 0xFAFF) return true;
+    if (codepoint < 0xFE10) return false;
+    if (codepoint <= 0xFE6F) return true;
+    if (codepoint < 0xFF01) return false;
+    if (codepoint <= 0xFF60) return true;
+    if (codepoint < 0xFFE0) return false;
+    if (codepoint <= 0xFFE6) return true;
+    if (codepoint < 0x1F000) return false;
+    return true;
   }
 }

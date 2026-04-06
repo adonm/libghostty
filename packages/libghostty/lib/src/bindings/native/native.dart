@@ -1220,6 +1220,28 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<int> rowCellsGetBgColorArgb(int cells) {
+    final result = native.ghostty_render_state_row_cells_get(
+      ffi.Pointer.fromAddress(cells),
+      .bgColor,
+      _outColorRgb.cast(),
+    );
+    final color = _outColorRgb.ref;
+    return (result, 0xFF000000 | (color.r << 16) | (color.g << 8) | color.b);
+  }
+
+  @override
+  CResult<int> rowCellsGetFgColorArgb(int cells) {
+    final result = native.ghostty_render_state_row_cells_get(
+      ffi.Pointer.fromAddress(cells),
+      .fgColor,
+      _outColorRgb.cast(),
+    );
+    final color = _outColorRgb.ref;
+    return (result, 0xFF000000 | (color.r << 16) | (color.g << 8) | color.b);
+  }
+
+  @override
   CResult<int> cellGetCodepoint(int cell) => _cellGetU32(cell, .codepoint);
 
   @override
