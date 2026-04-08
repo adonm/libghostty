@@ -1,0 +1,119 @@
+import 'dart:ui';
+
+import 'package:flutter/painting.dart';
+import 'package:libghostty/libghostty.dart';
+
+import '../atlas/glyph_atlas.dart';
+import '../paint_state.dart';
+import 'terminal_painter.dart';
+
+/// Renders the terminal cursor in block, hollow, underline, and bar shapes.
+///
+/// Shape rules:
+/// - Focused: uses the shape reported by the terminal (block, underline, bar).
+/// - Unfocused: block becomes hollow outline; other shapes draw as-is.
+/// - Password input + focused: forces filled block with a centered black dot
+///   (no character glyph is drawn). When unfocused, normal rules apply.
+///
+/// For focused block cursors (non-password), draws the character under
+/// the cursor using an atlas glyph tinted with the terminal background
+/// color, so the text contrasts against the cursor fill. The glyph and
+/// paint are pre-resolved during state sync.
+///
+/// Cursor opacity from [CursorTheme.opacity] is applied when focused.
+/// Unfocused cursors draw at full opacity.
+class CursorPainter implements TerminalPainter {
+  final Paint _paint;
+  final GlyphAtlas _atlas;
+  final TerminalPaintState _state;
+
+  CursorPainter(this._state, this._atlas) : _paint = Paint();
+
+  @override
+  void paint(Canvas canvas) {
+    final cursor = _state.cursor;
+    if (!cursor.visible ||
+        cursor.row < 0 ||
+        cursor.row >= _state.rows ||
+        cursor.col < 0 ||
+        cursor.col >= _state.cols ||
+        !_state.blinkVisible) {
+      return;
+    }
+
+    final metrics = _state.metrics;
+    final focused = _state.cursorFocused;
+    final opacity = focused ? (_state.theme.cursor.opacity * 255).ceil() : 255;
+    _paint.color = Color(
+      (opacity << 24) | (_state.cursorColorArgb & 0x00FFFFFF),
+    );
+
+    final endCol = (cursor.col + (_state.cursorWide ? 2 : 1)).clamp(
+      0,
+      _state.cols,
+    );
+    final rect = metrics.cellRangeRect(cursor.row, cursor.col, endCol, .zero);
+    final CursorShape shape = switch (cursor.passwordInput && focused) {
+      true => .block,
+      false => !focused && cursor.shape == .block ? .blockHollow : cursor.shape,
+    };
+
+    _paint.style = PaintingStyle.fill;
+    switch (shape) {
+      case .block:
+        canvas.drawRect(rect, _paint);
+        if (cursor.passwordInput) {
+          _paint.color = const Color(0xFF000000);
+          canvas.drawCircle(
+            rect.center,
+            (metrics.cellHeight * 0.15).clamp(1.5, 4.0),
+            _paint,
+          );
+        } else {
+          final entry = _state.cursorGlyphEntry;
+          final atlasImage = _atlas.image;
+          if (entry != null && atlasImage != null) {
+            final inverseDpr = 1.0 / _atlas.devicePixelRatio;
+            canvas.drawImageRect(
+              atlasImage,
+              Rect.fromLTRB(
+                entry.srcLeft,
+                entry.srcTop,
+                entry.srcRight,
+                entry.srcBottom,
+              ),
+              Rect.fromLTWH(
+                cursor.col * metrics.cellWidth,
+                cursor.row * metrics.cellHeight,
+                (entry.srcRight - entry.srcLeft) * inverseDpr,
+                (entry.srcBottom - entry.srcTop) * inverseDpr,
+              ),
+              _state.cursorGlyphPaint,
+            );
+          }
+        }
+
+      case .blockHollow:
+        _paint
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5;
+        canvas.drawRect(rect, _paint);
+
+      case .underline:
+        final thickness = metrics.underlineThickness;
+        final underlineY =
+            cursor.row * metrics.cellHeight + metrics.underlinePosition;
+        canvas.drawRect(
+          .fromLTWH(rect.left, underlineY, rect.width, thickness),
+          _paint,
+        );
+
+      case .bar:
+        final barWidth = (metrics.cellWidth / 6).clamp(1.0, 3.0);
+        canvas.drawRect(
+          .fromLTWH(rect.left, rect.top, barWidth, rect.height),
+          _paint,
+        );
+    }
+  }
+}

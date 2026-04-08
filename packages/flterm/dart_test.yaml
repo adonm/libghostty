@@ -1,0 +1,3 @@
+tags:
+  ffi:
+    test_on: vm
