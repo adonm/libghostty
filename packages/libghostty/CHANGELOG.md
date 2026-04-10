@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.7
+
+### Fixed
+
+- **Linux prebuilts**: the prebuilt Linux binaries failed to load on glibc
+  systems with `invalid ELF header`. They now ship as
+  `libghostty-x86_64-linux-gnu.so` and `libghostty-aarch64-linux-gnu.so`,
+  properly linked against glibc.
+
 ## 0.0.6
 
 ### Added
