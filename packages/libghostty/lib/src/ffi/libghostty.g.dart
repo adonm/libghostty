@@ -74,6 +74,52 @@ Result ghostty_cell_get(
   ffi.Pointer<ffi.Void> out,
 ) => Result.fromValue(_ghostty_cell_get(cell, data.value, out));
 
+/// Get multiple data fields from a cell in a single call.
+///
+/// Each element in the keys array specifies a data kind, and the
+/// corresponding element in the values array receives the result.
+///
+/// Processing stops at the first error; on success out_written
+/// is set to count, on error it is set to the index of the
+/// failing key (i.e. the number of values successfully written).
+///
+/// @param cell The cell value
+/// @param count Number of key/value pairs
+/// @param keys Array of data kinds to query
+/// @param values Array of output pointers (types must match each key's
+/// documented output type)
+/// @param[out] out_written On return, receives the number of values
+/// successfully written (may be NULL)
+/// @return GHOSTTY_SUCCESS if all queries succeed
+///
+/// @ingroup screen
+@ffi.Native<
+  ffi.Int Function(
+    Cell,
+    ffi.Size,
+    ffi.Pointer<ffi.UnsignedInt>,
+    ffi.Pointer<ffi.Pointer<ffi.Void>>,
+    ffi.Pointer<ffi.Size>,
+  )
+>(symbol: 'ghostty_cell_get_multi', isLeaf: true)
+external int _ghostty_cell_get_multi(
+  int cell,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+);
+
+Result ghostty_cell_get_multi(
+  DartCell cell,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+) => Result.fromValue(
+  _ghostty_cell_get_multi(cell, count, keys, values, out_written),
+);
+
 /// Get the RGB color components.
 ///
 /// This function extracts the individual red, green, and blue components
@@ -364,6 +410,48 @@ Result ghostty_grid_ref_graphemes(
   int buf_len,
   ffi.Pointer<ffi.Size> out_len,
 ) => Result.fromValue(_ghostty_grid_ref_graphemes(ref, buf, buf_len, out_len));
+
+/// Get the hyperlink URI for the cell at the grid reference's position.
+///
+/// Writes the URI bytes into the provided buffer. If the cell has no
+/// hyperlink, out_len is set to 0 and GHOSTTY_SUCCESS is returned.
+///
+/// If the buffer is too small (or NULL), the function returns
+/// GHOSTTY_OUT_OF_SPACE and writes the required number of bytes to
+/// out_len. The caller can then retry with a sufficiently sized buffer.
+///
+/// @param ref Pointer to the grid reference
+/// @param buf Output buffer for the URI bytes (may be NULL)
+/// @param buf_len Size of the output buffer in bytes
+/// @param[out] out_len On success, the number of bytes written. On
+/// GHOSTTY_OUT_OF_SPACE, the required buffer size in bytes.
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the ref's
+/// node is NULL, GHOSTTY_OUT_OF_SPACE if the buffer is too small
+///
+/// @ingroup grid_ref
+@ffi.Native<
+  ffi.Int Function(
+    ffi.Pointer<GridRef>,
+    ffi.Pointer<ffi.Uint8>,
+    ffi.Size,
+    ffi.Pointer<ffi.Size>,
+  )
+>(symbol: 'ghostty_grid_ref_hyperlink_uri', isLeaf: true)
+external int _ghostty_grid_ref_hyperlink_uri(
+  ffi.Pointer<GridRef> ref,
+  ffi.Pointer<ffi.Uint8> buf,
+  int buf_len,
+  ffi.Pointer<ffi.Size> out_len,
+);
+
+Result ghostty_grid_ref_hyperlink_uri(
+  ffi.Pointer<GridRef> ref,
+  ffi.Pointer<ffi.Uint8> buf,
+  int buf_len,
+  ffi.Pointer<ffi.Size> out_len,
+) => Result.fromValue(
+  _ghostty_grid_ref_hyperlink_uri(ref, buf, buf_len, out_len),
+);
 
 /// Get the row from a grid reference.
 ///
@@ -803,6 +891,630 @@ external void ghostty_key_event_set_utf8(
   KeyEvent event,
   ffi.Pointer<ffi.Char> utf8,
   int len,
+);
+
+/// Get data from a kitty graphics storage instance.
+///
+/// The output pointer must be of the appropriate type for the requested
+/// data kind.
+///
+/// Returns GHOSTTY_NO_VALUE when Kitty graphics are disabled at build time.
+///
+/// @param graphics The kitty graphics handle
+/// @param data The type of data to extract
+/// @param[out] out Pointer to store the extracted data
+/// @return GHOSTTY_SUCCESS on success
+///
+/// @ingroup kitty_graphics
+@ffi.Native<
+  ffi.Int Function(KittyGraphics, ffi.UnsignedInt, ffi.Pointer<ffi.Void>)
+>(symbol: 'ghostty_kitty_graphics_get', isLeaf: true)
+external int _ghostty_kitty_graphics_get(
+  KittyGraphics graphics,
+  int data,
+  ffi.Pointer<ffi.Void> out,
+);
+
+Result ghostty_kitty_graphics_get(
+  KittyGraphics graphics,
+  KittyGraphicsData data,
+  ffi.Pointer<ffi.Void> out,
+) => Result.fromValue(_ghostty_kitty_graphics_get(graphics, data.value, out));
+
+/// Look up a Kitty graphics image by its image ID.
+///
+/// Returns NULL if no image with the given ID exists or if Kitty graphics
+/// are disabled at build time.
+///
+/// @param graphics The kitty graphics handle
+/// @param image_id The image ID to look up
+/// @return An opaque image handle, or NULL if not found
+///
+/// @ingroup kitty_graphics
+@ffi.Native<KittyGraphicsImage Function(KittyGraphics, ffi.Uint32)>(
+  isLeaf: true,
+)
+external KittyGraphicsImage ghostty_kitty_graphics_image(
+  KittyGraphics graphics,
+  int image_id,
+);
+
+/// Get data from a Kitty graphics image.
+///
+/// The output pointer must be of the appropriate type for the requested
+/// data kind.
+///
+/// @param image The image handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @param data The data kind to query
+/// @param[out] out Pointer to receive the queried value
+/// @return GHOSTTY_SUCCESS on success
+///
+/// @ingroup kitty_graphics
+@ffi.Native<
+  ffi.Int Function(KittyGraphicsImage, ffi.UnsignedInt, ffi.Pointer<ffi.Void>)
+>(symbol: 'ghostty_kitty_graphics_image_get', isLeaf: true)
+external int _ghostty_kitty_graphics_image_get(
+  KittyGraphicsImage image,
+  int data,
+  ffi.Pointer<ffi.Void> out,
+);
+
+Result ghostty_kitty_graphics_image_get(
+  KittyGraphicsImage image,
+  KittyGraphicsImageData data,
+  ffi.Pointer<ffi.Void> out,
+) =>
+    Result.fromValue(_ghostty_kitty_graphics_image_get(image, data.value, out));
+
+/// Get multiple data fields from a Kitty graphics image in a single call.
+///
+/// This is an optimization over calling ghostty_kitty_graphics_image_get()
+/// repeatedly, particularly useful in environments with high per-call
+/// overhead such as FFI or Cgo.
+///
+/// Each element in the keys array specifies a data kind, and the
+/// corresponding element in the values array receives the result.
+/// The type of each values[i] pointer must match the output type
+/// documented for keys[i].
+///
+/// Processing stops at the first error; on success out_written
+/// is set to count, on error it is set to the index of the
+/// failing key (i.e. the number of values successfully written).
+///
+/// @param image The image handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @param count Number of key/value pairs
+/// @param keys Array of data kinds to query
+/// @param values Array of output pointers (types must match each key's
+/// documented output type)
+/// @param[out] out_written On return, receives the number of values
+/// successfully written (may be NULL)
+/// @return GHOSTTY_SUCCESS if all queries succeed
+///
+/// @ingroup kitty_graphics
+@ffi.Native<
+  ffi.Int Function(
+    KittyGraphicsImage,
+    ffi.Size,
+    ffi.Pointer<ffi.UnsignedInt>,
+    ffi.Pointer<ffi.Pointer<ffi.Void>>,
+    ffi.Pointer<ffi.Size>,
+  )
+>(symbol: 'ghostty_kitty_graphics_image_get_multi', isLeaf: true)
+external int _ghostty_kitty_graphics_image_get_multi(
+  KittyGraphicsImage image,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+);
+
+Result ghostty_kitty_graphics_image_get_multi(
+  KittyGraphicsImage image,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+) => Result.fromValue(
+  _ghostty_kitty_graphics_image_get_multi(
+    image,
+    count,
+    keys,
+    values,
+    out_written,
+  ),
+);
+
+/// Get data from the current placement in a placement iterator.
+///
+/// Call ghostty_kitty_graphics_placement_next() at least once before
+/// calling this function.
+///
+/// @param iterator The iterator handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @param data The data kind to query
+/// @param[out] out Pointer to receive the queried value
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the
+/// iterator is NULL or not positioned on a placement
+///
+/// @ingroup kitty_graphics
+@ffi.Native<
+  ffi.Int Function(
+    KittyGraphicsPlacementIterator,
+    ffi.UnsignedInt,
+    ffi.Pointer<ffi.Void>,
+  )
+>(symbol: 'ghostty_kitty_graphics_placement_get', isLeaf: true)
+external int _ghostty_kitty_graphics_placement_get(
+  KittyGraphicsPlacementIterator iterator,
+  int data,
+  ffi.Pointer<ffi.Void> out,
+);
+
+Result ghostty_kitty_graphics_placement_get(
+  KittyGraphicsPlacementIterator iterator,
+  KittyGraphicsPlacementData data,
+  ffi.Pointer<ffi.Void> out,
+) => Result.fromValue(
+  _ghostty_kitty_graphics_placement_get(iterator, data.value, out),
+);
+
+/// Get multiple data fields from the current placement in a single call.
+///
+/// This is an optimization over calling ghostty_kitty_graphics_placement_get()
+/// repeatedly, particularly useful in environments with high per-call
+/// overhead such as FFI or Cgo.
+///
+/// Each element in the keys array specifies a data kind, and the
+/// corresponding element in the values array receives the result.
+/// The type of each values[i] pointer must match the output type
+/// documented for keys[i].
+///
+/// Processing stops at the first error; on success out_written
+/// is set to count, on error it is set to the index of the
+/// failing key (i.e. the number of values successfully written).
+///
+/// @param iterator The iterator handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @param count Number of key/value pairs
+/// @param keys Array of data kinds to query
+/// @param values Array of output pointers (types must match each key's
+/// documented output type)
+/// @param[out] out_written On return, receives the number of values
+/// successfully written (may be NULL)
+/// @return GHOSTTY_SUCCESS if all queries succeed
+///
+/// @ingroup kitty_graphics
+@ffi.Native<
+  ffi.Int Function(
+    KittyGraphicsPlacementIterator,
+    ffi.Size,
+    ffi.Pointer<ffi.UnsignedInt>,
+    ffi.Pointer<ffi.Pointer<ffi.Void>>,
+    ffi.Pointer<ffi.Size>,
+  )
+>(symbol: 'ghostty_kitty_graphics_placement_get_multi', isLeaf: true)
+external int _ghostty_kitty_graphics_placement_get_multi(
+  KittyGraphicsPlacementIterator iterator,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+);
+
+Result ghostty_kitty_graphics_placement_get_multi(
+  KittyGraphicsPlacementIterator iterator,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+) => Result.fromValue(
+  _ghostty_kitty_graphics_placement_get_multi(
+    iterator,
+    count,
+    keys,
+    values,
+    out_written,
+  ),
+);
+
+/// Compute the grid cell size of the current placement.
+///
+/// Returns the number of columns and rows that the placement occupies
+/// in the terminal grid. If the placement specifies explicit columns
+/// and rows, those are returned directly; otherwise they are calculated
+/// from the pixel size and cell dimensions.
+///
+/// @param iterator The placement iterator positioned on a placement
+/// @param image The image handle for this placement's image
+/// @param terminal The terminal handle
+/// @param[out] out_cols On success, receives the number of columns
+/// @param[out] out_rows On success, receives the number of rows
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if any handle
+/// is NULL or the iterator is not positioned, GHOSTTY_NO_VALUE when
+/// Kitty graphics are disabled
+///
+/// @ingroup kitty_graphics
+@ffi.Native<
+  ffi.Int Function(
+    KittyGraphicsPlacementIterator,
+    KittyGraphicsImage,
+    Terminal,
+    ffi.Pointer<ffi.Uint32>,
+    ffi.Pointer<ffi.Uint32>,
+  )
+>(symbol: 'ghostty_kitty_graphics_placement_grid_size', isLeaf: true)
+external int _ghostty_kitty_graphics_placement_grid_size(
+  KittyGraphicsPlacementIterator iterator,
+  KittyGraphicsImage image,
+  Terminal terminal,
+  ffi.Pointer<ffi.Uint32> out_cols,
+  ffi.Pointer<ffi.Uint32> out_rows,
+);
+
+Result ghostty_kitty_graphics_placement_grid_size(
+  KittyGraphicsPlacementIterator iterator,
+  KittyGraphicsImage image,
+  Terminal terminal,
+  ffi.Pointer<ffi.Uint32> out_cols,
+  ffi.Pointer<ffi.Uint32> out_rows,
+) => Result.fromValue(
+  _ghostty_kitty_graphics_placement_grid_size(
+    iterator,
+    image,
+    terminal,
+    out_cols,
+    out_rows,
+  ),
+);
+
+/// Free a placement iterator.
+///
+/// @param iterator The iterator handle to free (may be NULL)
+///
+/// @ingroup kitty_graphics
+@ffi.Native<ffi.Void Function(KittyGraphicsPlacementIterator)>(isLeaf: true)
+external void ghostty_kitty_graphics_placement_iterator_free(
+  KittyGraphicsPlacementIterator iterator,
+);
+
+/// Create a new placement iterator instance.
+///
+/// All fields except the allocator are left undefined until populated
+/// via ghostty_kitty_graphics_get() with
+/// GHOSTTY_KITTY_GRAPHICS_DATA_PLACEMENT_ITERATOR.
+///
+/// @param allocator Pointer to allocator, or NULL to use the default allocator
+/// @param[out] out_iterator On success, receives the created iterator handle
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_OUT_OF_MEMORY on allocation
+/// failure
+///
+/// @ingroup kitty_graphics
+@ffi.Native<
+  ffi.Int Function(
+    ffi.Pointer<Allocator>,
+    ffi.Pointer<KittyGraphicsPlacementIterator>,
+  )
+>(symbol: 'ghostty_kitty_graphics_placement_iterator_new', isLeaf: true)
+external int _ghostty_kitty_graphics_placement_iterator_new(
+  ffi.Pointer<Allocator> allocator,
+  ffi.Pointer<KittyGraphicsPlacementIterator> out_iterator,
+);
+
+Result ghostty_kitty_graphics_placement_iterator_new(
+  ffi.Pointer<Allocator> allocator,
+  ffi.Pointer<KittyGraphicsPlacementIterator> out_iterator,
+) => Result.fromValue(
+  _ghostty_kitty_graphics_placement_iterator_new(allocator, out_iterator),
+);
+
+/// Set an option on a placement iterator.
+///
+/// Use GHOSTTY_KITTY_GRAPHICS_PLACEMENT_ITERATOR_OPTION_LAYER with a
+/// KittyPlacementLayer value to filter placements by z-layer.
+/// The filter is applied during iteration: ghostty_kitty_graphics_placement_next()
+/// will skip placements that do not match the configured layer.
+///
+/// The default layer is GHOSTTY_KITTY_PLACEMENT_LAYER_ALL (no filtering).
+///
+/// @param iterator The iterator handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @param option The option to set
+/// @param value Pointer to the value (type depends on option; NULL returns
+/// GHOSTTY_INVALID_VALUE)
+/// @return GHOSTTY_SUCCESS on success
+///
+/// @ingroup kitty_graphics
+@ffi.Native<
+  ffi.Int Function(
+    KittyGraphicsPlacementIterator,
+    ffi.UnsignedInt,
+    ffi.Pointer<ffi.Void>,
+  )
+>(symbol: 'ghostty_kitty_graphics_placement_iterator_set', isLeaf: true)
+external int _ghostty_kitty_graphics_placement_iterator_set(
+  KittyGraphicsPlacementIterator iterator,
+  int option,
+  ffi.Pointer<ffi.Void> value,
+);
+
+Result ghostty_kitty_graphics_placement_iterator_set(
+  KittyGraphicsPlacementIterator iterator,
+  KittyGraphicsPlacementIteratorOption option,
+  ffi.Pointer<ffi.Void> value,
+) => Result.fromValue(
+  _ghostty_kitty_graphics_placement_iterator_set(iterator, option.value, value),
+);
+
+/// Advance the placement iterator to the next placement.
+///
+/// If a layer filter has been set via
+/// ghostty_kitty_graphics_placement_iterator_set(), only placements
+/// matching that layer are returned.
+///
+/// @param iterator The iterator handle (may be NULL)
+/// @return true if advanced to the next placement, false if at the end
+///
+/// @ingroup kitty_graphics
+@ffi.Native<ffi.Bool Function(KittyGraphicsPlacementIterator)>(isLeaf: true)
+external bool ghostty_kitty_graphics_placement_next(
+  KittyGraphicsPlacementIterator iterator,
+);
+
+/// Compute the rendered pixel size of the current placement.
+///
+/// Takes into account the placement's source rectangle, specified
+/// columns/rows, and aspect ratio to calculate the final rendered
+/// pixel dimensions.
+///
+/// @param iterator The placement iterator positioned on a placement
+/// @param image The image handle for this placement's image
+/// @param terminal The terminal handle
+/// @param[out] out_width On success, receives the width in pixels
+/// @param[out] out_height On success, receives the height in pixels
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if any handle
+/// is NULL or the iterator is not positioned, GHOSTTY_NO_VALUE when
+/// Kitty graphics are disabled
+///
+/// @ingroup kitty_graphics
+@ffi.Native<
+  ffi.Int Function(
+    KittyGraphicsPlacementIterator,
+    KittyGraphicsImage,
+    Terminal,
+    ffi.Pointer<ffi.Uint32>,
+    ffi.Pointer<ffi.Uint32>,
+  )
+>(symbol: 'ghostty_kitty_graphics_placement_pixel_size', isLeaf: true)
+external int _ghostty_kitty_graphics_placement_pixel_size(
+  KittyGraphicsPlacementIterator iterator,
+  KittyGraphicsImage image,
+  Terminal terminal,
+  ffi.Pointer<ffi.Uint32> out_width,
+  ffi.Pointer<ffi.Uint32> out_height,
+);
+
+Result ghostty_kitty_graphics_placement_pixel_size(
+  KittyGraphicsPlacementIterator iterator,
+  KittyGraphicsImage image,
+  Terminal terminal,
+  ffi.Pointer<ffi.Uint32> out_width,
+  ffi.Pointer<ffi.Uint32> out_height,
+) => Result.fromValue(
+  _ghostty_kitty_graphics_placement_pixel_size(
+    iterator,
+    image,
+    terminal,
+    out_width,
+    out_height,
+  ),
+);
+
+/// Compute the grid rectangle occupied by the current placement.
+///
+/// Uses the placement's pin, the image dimensions, and the terminal's
+/// cell/pixel geometry to calculate the bounding rectangle. Virtual
+/// placements (unicode placeholders) return GHOSTTY_NO_VALUE.
+///
+/// @param terminal The terminal handle
+/// @param image The image handle for this placement's image
+/// @param iterator The placement iterator positioned on a placement
+/// @param[out] out_selection On success, receives the bounding rectangle
+/// as a selection with rectangle=true
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if any handle
+/// is NULL or the iterator is not positioned, GHOSTTY_NO_VALUE for
+/// virtual placements or when Kitty graphics are disabled
+///
+/// @ingroup kitty_graphics
+@ffi.Native<
+  ffi.Int Function(
+    KittyGraphicsPlacementIterator,
+    KittyGraphicsImage,
+    Terminal,
+    ffi.Pointer<Selection>,
+  )
+>(symbol: 'ghostty_kitty_graphics_placement_rect', isLeaf: true)
+external int _ghostty_kitty_graphics_placement_rect(
+  KittyGraphicsPlacementIterator iterator,
+  KittyGraphicsImage image,
+  Terminal terminal,
+  ffi.Pointer<Selection> out_selection,
+);
+
+Result ghostty_kitty_graphics_placement_rect(
+  KittyGraphicsPlacementIterator iterator,
+  KittyGraphicsImage image,
+  Terminal terminal,
+  ffi.Pointer<Selection> out_selection,
+) => Result.fromValue(
+  _ghostty_kitty_graphics_placement_rect(
+    iterator,
+    image,
+    terminal,
+    out_selection,
+  ),
+);
+
+/// Get all rendering geometry for a placement in a single call.
+///
+/// Combines pixel size, grid size, viewport position, and source
+/// rectangle into one struct. Initialize with
+/// GHOSTTY_INIT_SIZED(KittyGraphicsPlacementRenderInfo).
+///
+/// When viewport_visible is false, the placement is fully off-screen
+/// or is a virtual placement; viewport_col and viewport_row may
+/// contain meaningless values in that case.
+///
+/// @param iterator The iterator positioned on a placement
+/// @param image The image handle for this placement's image
+/// @param terminal The terminal handle
+/// @param[out] out_info Pointer to receive the rendering geometry
+/// @return GHOSTTY_SUCCESS on success
+///
+/// @ingroup kitty_graphics
+@ffi.Native<
+  ffi.Int Function(
+    KittyGraphicsPlacementIterator,
+    KittyGraphicsImage,
+    Terminal,
+    ffi.Pointer<KittyGraphicsPlacementRenderInfo>,
+  )
+>(symbol: 'ghostty_kitty_graphics_placement_render_info', isLeaf: true)
+external int _ghostty_kitty_graphics_placement_render_info(
+  KittyGraphicsPlacementIterator iterator,
+  KittyGraphicsImage image,
+  Terminal terminal,
+  ffi.Pointer<KittyGraphicsPlacementRenderInfo> out_info,
+);
+
+Result ghostty_kitty_graphics_placement_render_info(
+  KittyGraphicsPlacementIterator iterator,
+  KittyGraphicsImage image,
+  Terminal terminal,
+  ffi.Pointer<KittyGraphicsPlacementRenderInfo> out_info,
+) => Result.fromValue(
+  _ghostty_kitty_graphics_placement_render_info(
+    iterator,
+    image,
+    terminal,
+    out_info,
+  ),
+);
+
+/// Get the resolved source rectangle for the current placement.
+///
+/// Applies kitty protocol semantics: a width or height of 0 in the
+/// placement means "use the full image dimension", and the resulting
+/// rectangle is clamped to the actual image bounds. The returned
+/// values are in pixels and are ready to use for texture sampling.
+///
+/// @param iterator The placement iterator positioned on a placement
+/// @param image The image handle for this placement's image
+/// @param[out] out_x Source rect x origin in pixels
+/// @param[out] out_y Source rect y origin in pixels
+/// @param[out] out_width Source rect width in pixels
+/// @param[out] out_height Source rect height in pixels
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if any
+/// handle is NULL or the iterator is not positioned
+///
+/// @ingroup kitty_graphics
+@ffi.Native<
+  ffi.Int Function(
+    KittyGraphicsPlacementIterator,
+    KittyGraphicsImage,
+    ffi.Pointer<ffi.Uint32>,
+    ffi.Pointer<ffi.Uint32>,
+    ffi.Pointer<ffi.Uint32>,
+    ffi.Pointer<ffi.Uint32>,
+  )
+>(symbol: 'ghostty_kitty_graphics_placement_source_rect', isLeaf: true)
+external int _ghostty_kitty_graphics_placement_source_rect(
+  KittyGraphicsPlacementIterator iterator,
+  KittyGraphicsImage image,
+  ffi.Pointer<ffi.Uint32> out_x,
+  ffi.Pointer<ffi.Uint32> out_y,
+  ffi.Pointer<ffi.Uint32> out_width,
+  ffi.Pointer<ffi.Uint32> out_height,
+);
+
+Result ghostty_kitty_graphics_placement_source_rect(
+  KittyGraphicsPlacementIterator iterator,
+  KittyGraphicsImage image,
+  ffi.Pointer<ffi.Uint32> out_x,
+  ffi.Pointer<ffi.Uint32> out_y,
+  ffi.Pointer<ffi.Uint32> out_width,
+  ffi.Pointer<ffi.Uint32> out_height,
+) => Result.fromValue(
+  _ghostty_kitty_graphics_placement_source_rect(
+    iterator,
+    image,
+    out_x,
+    out_y,
+    out_width,
+    out_height,
+  ),
+);
+
+/// Get the viewport-relative grid position of the current placement.
+///
+/// Converts the placement's internal pin to viewport-relative column and
+/// row coordinates. The returned coordinates represent the top-left
+/// corner of the placement in the viewport's grid coordinate space.
+///
+/// The row value can be negative when the placement's origin has
+/// scrolled above the top of the viewport. For example, a 4-row
+/// image that has scrolled up by 2 rows returns row=-2, meaning
+/// its top 2 rows are above the visible area but its bottom 2 rows
+/// are still on screen. Embedders should use these coordinates
+/// directly when computing the destination rectangle for rendering;
+/// the embedder is responsible for clipping the portion of the image
+/// that falls outside the viewport.
+///
+/// Returns GHOSTTY_SUCCESS for any placement that is at least
+/// partially visible in the viewport. Returns GHOSTTY_NO_VALUE when
+/// the placement is completely outside the viewport (its bottom edge
+/// is above the viewport or its top edge is at or below the last
+/// viewport row), or when the placement is a virtual (unicode
+/// placeholder) placement.
+///
+/// @param iterator The placement iterator positioned on a placement
+/// @param image The image handle for this placement's image
+/// @param terminal The terminal handle
+/// @param[out] out_col On success, receives the viewport-relative column
+/// @param[out] out_row On success, receives the viewport-relative row
+/// (may be negative for partially visible placements)
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_NO_VALUE if fully
+/// off-screen or virtual, GHOSTTY_INVALID_VALUE if any handle
+/// is NULL or the iterator is not positioned
+///
+/// @ingroup kitty_graphics
+@ffi.Native<
+  ffi.Int Function(
+    KittyGraphicsPlacementIterator,
+    KittyGraphicsImage,
+    Terminal,
+    ffi.Pointer<ffi.Int32>,
+    ffi.Pointer<ffi.Int32>,
+  )
+>(symbol: 'ghostty_kitty_graphics_placement_viewport_pos', isLeaf: true)
+external int _ghostty_kitty_graphics_placement_viewport_pos(
+  KittyGraphicsPlacementIterator iterator,
+  KittyGraphicsImage image,
+  Terminal terminal,
+  ffi.Pointer<ffi.Int32> out_col,
+  ffi.Pointer<ffi.Int32> out_row,
+);
+
+Result ghostty_kitty_graphics_placement_viewport_pos(
+  KittyGraphicsPlacementIterator iterator,
+  KittyGraphicsImage image,
+  Terminal terminal,
+  ffi.Pointer<ffi.Int32> out_col,
+  ffi.Pointer<ffi.Int32> out_row,
+) => Result.fromValue(
+  _ghostty_kitty_graphics_placement_viewport_pos(
+    iterator,
+    image,
+    terminal,
+    out_col,
+    out_row,
+  ),
 );
 
 /// Encode a DECRPM (DEC Private Mode Report) response sequence.
@@ -1390,6 +2102,52 @@ Result ghostty_render_state_get(
   ffi.Pointer<ffi.Void> out,
 ) => Result.fromValue(_ghostty_render_state_get(state, data.value, out));
 
+/// Get multiple data fields from a render state in a single call.
+///
+/// Each element in the keys array specifies a data kind, and the
+/// corresponding element in the values array receives the result.
+///
+/// Processing stops at the first error; on success out_written
+/// is set to count, on error it is set to the index of the
+/// failing key (i.e. the number of values successfully written).
+///
+/// @param state The render state handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @param count Number of key/value pairs
+/// @param keys Array of data kinds to query
+/// @param values Array of output pointers (types must match each key's
+/// documented output type)
+/// @param[out] out_written On return, receives the number of values
+/// successfully written (may be NULL)
+/// @return GHOSTTY_SUCCESS if all queries succeed
+///
+/// @ingroup render
+@ffi.Native<
+  ffi.Int Function(
+    RenderState,
+    ffi.Size,
+    ffi.Pointer<ffi.UnsignedInt>,
+    ffi.Pointer<ffi.Pointer<ffi.Void>>,
+    ffi.Pointer<ffi.Size>,
+  )
+>(symbol: 'ghostty_render_state_get_multi', isLeaf: true)
+external int _ghostty_render_state_get_multi(
+  RenderState state,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+);
+
+Result ghostty_render_state_get_multi(
+  RenderState state,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+) => Result.fromValue(
+  _ghostty_render_state_get_multi(state, count, keys, values, out_written),
+);
+
 /// Create a new render state instance.
 ///
 /// @param allocator Pointer to allocator, or NULL to use the default allocator
@@ -1450,6 +2208,58 @@ Result ghostty_render_state_row_cells_get(
   ffi.Pointer<ffi.Void> out,
 ) => Result.fromValue(
   _ghostty_render_state_row_cells_get(cells, data.value, out),
+);
+
+/// Get multiple data fields from the current cell in a single call.
+///
+/// Each element in the keys array specifies a data kind, and the
+/// corresponding element in the values array receives the result.
+///
+/// Processing stops at the first error; on success out_written
+/// is set to count, on error it is set to the index of the
+/// failing key (i.e. the number of values successfully written).
+///
+/// @param cells The row cells handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @param count Number of key/value pairs
+/// @param keys Array of data kinds to query
+/// @param values Array of output pointers (types must match each key's
+/// documented output type)
+/// @param[out] out_written On return, receives the number of values
+/// successfully written (may be NULL)
+/// @return GHOSTTY_SUCCESS if all queries succeed
+///
+/// @ingroup render
+@ffi.Native<
+  ffi.Int Function(
+    RenderStateRowCells,
+    ffi.Size,
+    ffi.Pointer<ffi.UnsignedInt>,
+    ffi.Pointer<ffi.Pointer<ffi.Void>>,
+    ffi.Pointer<ffi.Size>,
+  )
+>(symbol: 'ghostty_render_state_row_cells_get_multi', isLeaf: true)
+external int _ghostty_render_state_row_cells_get_multi(
+  RenderStateRowCells cells,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+);
+
+Result ghostty_render_state_row_cells_get_multi(
+  RenderStateRowCells cells,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+) => Result.fromValue(
+  _ghostty_render_state_row_cells_get_multi(
+    cells,
+    count,
+    keys,
+    values,
+    out_written,
+  ),
 );
 
 /// Create a new row cells instance.
@@ -1552,6 +2362,58 @@ Result ghostty_render_state_row_get(
   RenderStateRowData data,
   ffi.Pointer<ffi.Void> out,
 ) => Result.fromValue(_ghostty_render_state_row_get(iterator, data.value, out));
+
+/// Get multiple data fields from the current row in a single call.
+///
+/// Each element in the keys array specifies a data kind, and the
+/// corresponding element in the values array receives the result.
+///
+/// Processing stops at the first error; on success out_written
+/// is set to count, on error it is set to the index of the
+/// failing key (i.e. the number of values successfully written).
+///
+/// @param iterator The iterator handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @param count Number of key/value pairs
+/// @param keys Array of data kinds to query
+/// @param values Array of output pointers (types must match each key's
+/// documented output type)
+/// @param[out] out_written On return, receives the number of values
+/// successfully written (may be NULL)
+/// @return GHOSTTY_SUCCESS if all queries succeed
+///
+/// @ingroup render
+@ffi.Native<
+  ffi.Int Function(
+    RenderStateRowIterator,
+    ffi.Size,
+    ffi.Pointer<ffi.UnsignedInt>,
+    ffi.Pointer<ffi.Pointer<ffi.Void>>,
+    ffi.Pointer<ffi.Size>,
+  )
+>(symbol: 'ghostty_render_state_row_get_multi', isLeaf: true)
+external int _ghostty_render_state_row_get_multi(
+  RenderStateRowIterator iterator,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+);
+
+Result ghostty_render_state_row_get_multi(
+  RenderStateRowIterator iterator,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+) => Result.fromValue(
+  _ghostty_render_state_row_get_multi(
+    iterator,
+    count,
+    keys,
+    values,
+    out_written,
+  ),
+);
 
 /// Free a render-state row iterator.
 ///
@@ -1712,6 +2574,52 @@ external int _ghostty_row_get(int row, int data, ffi.Pointer<ffi.Void> out);
 
 Result ghostty_row_get(DartRow row, RowData data, ffi.Pointer<ffi.Void> out) =>
     Result.fromValue(_ghostty_row_get(row, data.value, out));
+
+/// Get multiple data fields from a row in a single call.
+///
+/// Each element in the keys array specifies a data kind, and the
+/// corresponding element in the values array receives the result.
+///
+/// Processing stops at the first error; on success out_written
+/// is set to count, on error it is set to the index of the
+/// failing key (i.e. the number of values successfully written).
+///
+/// @param row The row value
+/// @param count Number of key/value pairs
+/// @param keys Array of data kinds to query
+/// @param values Array of output pointers (types must match each key's
+/// documented output type)
+/// @param[out] out_written On return, receives the number of values
+/// successfully written (may be NULL)
+/// @return GHOSTTY_SUCCESS if all queries succeed
+///
+/// @ingroup screen
+@ffi.Native<
+  ffi.Int Function(
+    Row,
+    ffi.Size,
+    ffi.Pointer<ffi.UnsignedInt>,
+    ffi.Pointer<ffi.Pointer<ffi.Void>>,
+    ffi.Pointer<ffi.Size>,
+  )
+>(symbol: 'ghostty_row_get_multi', isLeaf: true)
+external int _ghostty_row_get_multi(
+  int row,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+);
+
+Result ghostty_row_get_multi(
+  DartRow row,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+) => Result.fromValue(
+  _ghostty_row_get_multi(row, count, keys, values, out_written),
+);
 
 /// Get the tag from an SGR attribute.
 ///
@@ -1971,6 +2879,69 @@ external void ghostty_style_default(ffi.Pointer<Style> style);
 @ffi.Native<ffi.Bool Function(ffi.Pointer<Style>)>(isLeaf: true)
 external bool ghostty_style_is_default(ffi.Pointer<Style> style);
 
+/// Built-in log callback that writes to stderr.
+///
+/// Formats each message as "[level](scope): message\n".
+/// Can be passed directly to ghostty_sys_set():
+///
+/// @code
+/// ghostty_sys_set(GHOSTTY_SYS_OPT_LOG, &ghostty_sys_log_stderr);
+/// @endcode
+@ffi.Native<
+  ffi.Void Function(
+    ffi.Pointer<ffi.Void>,
+    ffi.UnsignedInt,
+    ffi.Pointer<ffi.Uint8>,
+    ffi.Size,
+    ffi.Pointer<ffi.Uint8>,
+    ffi.Size,
+  )
+>(symbol: 'ghostty_sys_log_stderr', isLeaf: true)
+external void _ghostty_sys_log_stderr(
+  ffi.Pointer<ffi.Void> userdata,
+  int level,
+  ffi.Pointer<ffi.Uint8> scope,
+  int scope_len,
+  ffi.Pointer<ffi.Uint8> message,
+  int message_len,
+);
+
+void ghostty_sys_log_stderr(
+  ffi.Pointer<ffi.Void> userdata,
+  SysLogLevel level,
+  ffi.Pointer<ffi.Uint8> scope,
+  int scope_len,
+  ffi.Pointer<ffi.Uint8> message,
+  int message_len,
+) => _ghostty_sys_log_stderr(
+  userdata,
+  level.value,
+  scope,
+  scope_len,
+  message,
+  message_len,
+);
+
+/// Set a system-level option.
+///
+/// Configures a process-global implementation function. These should be
+/// set once at startup before using any terminal functionality that
+/// depends on them.
+///
+/// @param option The option to set
+/// @param value  Pointer to the value (type depends on the option),
+/// or NULL to clear it
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the
+/// option is not recognized
+@ffi.Native<ffi.Int Function(ffi.UnsignedInt, ffi.Pointer<ffi.Void>)>(
+  symbol: 'ghostty_sys_set',
+  isLeaf: true,
+)
+external int _ghostty_sys_set(int option, ffi.Pointer<ffi.Void> value);
+
+Result ghostty_sys_set(SysOption option, ffi.Pointer<ffi.Void> value) =>
+    Result.fromValue(_ghostty_sys_set(option.value, value));
+
 /// Free a terminal instance.
 ///
 /// Releases all resources associated with the terminal. After this call,
@@ -2011,6 +2982,58 @@ Result ghostty_terminal_get(
   TerminalData data,
   ffi.Pointer<ffi.Void> out,
 ) => Result.fromValue(_ghostty_terminal_get(terminal, data.value, out));
+
+/// Get multiple data fields from a terminal in a single call.
+///
+/// This is an optimization over calling ghostty_terminal_get()
+/// repeatedly, particularly useful in environments with high per-call
+/// overhead such as FFI or Cgo.
+///
+/// Each element in the keys array specifies a data kind, and the
+/// corresponding element in the values array receives the result.
+/// The type of each values[i] pointer must match the output type
+/// documented for keys[i].
+///
+/// Processing stops at the first error; on success out_written
+/// is set to count, on error it is set to the index of the
+/// failing key (i.e. the number of values successfully written).
+///
+/// @param terminal The terminal handle (may be NULL)
+/// @param count Number of key/value pairs
+/// @param keys Array of data kinds to query
+/// @param values Array of output pointers (types must match each key's
+/// documented output type)
+/// @param[out] out_written On return, receives the number of values
+/// successfully written (may be NULL)
+/// @return GHOSTTY_SUCCESS if all queries succeed
+///
+/// @ingroup terminal
+@ffi.Native<
+  ffi.Int Function(
+    Terminal,
+    ffi.Size,
+    ffi.Pointer<ffi.UnsignedInt>,
+    ffi.Pointer<ffi.Pointer<ffi.Void>>,
+    ffi.Pointer<ffi.Size>,
+  )
+>(symbol: 'ghostty_terminal_get_multi', isLeaf: true)
+external int _ghostty_terminal_get_multi(
+  Terminal terminal,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+);
+
+Result ghostty_terminal_get_multi(
+  Terminal terminal,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+) => Result.fromValue(
+  _ghostty_terminal_get_multi(terminal, count, keys, values, out_written),
+);
 
 /// Resolve a point in the terminal grid to a grid reference.
 ///
@@ -2133,6 +3156,55 @@ Result ghostty_terminal_new(
   ffi.Pointer<Terminal> terminal,
   TerminalOptions options,
 ) => Result.fromValue(_ghostty_terminal_new(allocator, terminal, options));
+
+/// Convert a grid reference back to a point in the given coordinate system.
+///
+/// This is the inverse of ghostty_terminal_grid_ref(): given a grid reference,
+/// it returns the x/y coordinates in the requested coordinate system (active,
+/// viewport, screen, or history).
+///
+/// The grid reference must have been obtained from the same terminal instance.
+/// Like all grid references, it is only valid until the next mutating terminal
+/// call.
+///
+/// Not every grid reference is representable in every coordinate system. For
+/// example, a cell in scrollback history cannot be expressed in active
+/// coordinates, and a cell that has scrolled off the visible area cannot be
+/// expressed in viewport coordinates. In these cases, the function returns
+/// GHOSTTY_NO_VALUE.
+///
+/// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @param ref Pointer to the grid reference to convert
+/// @param tag The target coordinate system
+/// @param[out] out On success, set to the coordinate in the requested system (may be NULL)
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the terminal
+/// or ref is NULL/invalid, GHOSTTY_NO_VALUE if the ref falls outside
+/// the requested coordinate system
+///
+/// @ingroup terminal
+@ffi.Native<
+  ffi.Int Function(
+    Terminal,
+    ffi.Pointer<GridRef>,
+    ffi.UnsignedInt,
+    ffi.Pointer<PointCoordinate>,
+  )
+>(symbol: 'ghostty_terminal_point_from_grid_ref', isLeaf: true)
+external int _ghostty_terminal_point_from_grid_ref(
+  Terminal terminal,
+  ffi.Pointer<GridRef> ref,
+  int tag,
+  ffi.Pointer<PointCoordinate> out,
+);
+
+Result ghostty_terminal_point_from_grid_ref(
+  Terminal terminal,
+  ffi.Pointer<GridRef> ref,
+  PointTag tag,
+  ffi.Pointer<PointCoordinate> out,
+) => Result.fromValue(
+  _ghostty_terminal_point_from_grid_ref(terminal, ref, tag.value, out),
+);
 
 /// Perform a full reset of the terminal (RIS).
 ///
@@ -2670,6 +3742,10 @@ final class FormatterTerminalOptions extends ffi.Struct {
 
   /// Extra terminal state to include in styled output.
   external FormatterTerminalExtra extra;
+
+  /// Optional selection to restrict output to a range.
+  /// If NULL, the entire screen is formatted.
+  external ffi.Pointer<Selection> selection;
 }
 
 /// A resolved reference to a terminal cell position.
@@ -2709,6 +3785,102 @@ final class KeyEncoderImpl extends ffi.Opaque {}
 typedef KeyEvent = ffi.Pointer<KeyEventImpl>;
 
 final class KeyEventImpl extends ffi.Opaque {}
+
+/// Opaque handle to a Kitty graphics image storage.
+///
+/// Obtained via ghostty_terminal_get() with
+/// GHOSTTY_TERMINAL_DATA_KITTY_GRAPHICS. The pointer is borrowed from
+/// the terminal and remains valid until the next mutating terminal call
+/// (e.g. ghostty_terminal_vt_write() or ghostty_terminal_reset()).
+///
+/// @ingroup kitty_graphics
+typedef KittyGraphics = ffi.Pointer<KittyGraphicsImpl>;
+
+/// Opaque handle to a Kitty graphics image.
+///
+/// Obtained via ghostty_kitty_graphics_image() with an image ID. The
+/// pointer is borrowed from the storage and remains valid until the next
+/// mutating terminal call.
+///
+/// @ingroup kitty_graphics
+typedef KittyGraphicsImage = ffi.Pointer<KittyGraphicsImageImpl>;
+
+final class KittyGraphicsImageImpl extends ffi.Opaque {}
+
+final class KittyGraphicsImpl extends ffi.Opaque {}
+
+/// Opaque handle to a Kitty graphics placement iterator.
+///
+/// @ingroup kitty_graphics
+typedef KittyGraphicsPlacementIterator =
+    ffi.Pointer<KittyGraphicsPlacementIteratorImpl>;
+
+final class KittyGraphicsPlacementIteratorImpl extends ffi.Opaque {}
+
+/// Combined rendering geometry for a placement in a single sized struct.
+///
+/// Combines the results of ghostty_kitty_graphics_placement_pixel_size(),
+/// ghostty_kitty_graphics_placement_grid_size(),
+/// ghostty_kitty_graphics_placement_viewport_pos(), and
+/// ghostty_kitty_graphics_placement_source_rect() into one call. This is
+/// an optimization over calling those four functions individually,
+/// particularly useful in environments with high per-call overhead such
+/// as FFI or Cgo.
+///
+/// This struct uses the sized-struct ABI pattern. Initialize with
+/// GHOSTTY_INIT_SIZED(KittyGraphicsPlacementRenderInfo) before calling
+/// ghostty_kitty_graphics_placement_render_info().
+///
+/// @ingroup kitty_graphics
+final class KittyGraphicsPlacementRenderInfo extends ffi.Struct {
+  /// Size of this struct in bytes. Must be set to sizeof(KittyGraphicsPlacementRenderInfo).
+  @ffi.Size()
+  external int size;
+
+  /// Rendered width in pixels.
+  @ffi.Uint32()
+  external int pixel_width;
+
+  /// Rendered height in pixels.
+  @ffi.Uint32()
+  external int pixel_height;
+
+  /// Number of grid columns the placement occupies.
+  @ffi.Uint32()
+  external int grid_cols;
+
+  /// Number of grid rows the placement occupies.
+  @ffi.Uint32()
+  external int grid_rows;
+
+  /// Viewport-relative column (may be negative for partially visible placements).
+  @ffi.Int32()
+  external int viewport_col;
+
+  /// Viewport-relative row (may be negative for partially visible placements).
+  @ffi.Int32()
+  external int viewport_row;
+
+  /// False when the placement is fully off-screen or virtual.
+  @ffi.Bool()
+  external bool viewport_visible;
+
+  /// Resolved source rectangle x origin in pixels.
+  @ffi.Uint32()
+  external int source_x;
+
+  /// Resolved source rectangle y origin in pixels.
+  @ffi.Uint32()
+  external int source_y;
+
+  /// Resolved source rectangle width in pixels.
+  @ffi.Uint32()
+  external int source_width;
+
+  /// Resolved source rectangle height in pixels.
+  @ffi.Uint32()
+  external int source_height;
+}
 
 /// Kitty keyboard protocol flags.
 ///
@@ -2946,6 +4118,27 @@ final class RenderStateRowIteratorImpl extends ffi.Opaque {}
 typedef Row = ffi.Uint64;
 typedef DartRow = int;
 
+/// A selection range defined by two grid references.
+///
+/// This is a sized struct. Use GHOSTTY_INIT_SIZED() to initialize it.
+///
+/// @ingroup selection
+final class Selection extends ffi.Struct {
+  /// Size of this struct in bytes. Must be set to sizeof(Selection).
+  @ffi.Size()
+  external int size;
+
+  /// Start of the selection range (inclusive).
+  external GridRef start;
+
+  /// End of the selection range (inclusive).
+  external GridRef end;
+
+  /// Whether the selection is rectangular (block) rather than linear.
+  @ffi.Bool()
+  external bool rectangle;
+}
+
 /// SGR attribute (tagged union).
 ///
 /// A complete SGR attribute with both its type tag and associated value.
@@ -3158,6 +4351,85 @@ final class StyleColorValue extends ffi.Union {
 /// @ingroup style
 typedef StyleId = ffi.Uint16;
 typedef DartStyleId = int;
+
+/// Callback type for PNG decoding.
+///
+/// Decodes raw PNG data into RGBA pixels. The output pixel data must be
+/// allocated through the provided allocator. The library takes ownership
+/// of the buffer and will free it with the same allocator.
+///
+/// @param userdata  The userdata pointer set via GHOSTTY_SYS_OPT_USERDATA
+/// @param allocator The allocator to use for the output pixel buffer
+/// @param data      Pointer to the raw PNG data
+/// @param data_len  Length of the raw PNG data in bytes
+/// @param[out] out  On success, filled with the decoded image
+/// @return true on success, false on failure
+typedef SysDecodePngFn =
+    ffi.Pointer<
+      ffi.NativeFunction<
+        ffi.Bool Function(
+          ffi.Pointer<ffi.Void> userdata,
+          ffi.Pointer<Allocator> allocator,
+          ffi.Pointer<ffi.Uint8> data,
+          ffi.Size data_len,
+          ffi.Pointer<SysImage> out,
+        )
+      >
+    >;
+
+/// Result of decoding an image.
+///
+/// The `data` buffer must be allocated through the allocator provided to
+/// the decode callback. The library takes ownership and will free it
+/// with the same allocator.
+final class SysImage extends ffi.Struct {
+  /// Image width in pixels.
+  @ffi.Uint32()
+  external int width;
+
+  /// Image height in pixels.
+  @ffi.Uint32()
+  external int height;
+
+  /// Pointer to the decoded RGBA pixel data.
+  external ffi.Pointer<ffi.Uint8> data;
+
+  /// Length of the pixel data in bytes.
+  @ffi.Size()
+  external int data_len;
+}
+
+/// Callback type for logging.
+///
+/// When installed, internal library log messages are delivered through
+/// this callback instead of being discarded. The embedder is responsible
+/// for formatting and routing log output.
+///
+/// @p scope is the log scope name as UTF-8 bytes (e.g. "osc", "kitty").
+/// When the log is unscoped (default scope), @p scope_len is 0.
+///
+/// All pointer arguments are only valid for the duration of the callback.
+/// The callback must be safe to call from any thread.
+///
+/// @param userdata    The userdata pointer set via GHOSTTY_SYS_OPT_USERDATA
+/// @param level       The severity level of the log message
+/// @param scope       Pointer to the scope name bytes
+/// @param scope_len   Length of the scope name in bytes
+/// @param message     Pointer to the log message bytes
+/// @param message_len Length of the log message in bytes
+typedef SysLogFn =
+    ffi.Pointer<
+      ffi.NativeFunction<
+        ffi.Void Function(
+          ffi.Pointer<ffi.Void> userdata,
+          ffi.UnsignedInt level,
+          ffi.Pointer<ffi.Uint8> scope,
+          ffi.Size scope_len,
+          ffi.Pointer<ffi.Uint8> message,
+          ffi.Size message_len,
+        )
+      >
+    >;
 
 /// Opaque handle to a terminal instance.
 ///

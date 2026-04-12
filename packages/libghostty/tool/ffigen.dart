@@ -40,6 +40,14 @@ void main() {
       bindingsPath: _nativeOutput,
       enumsPath: _enumsOutput,
       docPrefix: 'Ghostty',
+      stripMembers: [
+        // C ABI sentinels (GHOSTTY_*_MAX_VALUE = INT_MAX) force enum sizing
+        // but have no meaning in Dart and break exhaustive switches.
+        (
+          member: RegExp(r',\n\s+\w*[Mm]axValue\(2147483647\);'),
+          fromValueCase: RegExp(r'\n\s+2147483647 => \w*[Mm]axValue,'),
+        ),
+      ],
     );
   } on Object catch (e, s) {
     stderr.writeln('Failed to extract enums: $e\n$s');

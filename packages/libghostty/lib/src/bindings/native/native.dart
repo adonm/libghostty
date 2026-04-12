@@ -1558,8 +1558,8 @@ class NativeBindings implements GhosttyBindings {
 
   @override
   CResult<int> buildInfo(BuildInfo data) {
-    final result = ghostty_build_info(data, _outI32.cast());
-    return (result, _outI32.value);
+    final result = ghostty_build_info(data, _outSize.cast());
+    return (result, _outSize.value);
   }
 
   @override

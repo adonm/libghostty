@@ -355,6 +355,18 @@ void main() {
       final (_, opt) = bindings.buildInfo(BuildInfo.optimize);
       expect(opt, isA<int>());
     });
+
+    test('string fields return valid values', () {
+      final (code, version) = bindings.buildInfoString(BuildInfo.versionString);
+      expect(code, Result.success);
+      expect(version, isNotEmpty);
+    });
+
+    test('version number fields return valid values', () {
+      final (code, val) = bindings.buildInfo(BuildInfo.versionMajor);
+      expect(code, Result.success);
+      expect(val, greaterThanOrEqualTo(0));
+    });
   });
 
   group('mode report encode', () {

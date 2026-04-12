@@ -48,11 +48,17 @@ enum BuildInfo {
   /// Output type: size_t *
   versionPatch(8),
 
+  /// The pre metadata string (e.g. "alpha", "beta", "dev"). Has zero length if
+  /// no pre metadata is present.
+  ///
+  /// Output type: String *
+  versionPre(9),
+
   /// The build metadata string (e.g. commit hash). Has zero length if
   /// no build metadata is present.
   ///
   /// Output type: String *
-  versionBuild(9);
+  versionBuild(10);
 
   final int value;
   const BuildInfo(this.value);
@@ -67,7 +73,8 @@ enum BuildInfo {
     6 => versionMajor,
     7 => versionMinor,
     8 => versionPatch,
-    9 => versionBuild,
+    9 => versionPre,
+    10 => versionBuild,
     _ => throw ArgumentError('Unknown value for BuildInfo: $value'),
   };
 }
@@ -743,6 +750,275 @@ enum KeyEncoderOption {
     5 => kittyFlags,
     6 => macosOptionAsAlt,
     _ => throw ArgumentError('Unknown value for KeyEncoderOption: $value'),
+  };
+}
+
+/// Queryable data kinds for ghostty_kitty_graphics_get().
+///
+/// @ingroup kitty_graphics
+enum KittyGraphicsData {
+  /// Invalid / sentinel value.
+  invalid(0),
+
+  /// Populate a pre-allocated placement iterator with placement data from
+  /// the storage. Iterator data is only valid as long as the underlying
+  /// terminal is not mutated.
+  ///
+  /// Output type: KittyGraphicsPlacementIterator *
+  placementIterator(1);
+
+  final int value;
+  const KittyGraphicsData(this.value);
+
+  static KittyGraphicsData fromValue(int value) => switch (value) {
+    0 => invalid,
+    1 => placementIterator,
+    _ => throw ArgumentError('Unknown value for KittyGraphicsData: $value'),
+  };
+}
+
+/// Queryable data kinds for ghostty_kitty_graphics_image_get().
+///
+/// @ingroup kitty_graphics
+enum KittyGraphicsImageData {
+  /// Invalid / sentinel value.
+  invalid(0),
+
+  /// The image ID.
+  ///
+  /// Output type: uint32_t *
+  id(1),
+
+  /// The image number.
+  ///
+  /// Output type: uint32_t *
+  number(2),
+
+  /// Image width in pixels.
+  ///
+  /// Output type: uint32_t *
+  width(3),
+
+  /// Image height in pixels.
+  ///
+  /// Output type: uint32_t *
+  height(4),
+
+  /// Pixel format of the image.
+  ///
+  /// Output type: KittyImageFormat *
+  format(5),
+
+  /// Compression of the image.
+  ///
+  /// Output type: KittyImageCompression *
+  compression(6),
+
+  /// Borrowed pointer to the raw pixel data. Valid as long as the
+  /// underlying terminal is not mutated.
+  ///
+  /// Output type: const uint8_t **
+  dataPtr(7),
+
+  /// Length of the raw pixel data in bytes.
+  ///
+  /// Output type: size_t *
+  dataLen(8);
+
+  final int value;
+  const KittyGraphicsImageData(this.value);
+
+  static KittyGraphicsImageData fromValue(int value) => switch (value) {
+    0 => invalid,
+    1 => id,
+    2 => number,
+    3 => width,
+    4 => height,
+    5 => format,
+    6 => compression,
+    7 => dataPtr,
+    8 => dataLen,
+    _ => throw ArgumentError(
+      'Unknown value for KittyGraphicsImageData: $value',
+    ),
+  };
+}
+
+/// Queryable data kinds for ghostty_kitty_graphics_placement_get().
+///
+/// @ingroup kitty_graphics
+enum KittyGraphicsPlacementData {
+  /// Invalid / sentinel value.
+  invalid(0),
+
+  /// The image ID this placement belongs to.
+  ///
+  /// Output type: uint32_t *
+  imageId(1),
+
+  /// The placement ID.
+  ///
+  /// Output type: uint32_t *
+  placementId(2),
+
+  /// Whether this is a virtual placement (unicode placeholder).
+  ///
+  /// Output type: bool *
+  isVirtual(3),
+
+  /// Pixel offset from the left edge of the cell.
+  ///
+  /// Output type: uint32_t *
+  xOffset(4),
+
+  /// Pixel offset from the top edge of the cell.
+  ///
+  /// Output type: uint32_t *
+  yOffset(5),
+
+  /// Source rectangle x origin in pixels.
+  ///
+  /// Output type: uint32_t *
+  sourceX(6),
+
+  /// Source rectangle y origin in pixels.
+  ///
+  /// Output type: uint32_t *
+  sourceY(7),
+
+  /// Source rectangle width in pixels (0 = full image width).
+  ///
+  /// Output type: uint32_t *
+  sourceWidth(8),
+
+  /// Source rectangle height in pixels (0 = full image height).
+  ///
+  /// Output type: uint32_t *
+  sourceHeight(9),
+
+  /// Number of columns this placement occupies.
+  ///
+  /// Output type: uint32_t *
+  columns(10),
+
+  /// Number of rows this placement occupies.
+  ///
+  /// Output type: uint32_t *
+  rows(11),
+
+  /// Z-index for this placement.
+  ///
+  /// Output type: int32_t *
+  z(12);
+
+  final int value;
+  const KittyGraphicsPlacementData(this.value);
+
+  static KittyGraphicsPlacementData fromValue(int value) => switch (value) {
+    0 => invalid,
+    1 => imageId,
+    2 => placementId,
+    3 => isVirtual,
+    4 => xOffset,
+    5 => yOffset,
+    6 => sourceX,
+    7 => sourceY,
+    8 => sourceWidth,
+    9 => sourceHeight,
+    10 => columns,
+    11 => rows,
+    12 => z,
+    _ => throw ArgumentError(
+      'Unknown value for KittyGraphicsPlacementData: $value',
+    ),
+  };
+}
+
+/// Settable options for ghostty_kitty_graphics_placement_iterator_set().
+///
+/// @ingroup kitty_graphics
+enum KittyGraphicsPlacementIteratorOption {
+  /// Set the z-layer filter for the iterator.
+  ///
+  /// Input type: KittyPlacementLayer *
+  layer(0);
+
+  final int value;
+  const KittyGraphicsPlacementIteratorOption(this.value);
+
+  static KittyGraphicsPlacementIteratorOption fromValue(int value) =>
+      switch (value) {
+        0 => layer,
+        _ => throw ArgumentError(
+          'Unknown value for KittyGraphicsPlacementIteratorOption: $value',
+        ),
+      };
+}
+
+/// Compression of a Kitty graphics image.
+///
+/// @ingroup kitty_graphics
+enum KittyImageCompression {
+  none(0),
+  zlibDeflate(1);
+
+  final int value;
+  const KittyImageCompression(this.value);
+
+  static KittyImageCompression fromValue(int value) => switch (value) {
+    0 => none,
+    1 => zlibDeflate,
+    _ => throw ArgumentError('Unknown value for KittyImageCompression: $value'),
+  };
+}
+
+/// Pixel format of a Kitty graphics image.
+///
+/// @ingroup kitty_graphics
+enum KittyImageFormat {
+  rgb(0),
+  rgba(1),
+  png(2),
+  grayAlpha(3),
+  gray(4);
+
+  final int value;
+  const KittyImageFormat(this.value);
+
+  static KittyImageFormat fromValue(int value) => switch (value) {
+    0 => rgb,
+    1 => rgba,
+    2 => png,
+    3 => grayAlpha,
+    4 => gray,
+    _ => throw ArgumentError('Unknown value for KittyImageFormat: $value'),
+  };
+}
+
+/// Z-layer classification for kitty graphics placements.
+///
+/// Based on the kitty protocol z-index conventions:
+/// - BELOW_BG:   z < INT32_MIN/2  (drawn below cell background)
+/// - BELOW_TEXT:  INT32_MIN/2 <= z < 0  (above background, below text)
+/// - ABOVE_TEXT:  z >= 0  (above text)
+/// - ALL:         no filtering (current behavior)
+///
+/// @ingroup kitty_graphics
+enum KittyPlacementLayer {
+  all(0),
+  belowBg(1),
+  belowText(2),
+  aboveText(3);
+
+  final int value;
+  const KittyPlacementLayer(this.value);
+
+  static KittyPlacementLayer fromValue(int value) => switch (value) {
+    0 => all,
+    1 => belowBg,
+    2 => belowText,
+    3 => aboveText,
+    _ => throw ArgumentError('Unknown value for KittyPlacementLayer: $value'),
   };
 }
 
@@ -1641,6 +1917,70 @@ enum StyleColorTag {
   };
 }
 
+/// Log severity levels for the log callback.
+enum SysLogLevel {
+  error(0),
+  warning(1),
+  info(2),
+  debug(3);
+
+  final int value;
+  const SysLogLevel(this.value);
+
+  static SysLogLevel fromValue(int value) => switch (value) {
+    0 => error,
+    1 => warning,
+    2 => info,
+    3 => debug,
+    _ => throw ArgumentError('Unknown value for SysLogLevel: $value'),
+  };
+}
+
+/// System option identifiers for ghostty_sys_set().
+enum SysOption {
+  /// Set the userdata pointer passed to all sys callbacks.
+  ///
+  /// Input type: void* (or NULL)
+  userdata(0),
+
+  /// Set the PNG decode function.
+  ///
+  /// When set, the terminal can accept PNG images via the Kitty
+  /// Graphics Protocol. When cleared (NULL value), PNG decoding is
+  /// unsupported and PNG image data will be rejected.
+  ///
+  /// Input type: SysDecodePngFn (function pointer, or NULL)
+  decodePng(1),
+
+  /// Set the log callback.
+  ///
+  /// When set, internal library log messages are delivered to this
+  /// callback. When cleared (NULL value), log messages are silently
+  /// discarded.
+  ///
+  /// Use ghostty_sys_log_stderr as a convenience callback that
+  /// writes formatted messages to stderr.
+  ///
+  /// Which log levels are emitted depends on the build mode of the
+  /// library and is not configurable at runtime. Debug builds emit
+  /// all levels (debug and above). Release builds emit info and
+  /// above; debug-level messages are compiled out entirely and will
+  /// never reach the callback.
+  ///
+  /// Input type: SysLogFn (function pointer, or NULL)
+  log(2);
+
+  final int value;
+  const SysOption(this.value);
+
+  static SysOption fromValue(int value) => switch (value) {
+    0 => userdata,
+    1 => decodePng,
+    2 => log,
+    _ => throw ArgumentError('Unknown value for SysOption: $value'),
+  };
+}
+
 /// Terminal data types.
 ///
 /// These values specify what type of data to extract from a terminal
@@ -1808,7 +2148,50 @@ enum TerminalData {
   /// The default 256-color palette (ignoring any OSC overrides).
   ///
   /// Output type: ColorRgb[256] *
-  colorPaletteDefault(25);
+  colorPaletteDefault(25),
+
+  /// The Kitty image storage limit in bytes for the active screen.
+  ///
+  /// A value of zero means the Kitty graphics protocol is disabled.
+  /// Returns GHOSTTY_NO_VALUE when Kitty graphics are disabled at build time.
+  ///
+  /// Output type: uint64_t *
+  kittyImageStorageLimit(26),
+
+  /// Whether the file medium is enabled for Kitty image loading on the
+  /// active screen.
+  ///
+  /// Returns GHOSTTY_NO_VALUE when Kitty graphics are disabled at build time.
+  ///
+  /// Output type: bool *
+  kittyImageMediumFile(27),
+
+  /// Whether the temporary file medium is enabled for Kitty image loading
+  /// on the active screen.
+  ///
+  /// Returns GHOSTTY_NO_VALUE when Kitty graphics are disabled at build time.
+  ///
+  /// Output type: bool *
+  kittyImageMediumTempFile(28),
+
+  /// Whether the shared memory medium is enabled for Kitty image loading
+  /// on the active screen.
+  ///
+  /// Returns GHOSTTY_NO_VALUE when Kitty graphics are disabled at build time.
+  ///
+  /// Output type: bool *
+  kittyImageMediumSharedMem(29),
+
+  /// The Kitty graphics image storage for the active screen.
+  ///
+  /// Returns a borrowed pointer to the image storage. The pointer is valid
+  /// until the next mutating terminal call (e.g. ghostty_terminal_vt_write()
+  /// or ghostty_terminal_reset()).
+  ///
+  /// Returns GHOSTTY_NO_VALUE when Kitty graphics are disabled at build time.
+  ///
+  /// Output type: KittyGraphics *
+  kittyGraphics(30);
 
   final int value;
   const TerminalData(this.value);
@@ -1840,6 +2223,11 @@ enum TerminalData {
     23 => colorBackgroundDefault,
     24 => colorCursorDefault,
     25 => colorPaletteDefault,
+    26 => kittyImageStorageLimit,
+    27 => kittyImageMediumFile,
+    28 => kittyImageMediumTempFile,
+    29 => kittyImageMediumSharedMem,
+    30 => kittyGraphics,
     _ => throw ArgumentError('Unknown value for TerminalData: $value'),
   };
 }
@@ -1953,7 +2341,42 @@ enum TerminalOption {
   /// A NULL value pointer resets to the built-in default palette.
   ///
   /// Input type: ColorRgb[256]*
-  colorPalette(14);
+  colorPalette(14),
+
+  /// Set the Kitty image storage limit in bytes.
+  ///
+  /// Applied to all initialized screens (primary and alternate).
+  /// A value of zero disables the Kitty graphics protocol entirely,
+  /// deleting all stored images and placements. A NULL value pointer
+  /// is equivalent to zero (disables). Has no effect when Kitty graphics
+  /// are disabled at build time.
+  ///
+  /// Input type: uint64_t*
+  kittyImageStorageLimit(15),
+
+  /// Enable or disable Kitty image loading via the file medium.
+  ///
+  /// A NULL value pointer is a no-op. Has no effect when Kitty graphics
+  /// are disabled at build time.
+  ///
+  /// Input type: bool*
+  kittyImageMediumFile(16),
+
+  /// Enable or disable Kitty image loading via the temporary file medium.
+  ///
+  /// A NULL value pointer is a no-op. Has no effect when Kitty graphics
+  /// are disabled at build time.
+  ///
+  /// Input type: bool*
+  kittyImageMediumTempFile(17),
+
+  /// Enable or disable Kitty image loading via the shared memory medium.
+  ///
+  /// A NULL value pointer is a no-op. Has no effect when Kitty graphics
+  /// are disabled at build time.
+  ///
+  /// Input type: bool*
+  kittyImageMediumSharedMem(18);
 
   final int value;
   const TerminalOption(this.value);
@@ -1974,6 +2397,10 @@ enum TerminalOption {
     12 => colorBackground,
     13 => colorCursor,
     14 => colorPalette,
+    15 => kittyImageStorageLimit,
+    16 => kittyImageMediumFile,
+    17 => kittyImageMediumTempFile,
+    18 => kittyImageMediumSharedMem,
     _ => throw ArgumentError('Unknown value for TerminalOption: $value'),
   };
 }

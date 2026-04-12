@@ -50,6 +50,33 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// @ingroup screen
   external int ghostty_cell_get(int cell, int data, Pointer out);
 
+  /// Get multiple data fields from a cell in a single call.
+  ///
+  /// Each element in the keys array specifies a data kind, and the
+  /// corresponding element in the values array receives the result.
+  ///
+  /// Processing stops at the first error; on success out_written
+  /// is set to count, on error it is set to the index of the
+  /// failing key (i.e. the number of values successfully written).
+  ///
+  /// @param cell The cell value
+  /// @param count Number of key/value pairs
+  /// @param keys Array of data kinds to query
+  /// @param values Array of output pointers (types must match each key's
+  /// documented output type)
+  /// @param[out] out_written On return, receives the number of values
+  /// successfully written (may be NULL)
+  /// @return GHOSTTY_SUCCESS if all queries succeed
+  ///
+  /// @ingroup screen
+  external int ghostty_cell_get_multi(
+    int cell,
+    int count,
+    Pointer keys,
+    Pointer values,
+    Pointer out_written,
+  );
+
   /// Get the RGB color components.
   ///
   /// This function extracts the individual red, green, and blue components
@@ -224,6 +251,31 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   ///
   /// @ingroup grid_ref
   external int ghostty_grid_ref_graphemes(
+    Pointer ref,
+    Pointer buf,
+    int buf_len,
+    Pointer out_len,
+  );
+
+  /// Get the hyperlink URI for the cell at the grid reference's position.
+  ///
+  /// Writes the URI bytes into the provided buffer. If the cell has no
+  /// hyperlink, out_len is set to 0 and GHOSTTY_SUCCESS is returned.
+  ///
+  /// If the buffer is too small (or NULL), the function returns
+  /// GHOSTTY_OUT_OF_SPACE and writes the required number of bytes to
+  /// out_len. The caller can then retry with a sufficiently sized buffer.
+  ///
+  /// @param ref Pointer to the grid reference
+  /// @param buf Output buffer for the URI bytes (may be NULL)
+  /// @param buf_len Size of the output buffer in bytes
+  /// @param[out] out_len On success, the number of bytes written. On
+  /// GHOSTTY_OUT_OF_SPACE, the required buffer size in bytes.
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the ref's
+  /// node is NULL, GHOSTTY_OUT_OF_SPACE if the buffer is too small
+  ///
+  /// @ingroup grid_ref
+  external int ghostty_grid_ref_hyperlink_uri(
     Pointer ref,
     Pointer buf,
     int buf_len,
@@ -541,6 +593,355 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   ///
   /// @ingroup key
   external void ghostty_key_event_set_utf8(int event, Pointer utf8, int len);
+
+  /// Get data from a kitty graphics storage instance.
+  ///
+  /// The output pointer must be of the appropriate type for the requested
+  /// data kind.
+  ///
+  /// Returns GHOSTTY_NO_VALUE when Kitty graphics are disabled at build time.
+  ///
+  /// @param graphics The kitty graphics handle
+  /// @param data The type of data to extract
+  /// @param[out] out Pointer to store the extracted data
+  /// @return GHOSTTY_SUCCESS on success
+  ///
+  /// @ingroup kitty_graphics
+  external int ghostty_kitty_graphics_get(int graphics, int data, Pointer out);
+
+  /// Look up a Kitty graphics image by its image ID.
+  ///
+  /// Returns NULL if no image with the given ID exists or if Kitty graphics
+  /// are disabled at build time.
+  ///
+  /// @param graphics The kitty graphics handle
+  /// @param image_id The image ID to look up
+  /// @return An opaque image handle, or NULL if not found
+  ///
+  /// @ingroup kitty_graphics
+  external int ghostty_kitty_graphics_image(int graphics, int image_id);
+
+  /// Get data from a Kitty graphics image.
+  ///
+  /// The output pointer must be of the appropriate type for the requested
+  /// data kind.
+  ///
+  /// @param image The image handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param data The data kind to query
+  /// @param[out] out Pointer to receive the queried value
+  /// @return GHOSTTY_SUCCESS on success
+  ///
+  /// @ingroup kitty_graphics
+  external int ghostty_kitty_graphics_image_get(
+    int image,
+    int data,
+    Pointer out,
+  );
+
+  /// Get multiple data fields from a Kitty graphics image in a single call.
+  ///
+  /// This is an optimization over calling ghostty_kitty_graphics_image_get()
+  /// repeatedly, particularly useful in environments with high per-call
+  /// overhead such as FFI or Cgo.
+  ///
+  /// Each element in the keys array specifies a data kind, and the
+  /// corresponding element in the values array receives the result.
+  /// The type of each values[i] pointer must match the output type
+  /// documented for keys[i].
+  ///
+  /// Processing stops at the first error; on success out_written
+  /// is set to count, on error it is set to the index of the
+  /// failing key (i.e. the number of values successfully written).
+  ///
+  /// @param image The image handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param count Number of key/value pairs
+  /// @param keys Array of data kinds to query
+  /// @param values Array of output pointers (types must match each key's
+  /// documented output type)
+  /// @param[out] out_written On return, receives the number of values
+  /// successfully written (may be NULL)
+  /// @return GHOSTTY_SUCCESS if all queries succeed
+  ///
+  /// @ingroup kitty_graphics
+  external int ghostty_kitty_graphics_image_get_multi(
+    int image,
+    int count,
+    Pointer keys,
+    Pointer values,
+    Pointer out_written,
+  );
+
+  /// Get data from the current placement in a placement iterator.
+  ///
+  /// Call ghostty_kitty_graphics_placement_next() at least once before
+  /// calling this function.
+  ///
+  /// @param iterator The iterator handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param data The data kind to query
+  /// @param[out] out Pointer to receive the queried value
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the
+  /// iterator is NULL or not positioned on a placement
+  ///
+  /// @ingroup kitty_graphics
+  external int ghostty_kitty_graphics_placement_get(
+    int iterator,
+    int data,
+    Pointer out,
+  );
+
+  /// Get multiple data fields from the current placement in a single call.
+  ///
+  /// This is an optimization over calling ghostty_kitty_graphics_placement_get()
+  /// repeatedly, particularly useful in environments with high per-call
+  /// overhead such as FFI or Cgo.
+  ///
+  /// Each element in the keys array specifies a data kind, and the
+  /// corresponding element in the values array receives the result.
+  /// The type of each values[i] pointer must match the output type
+  /// documented for keys[i].
+  ///
+  /// Processing stops at the first error; on success out_written
+  /// is set to count, on error it is set to the index of the
+  /// failing key (i.e. the number of values successfully written).
+  ///
+  /// @param iterator The iterator handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param count Number of key/value pairs
+  /// @param keys Array of data kinds to query
+  /// @param values Array of output pointers (types must match each key's
+  /// documented output type)
+  /// @param[out] out_written On return, receives the number of values
+  /// successfully written (may be NULL)
+  /// @return GHOSTTY_SUCCESS if all queries succeed
+  ///
+  /// @ingroup kitty_graphics
+  external int ghostty_kitty_graphics_placement_get_multi(
+    int iterator,
+    int count,
+    Pointer keys,
+    Pointer values,
+    Pointer out_written,
+  );
+
+  /// Compute the grid cell size of the current placement.
+  ///
+  /// Returns the number of columns and rows that the placement occupies
+  /// in the terminal grid. If the placement specifies explicit columns
+  /// and rows, those are returned directly; otherwise they are calculated
+  /// from the pixel size and cell dimensions.
+  ///
+  /// @param iterator The placement iterator positioned on a placement
+  /// @param image The image handle for this placement's image
+  /// @param terminal The terminal handle
+  /// @param[out] out_cols On success, receives the number of columns
+  /// @param[out] out_rows On success, receives the number of rows
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if any handle
+  /// is NULL or the iterator is not positioned, GHOSTTY_NO_VALUE when
+  /// Kitty graphics are disabled
+  ///
+  /// @ingroup kitty_graphics
+  external int ghostty_kitty_graphics_placement_grid_size(
+    int iterator,
+    int image,
+    int terminal,
+    Pointer out_cols,
+    Pointer out_rows,
+  );
+
+  /// Free a placement iterator.
+  ///
+  /// @param iterator The iterator handle to free (may be NULL)
+  ///
+  /// @ingroup kitty_graphics
+  external void ghostty_kitty_graphics_placement_iterator_free(int iterator);
+
+  /// Create a new placement iterator instance.
+  ///
+  /// All fields except the allocator are left undefined until populated
+  /// via ghostty_kitty_graphics_get() with
+  /// GHOSTTY_KITTY_GRAPHICS_DATA_PLACEMENT_ITERATOR.
+  ///
+  /// @param allocator Pointer to allocator, or NULL to use the default allocator
+  /// @param[out] out_iterator On success, receives the created iterator handle
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_OUT_OF_MEMORY on allocation
+  /// failure
+  ///
+  /// @ingroup kitty_graphics
+  external int ghostty_kitty_graphics_placement_iterator_new(
+    Pointer allocator,
+    Pointer out_iterator,
+  );
+
+  /// Set an option on a placement iterator.
+  ///
+  /// Use GHOSTTY_KITTY_GRAPHICS_PLACEMENT_ITERATOR_OPTION_LAYER with a
+  /// GhosttyKittyPlacementLayer value to filter placements by z-layer.
+  /// The filter is applied during iteration: ghostty_kitty_graphics_placement_next()
+  /// will skip placements that do not match the configured layer.
+  ///
+  /// The default layer is GHOSTTY_KITTY_PLACEMENT_LAYER_ALL (no filtering).
+  ///
+  /// @param iterator The iterator handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param option The option to set
+  /// @param value Pointer to the value (type depends on option; NULL returns
+  /// GHOSTTY_INVALID_VALUE)
+  /// @return GHOSTTY_SUCCESS on success
+  ///
+  /// @ingroup kitty_graphics
+  external int ghostty_kitty_graphics_placement_iterator_set(
+    int iterator,
+    int option,
+    Pointer value,
+  );
+
+  /// Advance the placement iterator to the next placement.
+  ///
+  /// If a layer filter has been set via
+  /// ghostty_kitty_graphics_placement_iterator_set(), only placements
+  /// matching that layer are returned.
+  ///
+  /// @param iterator The iterator handle (may be NULL)
+  /// @return true if advanced to the next placement, false if at the end
+  ///
+  /// @ingroup kitty_graphics
+  external int ghostty_kitty_graphics_placement_next(int iterator);
+
+  /// Compute the rendered pixel size of the current placement.
+  ///
+  /// Takes into account the placement's source rectangle, specified
+  /// columns/rows, and aspect ratio to calculate the final rendered
+  /// pixel dimensions.
+  ///
+  /// @param iterator The placement iterator positioned on a placement
+  /// @param image The image handle for this placement's image
+  /// @param terminal The terminal handle
+  /// @param[out] out_width On success, receives the width in pixels
+  /// @param[out] out_height On success, receives the height in pixels
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if any handle
+  /// is NULL or the iterator is not positioned, GHOSTTY_NO_VALUE when
+  /// Kitty graphics are disabled
+  ///
+  /// @ingroup kitty_graphics
+  external int ghostty_kitty_graphics_placement_pixel_size(
+    int iterator,
+    int image,
+    int terminal,
+    Pointer out_width,
+    Pointer out_height,
+  );
+
+  /// Compute the grid rectangle occupied by the current placement.
+  ///
+  /// Uses the placement's pin, the image dimensions, and the terminal's
+  /// cell/pixel geometry to calculate the bounding rectangle. Virtual
+  /// placements (unicode placeholders) return GHOSTTY_NO_VALUE.
+  ///
+  /// @param terminal The terminal handle
+  /// @param image The image handle for this placement's image
+  /// @param iterator The placement iterator positioned on a placement
+  /// @param[out] out_selection On success, receives the bounding rectangle
+  /// as a selection with rectangle=true
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if any handle
+  /// is NULL or the iterator is not positioned, GHOSTTY_NO_VALUE for
+  /// virtual placements or when Kitty graphics are disabled
+  ///
+  /// @ingroup kitty_graphics
+  external int ghostty_kitty_graphics_placement_rect(
+    int iterator,
+    int image,
+    int terminal,
+    Pointer out_selection,
+  );
+
+  /// Get all rendering geometry for a placement in a single call.
+  ///
+  /// Combines pixel size, grid size, viewport position, and source
+  /// rectangle into one struct. Initialize with
+  /// GHOSTTY_INIT_SIZED(GhosttyKittyGraphicsPlacementRenderInfo).
+  ///
+  /// When viewport_visible is false, the placement is fully off-screen
+  /// or is a virtual placement; viewport_col and viewport_row may
+  /// contain meaningless values in that case.
+  ///
+  /// @param iterator The iterator positioned on a placement
+  /// @param image The image handle for this placement's image
+  /// @param terminal The terminal handle
+  /// @param[out] out_info Pointer to receive the rendering geometry
+  /// @return GHOSTTY_SUCCESS on success
+  ///
+  /// @ingroup kitty_graphics
+  external int ghostty_kitty_graphics_placement_render_info(
+    int iterator,
+    int image,
+    int terminal,
+    Pointer out_info,
+  );
+
+  /// Get the resolved source rectangle for the current placement.
+  ///
+  /// Applies kitty protocol semantics: a width or height of 0 in the
+  /// placement means "use the full image dimension", and the resulting
+  /// rectangle is clamped to the actual image bounds. The returned
+  /// values are in pixels and are ready to use for texture sampling.
+  ///
+  /// @param iterator The placement iterator positioned on a placement
+  /// @param image The image handle for this placement's image
+  /// @param[out] out_x Source rect x origin in pixels
+  /// @param[out] out_y Source rect y origin in pixels
+  /// @param[out] out_width Source rect width in pixels
+  /// @param[out] out_height Source rect height in pixels
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if any
+  /// handle is NULL or the iterator is not positioned
+  ///
+  /// @ingroup kitty_graphics
+  external int ghostty_kitty_graphics_placement_source_rect(
+    int iterator,
+    int image,
+    Pointer out_x,
+    Pointer out_y,
+    Pointer out_width,
+    Pointer out_height,
+  );
+
+  /// Get the viewport-relative grid position of the current placement.
+  ///
+  /// Converts the placement's internal pin to viewport-relative column and
+  /// row coordinates. The returned coordinates represent the top-left
+  /// corner of the placement in the viewport's grid coordinate space.
+  ///
+  /// The row value can be negative when the placement's origin has
+  /// scrolled above the top of the viewport. For example, a 4-row
+  /// image that has scrolled up by 2 rows returns row=-2, meaning
+  /// its top 2 rows are above the visible area but its bottom 2 rows
+  /// are still on screen. Embedders should use these coordinates
+  /// directly when computing the destination rectangle for rendering;
+  /// the embedder is responsible for clipping the portion of the image
+  /// that falls outside the viewport.
+  ///
+  /// Returns GHOSTTY_SUCCESS for any placement that is at least
+  /// partially visible in the viewport. Returns GHOSTTY_NO_VALUE when
+  /// the placement is completely outside the viewport (its bottom edge
+  /// is above the viewport or its top edge is at or below the last
+  /// viewport row), or when the placement is a virtual (unicode
+  /// placeholder) placement.
+  ///
+  /// @param iterator The placement iterator positioned on a placement
+  /// @param image The image handle for this placement's image
+  /// @param terminal The terminal handle
+  /// @param[out] out_col On success, receives the viewport-relative column
+  /// @param[out] out_row On success, receives the viewport-relative row
+  /// (may be negative for partially visible placements)
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_NO_VALUE if fully
+  /// off-screen or virtual, GHOSTTY_INVALID_VALUE if any handle
+  /// is NULL or the iterator is not positioned
+  ///
+  /// @ingroup kitty_graphics
+  external int ghostty_kitty_graphics_placement_viewport_pos(
+    int iterator,
+    int image,
+    int terminal,
+    Pointer out_col,
+    Pointer out_row,
+  );
 
   /// Encode a DECRPM (DEC Private Mode Report) response sequence.
   ///
@@ -934,6 +1335,33 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// @ingroup render
   external int ghostty_render_state_get(int state, int data, Pointer out);
 
+  /// Get multiple data fields from a render state in a single call.
+  ///
+  /// Each element in the keys array specifies a data kind, and the
+  /// corresponding element in the values array receives the result.
+  ///
+  /// Processing stops at the first error; on success out_written
+  /// is set to count, on error it is set to the index of the
+  /// failing key (i.e. the number of values successfully written).
+  ///
+  /// @param state The render state handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param count Number of key/value pairs
+  /// @param keys Array of data kinds to query
+  /// @param values Array of output pointers (types must match each key's
+  /// documented output type)
+  /// @param[out] out_written On return, receives the number of values
+  /// successfully written (may be NULL)
+  /// @return GHOSTTY_SUCCESS if all queries succeed
+  ///
+  /// @ingroup render
+  external int ghostty_render_state_get_multi(
+    int state,
+    int count,
+    Pointer keys,
+    Pointer values,
+    Pointer out_written,
+  );
+
   /// Create a new render state instance.
   ///
   /// @param allocator Pointer to allocator, or NULL to use the default allocator
@@ -970,6 +1398,33 @@ extension type GhosttyExports(JSObject _) implements JSObject {
     int cells,
     int data,
     Pointer out,
+  );
+
+  /// Get multiple data fields from the current cell in a single call.
+  ///
+  /// Each element in the keys array specifies a data kind, and the
+  /// corresponding element in the values array receives the result.
+  ///
+  /// Processing stops at the first error; on success out_written
+  /// is set to count, on error it is set to the index of the
+  /// failing key (i.e. the number of values successfully written).
+  ///
+  /// @param cells The row cells handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param count Number of key/value pairs
+  /// @param keys Array of data kinds to query
+  /// @param values Array of output pointers (types must match each key's
+  /// documented output type)
+  /// @param[out] out_written On return, receives the number of values
+  /// successfully written (may be NULL)
+  /// @return GHOSTTY_SUCCESS if all queries succeed
+  ///
+  /// @ingroup render
+  external int ghostty_render_state_row_cells_get_multi(
+    int cells,
+    int count,
+    Pointer keys,
+    Pointer values,
+    Pointer out_written,
   );
 
   /// Create a new row cells instance.
@@ -1036,6 +1491,33 @@ extension type GhosttyExports(JSObject _) implements JSObject {
     int iterator,
     int data,
     Pointer out,
+  );
+
+  /// Get multiple data fields from the current row in a single call.
+  ///
+  /// Each element in the keys array specifies a data kind, and the
+  /// corresponding element in the values array receives the result.
+  ///
+  /// Processing stops at the first error; on success out_written
+  /// is set to count, on error it is set to the index of the
+  /// failing key (i.e. the number of values successfully written).
+  ///
+  /// @param iterator The iterator handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param count Number of key/value pairs
+  /// @param keys Array of data kinds to query
+  /// @param values Array of output pointers (types must match each key's
+  /// documented output type)
+  /// @param[out] out_written On return, receives the number of values
+  /// successfully written (may be NULL)
+  /// @return GHOSTTY_SUCCESS if all queries succeed
+  ///
+  /// @ingroup render
+  external int ghostty_render_state_row_get_multi(
+    int iterator,
+    int count,
+    Pointer keys,
+    Pointer values,
+    Pointer out_written,
   );
 
   /// Free a render-state row iterator.
@@ -1139,6 +1621,33 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   ///
   /// @ingroup screen
   external int ghostty_row_get(int row, int data, Pointer out);
+
+  /// Get multiple data fields from a row in a single call.
+  ///
+  /// Each element in the keys array specifies a data kind, and the
+  /// corresponding element in the values array receives the result.
+  ///
+  /// Processing stops at the first error; on success out_written
+  /// is set to count, on error it is set to the index of the
+  /// failing key (i.e. the number of values successfully written).
+  ///
+  /// @param row The row value
+  /// @param count Number of key/value pairs
+  /// @param keys Array of data kinds to query
+  /// @param values Array of output pointers (types must match each key's
+  /// documented output type)
+  /// @param[out] out_written On return, receives the number of values
+  /// successfully written (may be NULL)
+  /// @return GHOSTTY_SUCCESS if all queries succeed
+  ///
+  /// @ingroup screen
+  external int ghostty_row_get_multi(
+    int row,
+    int count,
+    Pointer keys,
+    Pointer values,
+    Pointer out_written,
+  );
 
   /// Get the tag from an SGR attribute.
   ///
@@ -1318,6 +1827,36 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// @ingroup style
   external int ghostty_style_is_default(Pointer style);
 
+  /// Built-in log callback that writes to stderr.
+  ///
+  /// Formats each message as "[level](scope): message\n".
+  /// Can be passed directly to ghostty_sys_set():
+  ///
+  /// @code
+  /// ghostty_sys_set(GHOSTTY_SYS_OPT_LOG, &ghostty_sys_log_stderr);
+  /// @endcode
+  external void ghostty_sys_log_stderr(
+    Pointer userdata,
+    int level,
+    Pointer scope,
+    int scope_len,
+    Pointer message,
+    int message_len,
+  );
+
+  /// Set a system-level option.
+  ///
+  /// Configures a process-global implementation function. These should be
+  /// set once at startup before using any terminal functionality that
+  /// depends on them.
+  ///
+  /// @param option The option to set
+  /// @param value  Pointer to the value (type depends on the option),
+  /// or NULL to clear it
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the
+  /// option is not recognized
+  external int ghostty_sys_set(int option, Pointer value);
+
   /// Free a terminal instance.
   ///
   /// Releases all resources associated with the terminal. After this call,
@@ -1343,6 +1882,39 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   ///
   /// @ingroup terminal
   external int ghostty_terminal_get(int terminal, int data, Pointer out);
+
+  /// Get multiple data fields from a terminal in a single call.
+  ///
+  /// This is an optimization over calling ghostty_terminal_get()
+  /// repeatedly, particularly useful in environments with high per-call
+  /// overhead such as FFI or Cgo.
+  ///
+  /// Each element in the keys array specifies a data kind, and the
+  /// corresponding element in the values array receives the result.
+  /// The type of each values[i] pointer must match the output type
+  /// documented for keys[i].
+  ///
+  /// Processing stops at the first error; on success out_written
+  /// is set to count, on error it is set to the index of the
+  /// failing key (i.e. the number of values successfully written).
+  ///
+  /// @param terminal The terminal handle (may be NULL)
+  /// @param count Number of key/value pairs
+  /// @param keys Array of data kinds to query
+  /// @param values Array of output pointers (types must match each key's
+  /// documented output type)
+  /// @param[out] out_written On return, receives the number of values
+  /// successfully written (may be NULL)
+  /// @return GHOSTTY_SUCCESS if all queries succeed
+  ///
+  /// @ingroup terminal
+  external int ghostty_terminal_get_multi(
+    int terminal,
+    int count,
+    Pointer keys,
+    Pointer values,
+    Pointer out_written,
+  );
 
   /// Resolve a point in the terminal grid to a grid reference.
   ///
@@ -1417,6 +1989,38 @@ extension type GhosttyExports(JSObject _) implements JSObject {
     Pointer allocator,
     Pointer terminal,
     int options,
+  );
+
+  /// Convert a grid reference back to a point in the given coordinate system.
+  ///
+  /// This is the inverse of ghostty_terminal_grid_ref(): given a grid reference,
+  /// it returns the x/y coordinates in the requested coordinate system (active,
+  /// viewport, screen, or history).
+  ///
+  /// The grid reference must have been obtained from the same terminal instance.
+  /// Like all grid references, it is only valid until the next mutating terminal
+  /// call.
+  ///
+  /// Not every grid reference is representable in every coordinate system. For
+  /// example, a cell in scrollback history cannot be expressed in active
+  /// coordinates, and a cell that has scrolled off the visible area cannot be
+  /// expressed in viewport coordinates. In these cases, the function returns
+  /// GHOSTTY_NO_VALUE.
+  ///
+  /// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param ref Pointer to the grid reference to convert
+  /// @param tag The target coordinate system
+  /// @param[out] out On success, set to the coordinate in the requested system (may be NULL)
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the terminal
+  /// or ref is NULL/invalid, GHOSTTY_NO_VALUE if the ref falls outside
+  /// the requested coordinate system
+  ///
+  /// @ingroup terminal
+  external int ghostty_terminal_point_from_grid_ref(
+    int terminal,
+    Pointer ref,
+    int tag,
+    Pointer out,
   );
 
   /// Perform a full reset of the terminal (RIS).

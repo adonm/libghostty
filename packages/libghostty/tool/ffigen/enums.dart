@@ -3,15 +3,27 @@ library;
 
 import 'dart:io';
 
+/// A pattern describing enum members to strip from generated enums.
+///
+/// Both [member] and [fromValueCase] must match for a member to be fully
+/// removed. [member] matches the declaration line (e.g. `  name(value);`)
+/// and [fromValueCase] matches the corresponding `fromValue` switch arm
+/// (e.g. `    value => name,`).
+typedef StripPattern = ({RegExp member, RegExp fromValueCase});
+
 /// Extracts all enum definitions from [bindingsPath] into [enumsPath] and
 /// adds an import of the enums file back into the bindings.
 ///
 /// If [docPrefix] is provided, strips it from doc comment lines so that
 /// C type references match their renamed Dart names.
+///
+/// If [stripMembers] is provided, matching enum members and their
+/// `fromValue` switch cases are removed from the extracted enums.
 void extractEnums({
   required String bindingsPath,
   required String enumsPath,
   String? docPrefix,
+  List<StripPattern> stripMembers = const [],
 }) {
   final lines = File(bindingsPath).readAsStringSync().split('\n');
   final enumBuf = StringBuffer(
@@ -60,6 +72,12 @@ void extractEnums({
   }
 
   var enumStr = enumBuf.toString();
+  for (final pattern in stripMembers) {
+    enumStr = enumStr
+        .replaceAll(pattern.member, ';')
+        .replaceAll(pattern.fromValueCase, '');
+  }
+
   var bindingsStr = bindingsBuf.toString();
 
   if (docPrefix != null) {
