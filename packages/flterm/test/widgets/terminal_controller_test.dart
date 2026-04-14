@@ -29,7 +29,7 @@ void main() {
 
     test('initial state has null selection, empty selectedText, no focus', () {
       expect(controller.selection, isNull);
-      expect(controller.selectedText, '');
+      expect(controller.selectedText(), '');
       expect(controller.hasFocus, isFalse);
     });
 
@@ -162,7 +162,32 @@ void main() {
         endCol: 5,
       );
 
-      expect(controller.selectedText, 'hello');
+      expect(controller.selectedText(), 'hello');
+    });
+
+    test('selectedText honors requested formatter format', () {
+      controller = TerminalControllerImpl(
+        config: const TerminalConfig(cols: 20, rows: 5),
+      );
+      controller.terminal.renderState.update();
+      controller.writeUtf8('\x1b[31mhi\x1b[0m');
+
+      controller.selection = const TerminalSelection(
+        startRow: 0,
+        startCol: 0,
+        endRow: 0,
+        endCol: 2,
+      );
+
+      expect(controller.selectedText(), 'hi');
+      expect(
+        controller.selectedText(format: FormatterFormat.vt),
+        contains('hi'),
+      );
+      expect(
+        controller.selectedText(format: FormatterFormat.html),
+        contains('<'),
+      );
     });
 
     test('selectedText excludes spacer tails from wide characters', () {
@@ -184,7 +209,7 @@ void main() {
         endRow: 0,
         endCol: 6,
       );
-      expect(controller.selectedText, '日本語');
+      expect(controller.selectedText(), '日本語');
 
       controller.selection = const TerminalSelection(
         startRow: 0,
@@ -193,7 +218,7 @@ void main() {
         endCol: 6,
         mode: TerminalSelectionMode.block,
       );
-      expect(controller.selectedText, '日本語');
+      expect(controller.selectedText(), '日本語');
     });
 
     group('scrollback selection', () {
@@ -246,8 +271,8 @@ void main() {
           endCol: 20,
         );
 
-        expect(() => smallController.selectedText, returnsNormally);
-        expect(smallController.selectedText, contains('aaa'));
+        expect(() => smallController.selectedText(), returnsNormally);
+        expect(smallController.selectedText(), contains('aaa'));
       });
 
       test('selectedText extracts from scrollback and screen', () {
@@ -257,7 +282,7 @@ void main() {
 
         smallController.selectAll();
 
-        final text = smallController.selectedText;
+        final text = smallController.selectedText();
         expect(text, contains('aaa'));
         expect(text, contains('bbb'));
         expect(text, contains('ccc'));
@@ -275,7 +300,7 @@ void main() {
 
         wrapController.selectAll();
 
-        final text = wrapController.selectedText;
+        final text = wrapController.selectedText();
         expect(text, 'abcdefgh');
         expect(text, isNot(contains('\n')));
       });
@@ -297,7 +322,7 @@ void main() {
         );
         wrapController.selectAll();
 
-        expect(wrapController.selectedText, 'A日B日C');
+        expect(wrapController.selectedText(), 'A日B日C');
       });
 
       test('selectedText in block mode inserts newlines between rows', () {
@@ -310,7 +335,7 @@ void main() {
           mode: TerminalSelectionMode.block,
         );
 
-        final text = smallController.selectedText;
+        final text = smallController.selectedText();
         final lines = text.split('\n');
         expect(lines.length, 3);
         expect(lines[0], 'aa');
@@ -329,7 +354,7 @@ void main() {
           endCol: 3,
         );
 
-        final text = smallController.selectedText;
+        final text = smallController.selectedText();
         expect(text, contains('aaa'));
         expect(text, contains('bbb'));
         expect(text, isNot(contains('ccc')));

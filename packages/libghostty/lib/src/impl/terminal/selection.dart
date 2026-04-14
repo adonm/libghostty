@@ -7,6 +7,12 @@ part of 'terminal.dart';
 /// terminal (write, reset, resize) may invalidate those endpoints;
 /// create a fresh formatter with a new [Selection] after such operations.
 ///
+/// [pointTag] selects the coordinate space the row/column values refer
+/// to. Use [PointTag.active] for the active screen (default),
+/// [PointTag.viewport] for viewport-relative addressing, or
+/// [PointTag.screen] to address the full scrollback plus active screen
+/// by absolute row index.
+///
 /// ```dart
 /// final selection = Selection(
 ///   startCol: 0, startRow: 0,
@@ -35,17 +41,28 @@ class Selection {
   /// than a linear text range.
   final bool rectangle;
 
+  /// Coordinate space the row/column values address.
+  final PointTag pointTag;
+
   const Selection({
     required this.startCol,
     required this.startRow,
     required this.endCol,
     required this.endRow,
     this.rectangle = false,
+    this.pointTag = PointTag.active,
   });
 
   @override
-  int get hashCode =>
-      Object.hash(Selection, startCol, startRow, endCol, endRow, rectangle);
+  int get hashCode => Object.hash(
+    Selection,
+    startCol,
+    startRow,
+    endCol,
+    endRow,
+    rectangle,
+    pointTag,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -54,10 +71,11 @@ class Selection {
       other.startRow == startRow &&
       other.endCol == endCol &&
       other.endRow == endRow &&
-      other.rectangle == rectangle;
+      other.rectangle == rectangle &&
+      other.pointTag == pointTag;
 
   @override
   String toString() =>
       'Selection($startCol,$startRow -> $endCol,$endRow'
-      '${rectangle ? ', rectangle' : ''})';
+      '${rectangle ? ', rectangle' : ''}, $pointTag)';
 }

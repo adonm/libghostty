@@ -107,7 +107,7 @@ class TerminalShortcutScope extends StatelessWidget {
           CopyIntent: _ConditionalAction<CopyIntent>(
             isEnabledFn: () => controller.selection != null,
             onInvokeFn: () {
-              final text = controller.selectedText;
+              final text = controller.selectedText();
               if (text.isNotEmpty) {
                 unawaited(Clipboard.setData(ClipboardData(text: text)));
               }

@@ -426,11 +426,13 @@ class Terminal with Listenable {
       _handle,
       col: selection.startCol,
       row: selection.startRow,
+      pointTag: selection.pointTag,
     );
     final end = GridRef._(
       _handle,
       col: selection.endCol,
       row: selection.endRow,
+      pointTag: selection.pointTag,
     );
     try {
       return Formatter._(

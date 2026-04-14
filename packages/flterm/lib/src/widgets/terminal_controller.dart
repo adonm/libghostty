@@ -83,12 +83,6 @@ abstract class TerminalController extends ChangeNotifier
   /// Scrollbar state: total rows, visible rows, and current offset.
   Scrollbar get scrollbar;
 
-  /// Text content of the current selection, or empty if none.
-  ///
-  /// Soft-wrapped lines are joined without newlines in normal mode.
-  /// Block mode inserts a newline after each row.
-  String get selectedText;
-
   @override
   TerminalSelection? get selection;
 
@@ -173,6 +167,21 @@ abstract class TerminalController extends ChangeNotifier
 
   /// Selects all terminal content including scrollback.
   void selectAll();
+
+  /// Returns the text within the current [selection], or empty string
+  /// when there is no selection.
+  ///
+  /// [format] controls the output encoding:
+  /// - [FormatterFormat.plain]: unstyled text, suitable for the clipboard
+  ///   (default).
+  /// - [FormatterFormat.vt]: VT escape sequences preserving colors, styles,
+  ///   and hyperlinks.
+  /// - [FormatterFormat.html]: HTML with inline styles.
+  ///
+  /// In normal selection mode, soft-wrapped lines are joined into a single
+  /// line without an inserted newline. In block mode, every row is kept
+  /// separate regardless of wrapping.
+  String selectedText({FormatterFormat format = .plain});
 
   /// Encodes a key press and sends it via [onOutput].
   ///

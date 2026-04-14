@@ -575,7 +575,7 @@ void main() {
         await tester.pump();
 
         expect(controller.selection, isNotNull);
-        expect(controller.selectedText, contains('hello'));
+        expect(controller.selectedText(), contains('hello'));
       });
 
       testWidgets('triple click selects entire line', (tester) async {
@@ -597,7 +597,7 @@ void main() {
         final sel = controller.selection;
         expect(sel, isNotNull);
         expect(sel!.startCol, 0);
-        expect(controller.selectedText.length, greaterThan('hello'.length));
+        expect(controller.selectedText().length, greaterThan('hello'.length));
       });
 
       testWidgets('mouse drag creates selection', (tester) async {
@@ -617,7 +617,7 @@ void main() {
         await tester.pump();
 
         expect(controller.selection, isNotNull);
-        expect(controller.selectedText, isNotEmpty);
+        expect(controller.selectedText(), isNotEmpty);
       });
     });
 

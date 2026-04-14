@@ -127,51 +127,6 @@ class TerminalControllerImpl extends TerminalController
   Scrollbar get scrollbar => terminal.scrollbar;
 
   @override
-  String get selectedText {
-    final selection = _selection;
-    if (selection == null) return '';
-
-    final buffer = StringBuffer();
-    final cols = terminal.renderState.cols;
-
-    final total = terminal.totalRows;
-    final maxRow = selection.bottomRow < total
-        ? selection.bottomRow
-        : total - 1;
-
-    for (var row = selection.topRow; row <= maxRow; row++) {
-      final startCol = switch (selection.mode) {
-        .block => selection.topCol,
-        _ => (row == selection.topRow ? selection.topCol : 0),
-      };
-      final endCol = switch (selection.mode) {
-        .block => selection.bottomCol,
-        _ => (row == selection.bottomRow ? selection.bottomCol : cols),
-      };
-
-      for (var col = startCol; col < endCol && col < cols; col++) {
-        final ref = terminal.gridRefAt(col: col, row: row, pointTag: .screen);
-        final wide = ref.wide;
-        if (wide == .spacerTail || wide == .spacerHead) {
-          ref.dispose();
-          continue;
-        }
-        final content = ref.content;
-        ref.dispose();
-        buffer.write(content.isEmpty ? ' ' : content);
-      }
-
-      if (row < maxRow) {
-        if (selection.mode == .block || !_isRowWrapped(row)) {
-          buffer.write('\n');
-        }
-      }
-    }
-
-    return buffer.toString();
-  }
-
-  @override
   TerminalSelection? get selection => _selection;
 
   @override
@@ -457,6 +412,43 @@ class TerminalControllerImpl extends TerminalController
   }
 
   @override
+  String selectedText({FormatterFormat format = .plain}) {
+    final selection = _selection;
+    if (selection == null) return '';
+
+    final cols = terminal.renderState.cols;
+    final total = terminal.totalRows;
+    if (cols <= 0 || total <= 0) return '';
+    final topRow = selection.topRow.clamp(0, total - 1);
+    final bottomRow = selection.bottomRow.clamp(0, total - 1);
+    if (topRow > bottomRow) return '';
+
+    final block = selection.mode == .block;
+    final topCol = selection.topCol.clamp(0, cols - 1);
+    final bottomCol = (selection.bottomCol - 1).clamp(0, cols - 1);
+    if (block && topCol > bottomCol) return '';
+
+    final formatter = terminal.createFormatter(
+      format: format,
+      unwrap: !block,
+      selection: Selection(
+        startCol: topCol,
+        startRow: topRow,
+        endCol: bottomCol,
+        endRow: bottomRow,
+        rectangle: block,
+        pointTag: .screen,
+      ),
+    );
+
+    try {
+      return formatter.format();
+    } finally {
+      formatter.dispose();
+    }
+  }
+
+  @override
   void selectLine(int row, LineSelectMode lineSelectMode) {
     final (:startRow, :endRow, :endCol) = terminal.lineBoundaryAt(row);
     final effectiveEndCol = switch (lineSelectMode) {
@@ -633,13 +625,6 @@ class TerminalControllerImpl extends TerminalController
     _emitOutput(utf8.encode(text));
     clearVirtualMods();
     _onTextInput();
-  }
-
-  bool _isRowWrapped(int row) {
-    final ref = terminal.gridRefAt(col: 0, row: row, pointTag: .screen);
-    final wrapped = ref.rowWrap;
-    ref.dispose();
-    return wrapped;
   }
 
   void _onFocusChanged() {

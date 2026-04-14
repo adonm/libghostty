@@ -78,7 +78,7 @@ controller.sendText('ls -la\n');
 
 // Selection
 controller.selectAll();
-print(controller.selectedText);
+print(controller.selectedText());
 
 // Clipboard
 controller.paste('hello');

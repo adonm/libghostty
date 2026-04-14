@@ -87,7 +87,7 @@ void main() {
       await _sendCmd(tester, .keyA);
 
       expect(controller.selection, isNotNull);
-      expect(controller.selectedText, 'hello');
+      expect(controller.selectedText(), 'hello');
     });
 
     testWidgets('Cmd+A is no-op when enableSelectAll is false', (tester) async {
