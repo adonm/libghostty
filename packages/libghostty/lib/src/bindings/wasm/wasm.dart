@@ -1259,6 +1259,55 @@ class WasmBindings implements GhosttyBindings {
     _exports.ghostty_terminal_set(handle, option.value, index);
   }
 
+  int? _sysLogIndex;
+
+  @override
+  void sysSetLogCallback(SysLogCallback callback) {
+    _installSysLog((userdata, level, scopePtr, scopeLen, msgPtr, msgLen) {
+      try {
+        callback(
+          SysLogLevel.fromValue(level),
+          utf8.decode(_mem.readBytes(scopePtr, scopeLen), allowMalformed: true),
+          utf8.decode(_mem.readBytes(msgPtr, msgLen), allowMalformed: true),
+        );
+      } on Object catch (_) {}
+    });
+  }
+
+  @override
+  void sysSetLogToStderr() {
+    // ignore: unnecessary_lambdas
+    _installSysLog((userdata, level, scopePtr, scopeLen, msgPtr, msgLen) {
+      _exports.ghostty_sys_log_stderr(
+        userdata,
+        level,
+        scopePtr,
+        scopeLen,
+        msgPtr,
+        msgLen,
+      );
+    });
+  }
+
+  @override
+  void sysClearLogCallback() {
+    _exports.ghostty_sys_set(SysOption.log.value, 0);
+    if (_sysLogIndex case final index?) _table.set(index);
+  }
+
+  void _installSysLog(void Function(int, int, int, int, int, int) fn) {
+    final index = _registerCallback(fn.toJS, [
+      'i32',
+      'i32',
+      'i32',
+      'i32',
+      'i32',
+      'i32',
+    ], reuseIndex: _sysLogIndex);
+    _sysLogIndex = index;
+    _exports.ghostty_sys_set(SysOption.log.value, index);
+  }
+
   @override
   void terminalDisposeCallbacks(int handle) {
     final map = _callbacks.remove(handle);

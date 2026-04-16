@@ -33,3 +33,8 @@ typedef VoidCallback = void Function();
 /// A selection range addressed by `GridRef` handles. `rectangle` indicates
 /// a rectangular (block) selection rather than a linear one.
 typedef RawSelection = ({int start, int end, bool rectangle});
+
+/// Callback invoked for each internal libghostty log message, after the
+/// scope and message byte slices have been decoded to Dart strings.
+typedef SysLogCallback =
+    void Function(SysLogLevel level, String scope, String message);

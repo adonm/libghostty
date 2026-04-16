@@ -50,6 +50,7 @@ export 'src/ffi/libghostty_enums.g.dart'
         PointTag,
         SgrAttributeTag,
         SizeReportStyle,
+        SysLogLevel,
         TerminalScreen;
 export 'src/impl/build_info.dart' show LibGhosttyBuildInfo;
 export 'src/impl/encode.dart' show FocusEventEncode, SizeReportStyleEncode;
@@ -62,6 +63,7 @@ export 'src/impl/mouse/mouse_event.dart' show MouseEvent;
 export 'src/impl/osc_parser.dart' show OscCommand, OscParser;
 export 'src/impl/paste.dart' show pasteEncode, pasteIsSafe;
 export 'src/impl/sgr_parser.dart' show SgrParser;
+export 'src/impl/sys.dart' show LibGhostty, LogCallback;
 export 'src/impl/terminal/terminal.dart'
     show
         Cell,

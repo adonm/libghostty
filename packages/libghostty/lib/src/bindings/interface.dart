@@ -167,6 +167,10 @@ abstract interface class GhosttyBindings {
   );
   void terminalDisposeCallbacks(int handle);
 
+  void sysSetLogCallback(SysLogCallback callback);
+  void sysSetLogToStderr();
+  void sysClearLogCallback();
+
   CResult<int> renderStateNew();
   void renderStateFree(int handle);
   Result renderStateUpdate(int state, int terminal);

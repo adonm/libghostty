@@ -23,6 +23,8 @@ class NativeBindings implements GhosttyBindings {
   final _callables = <int, Map<TerminalOption, NativeCallable>>{};
   final _stringBuffers = <int, Map<TerminalOption, _StringBuffer>>{};
 
+  NativeCallable? _sysLogCallable;
+
   final _outU8 = calloc<Uint8>();
   final _outU16 = calloc<Uint16>();
   final _outU32 = calloc<Uint32>();
@@ -2309,5 +2311,66 @@ class NativeBindings implements GhosttyBindings {
         calloc.free(buf.str);
       }
     }
+  }
+
+  @override
+  void sysSetLogCallback(SysLogCallback callback) {
+    _installSysLog((userdata, level, scope, scopeLen, msg, msgLen) {
+      try {
+        callback(
+          SysLogLevel.fromValue(level),
+          utf8.decode(scope.asTypedList(scopeLen), allowMalformed: true),
+          utf8.decode(msg.asTypedList(msgLen), allowMalformed: true),
+        );
+      } on Object catch (_) {}
+    });
+  }
+
+  @override
+  void sysSetLogToStderr() {
+    _installSysLog((userdata, level, scope, scopeLen, msg, msgLen) {
+      ghostty_sys_log_stderr(
+        userdata,
+        SysLogLevel.fromValue(level),
+        scope,
+        scopeLen,
+        msg,
+        msgLen,
+      );
+    });
+  }
+
+  @override
+  void sysClearLogCallback() {
+    ghostty_sys_set(SysOption.log, nullptr);
+    _sysLogCallable?.close();
+    _sysLogCallable = null;
+  }
+
+  void _installSysLog(
+    void Function(
+      Pointer<Void> userdata,
+      int level,
+      Pointer<Uint8> scope,
+      int scopeLen,
+      Pointer<Uint8> message,
+      int messageLen,
+    )
+    fn,
+  ) {
+    _sysLogCallable?.close();
+    final callable =
+        NativeCallable<
+          Void Function(
+            Pointer<Void>,
+            UnsignedInt,
+            Pointer<Uint8>,
+            Size,
+            Pointer<Uint8>,
+            Size,
+          )
+        >.isolateLocal(fn);
+    _sysLogCallable = callable;
+    ghostty_sys_set(SysOption.log, callable.nativeFunction.cast());
   }
 }
