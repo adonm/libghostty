@@ -352,7 +352,7 @@ final class TerminalTheme {
     this.fontFamily = 'JetBrains Mono',
     this.fontFamilyFallback = _defaultFontFamilyFallback,
     this.selection = const SelectionTheme(background: Color(0x3D7AA2F7)),
-    this.boldIsBright = true,
+    this.boldIsBright = false,
     this.faintOpacity = 0.5,
     this.minimumContrast = 1.0,
     this.backgroundOpacity = 1.0,

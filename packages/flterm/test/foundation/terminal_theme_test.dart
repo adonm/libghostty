@@ -242,7 +242,7 @@ void main() {
     test('defaults: boldIsBright, faintOpacity, minimumContrast, '
         'fontFamilyFallback', () {
       final theme = TerminalTheme.dark();
-      expect(theme.boldIsBright, isTrue);
+      expect(theme.boldIsBright, isFalse);
       expect(theme.faintOpacity, 0.5);
       expect(theme.minimumContrast, 1.0);
       expect(theme.fontFamilyFallback, isNotEmpty);
@@ -319,7 +319,7 @@ void main() {
       expect(a, equals(b));
       expect(a.hashCode, b.hashCode);
       expect(a, isNot(equals(a.copyWith(foreground: const Color(0xFFFFFFFF)))));
-      expect(a, isNot(equals(a.copyWith(boldIsBright: false))));
+      expect(a, isNot(equals(a.copyWith(boldIsBright: true))));
       expect(a, isNot(equals(a.copyWith(faintOpacity: 0.3))));
       expect(a, isNot(equals(a.copyWith(minimumContrast: 4.5))));
       expect(a, isNot(equals(a.copyWith(fontFamilyFallback: ['Menlo']))));
@@ -341,7 +341,7 @@ void main() {
       final original = TerminalTheme.dark();
       final modified = original.copyWith(
         foreground: const Color(0xFFFFFFFF),
-        boldIsBright: false,
+        boldIsBright: true,
         faintOpacity: 0.3,
         minimumContrast: 4.5,
         fontFamily: 'Fira Code',
@@ -349,7 +349,7 @@ void main() {
         selection: const SelectionTheme(foreground: Color(0xFF000000)),
       );
       expect(modified.foreground, const Color(0xFFFFFFFF));
-      expect(modified.boldIsBright, isFalse);
+      expect(modified.boldIsBright, isTrue);
       expect(modified.faintOpacity, 0.3);
       expect(modified.minimumContrast, 4.5);
       expect(modified.fontFamilyFallback, ['Fira Code', 'Menlo']);
