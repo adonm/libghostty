@@ -22,12 +22,13 @@ class UnderlinePainter implements TerminalPainter {
   @override
   void paint(Canvas canvas) {
     final image = _atlas.image;
-    if (image == null || _sprites.underline.count == 0) return;
+    final underline = _sprites.underline;
+    if (image == null || !underline.hasSprites) return;
     canvas.drawRawAtlas(
       image,
-      _sprites.underline.sealedTransforms,
-      _sprites.underline.sealedRects,
-      _sprites.underline.sealedColors,
+      underline.sealedTransforms,
+      underline.sealedRects,
+      underline.sealedColors,
       BlendMode.modulate,
       null,
       _paint,

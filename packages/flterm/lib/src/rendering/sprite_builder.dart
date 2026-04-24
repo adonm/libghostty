@@ -41,6 +41,63 @@ bool _isOperator(int cp) {
       cp > 0x7A;
 }
 
+/// Tracks per-row dirtiness from sources outside libghostty's own
+/// row-dirty flag, such as selection changes.
+///
+/// [SpriteBuilder] combines this with [RowIterator.dirty] when deciding
+/// whether to re-emit each row, and clears it at the end of every
+/// [SpriteBuilder.build].
+class RowDirtyTracker {
+  var _rows = Uint8List(0);
+  var _anyDirty = false;
+
+  /// Whether any row is currently marked dirty.
+  bool get anyDirty => _anyDirty;
+
+  /// Whether [row] is marked dirty. Out-of-range rows read as clean.
+  bool isDirty(int row) => row >= 0 && row < _rows.length && _rows[row] != 0;
+
+  /// Marks every row dirty.
+  void markAll() {
+    if (_rows.isEmpty) return;
+    _rows.fillRange(0, _rows.length, 1);
+    _anyDirty = true;
+  }
+
+  /// Marks rows `[from, toExclusive)` dirty, clamped to the tracker's
+  /// current row count.
+  void markRange(int from, int toExclusive) {
+    final start = from < 0 ? 0 : from;
+    final end = toExclusive > _rows.length ? _rows.length : toExclusive;
+    if (start >= end) return;
+    _rows.fillRange(start, end, 1);
+    _anyDirty = true;
+  }
+
+  /// Marks a single [row] dirty. Out-of-range rows are ignored.
+  void markRow(int row) {
+    if (row < 0 || row >= _rows.length) return;
+    _rows[row] = 1;
+    _anyDirty = true;
+  }
+
+  /// Resizes to track [rowCount] rows and clears all flags.
+  void resize(int rowCount) {
+    if (_rows.length != rowCount) {
+      _rows = Uint8List(rowCount);
+    } else {
+      _rows.fillRange(0, rowCount, 0);
+    }
+    _anyDirty = false;
+  }
+
+  void _clear() {
+    if (!_anyDirty) return;
+    _rows.fillRange(0, _rows.length, 0);
+    _anyDirty = false;
+  }
+}
+
 /// Builds all sprite data for one terminal frame.
 ///
 /// Reads terminal cells via [RenderState] (walked with pre-allocated
@@ -64,6 +121,7 @@ class SpriteBuilder {
   final _RowCursor _cursor;
   final RowIterator _rows;
   final CellIterator _cells;
+  final RowDirtyTracker _dirtyRows;
 
   // Per-frame cached values used in the per-cell hot loop.
   late double _cellWidth;
@@ -87,18 +145,23 @@ class SpriteBuilder {
     : _styleCache = _StyleCache(_state),
       _cursor = _RowCursor(),
       _rows = RowIterator(),
-      _cells = CellIterator();
+      _cells = CellIterator(),
+      _dirtyRows = RowDirtyTracker();
 
-  /// Rebuilds all sprites from [renderState].
+  /// Per-row dirty contributions from flterm-side sources (selection,
+  /// blink, theme, atlas reconfigure). Combined with libghostty's own
+  /// row-dirty flag during [build].
+  RowDirtyTracker get dirtyRows => _dirtyRows;
+
+  /// Updates sprites for the current frame.
   ///
-  /// Clears existing sprite data, iterates every cell in the viewport,
-  /// and populates the sprite buffer with glyph, background, and
-  /// decoration entries. Finalizes the atlas image at the end.
-  ///
-  /// After returning, [SpriteBuffer] and [GlyphAtlas.image] are ready
-  /// for painters.
-  void build(RenderState renderState) {
-    _sprites.clear();
+  /// A row is re-emitted when [dirty] is not [DirtyState.partial], when
+  /// libghostty flags it via [RowIterator.dirty], or when any
+  /// flterm-side source has marked it via [dirtyRows]. Callers must not
+  /// invoke [build] when the snapshot is [DirtyState.clean] and
+  /// [dirtyRows] is empty; that case is handled one level up by
+  /// skipping the build entirely.
+  void build(RenderState renderState, {required DirtyState dirty}) {
     _cellWidth = _state.metrics.cellWidth;
     _cellHeight = _state.metrics.cellHeight;
     _underlineThickness = _state.metrics.underlineThickness;
@@ -115,19 +178,36 @@ class SpriteBuilder {
     _selection = _state.selection;
     _styleCache.beginFrame();
 
+    final rebuildAll = dirty != DirtyState.partial;
+
     _rows.reset(renderState);
     var row = 0;
     while (_rows.next()) {
       if (row >= _state.rows) break;
-      _cursor.reset(row, _cellHeight, _bgArgb);
-      _cells.reset(_rows);
-      _buildRow(_cells);
-      _rows.dirty = false;
+      if (rebuildAll || _rows.dirty || _dirtyRows.isDirty(row)) {
+        _sprites.beginRow(row);
+        _cursor.reset(row, _cellHeight, _bgArgb);
+        _cells.reset(_rows);
+        _buildRow(_cells);
+        _sprites.endRow();
+        _rows.dirty = false;
+      }
       row++;
     }
+    _dirtyRows._clear();
 
     _atlas.ensureImage();
     _sprites.seal();
+  }
+
+  /// Reconfigures sprite storage for the current grid size.
+  ///
+  /// Called by the render object when the grid dimensions change. The
+  /// caller is responsible for triggering a [DirtyState.full] build on
+  /// the next paint so every row is re-emitted into the fresh layout.
+  void configure(int rows, int cols) {
+    _sprites.configure(rows, cols);
+    _dirtyRows.resize(rows);
   }
 
   /// Releases the owned [RowIterator] and [CellIterator] handles.
@@ -148,21 +228,19 @@ class SpriteBuilder {
       final isWide = cells.wide == .wide;
       final selected = _isCellSelected(cursor.row, cursor.col);
       final styleChanged = cells.styleId != cursor.prevStyleId;
-      final selectionChanged = selected != cursor.prevSelected;
+      final stateChanged = styleChanged || selected != cursor.prevSelected;
 
-      if (styleChanged || selectionChanged) _flushOperatorRun(cursor);
-
-      if (styleChanged) {
-        final (fg, bg, style, explicitBg) = _styleCache.resolve(cells);
-        cursor.prevStyleId = cells.styleId;
-        cursor.baseForeground = fg;
-        cursor.baseBackground = bg;
-        cursor.baseBackgroundExplicit = explicitBg;
-        cursor.backgroundInverse = style.inverse;
-        cursor.style = style;
-      }
-
-      if (styleChanged || selectionChanged) {
+      if (stateChanged) {
+        _flushOperatorRun(cursor);
+        if (styleChanged) {
+          final (fg, bg, style, explicitBg) = _styleCache.resolve(cells);
+          cursor.prevStyleId = cells.styleId;
+          cursor.baseForeground = fg;
+          cursor.baseBackground = bg;
+          cursor.baseBackgroundExplicit = explicitBg;
+          cursor.backgroundInverse = style.inverse;
+          cursor.style = style;
+        }
         if (selected) {
           final sel = _state.theme.selection;
           cursor.foreground = _resolveSelectionColor(
@@ -226,30 +304,6 @@ class SpriteBuilder {
         _resolveBgArgb(cursor.bgRunArgb, cursor.bgRunInverse),
       );
     }
-  }
-
-  bool _isCellSelected(int row, int col) {
-    final sel = _selection;
-    if (sel == null) return false;
-    return sel.contains(row + _state.viewportOffset, col);
-  }
-
-  // Resolves a selection override (foreground or background) against the
-  // current cell. Defaults let selection invert the cell visually: when no
-  // override is set, selection fg falls back to the terminal background and
-  // selection bg to the terminal foreground.
-  int _resolveSelectionColor(
-    _RowCursor cursor,
-    DynamicColor? override,
-    int fallbackArgb,
-  ) {
-    if (override == null) return fallbackArgb;
-    return override
-        .resolve(
-          cellForeground: Color(cursor.baseForeground),
-          cellBackground: Color(cursor.baseBackground),
-        )
-        .toARGB32();
   }
 
   void _emitCodepoint(int codepoint, double x, Style style, _RowCursor cursor) {
@@ -493,6 +547,12 @@ class SpriteBuilder {
     cursor.operatorRun.clear();
   }
 
+  bool _isCellSelected(int row, int col) {
+    final selection = _selection;
+    if (selection == null) return false;
+    return selection.contains(row + _state.viewportOffset, col);
+  }
+
   /// Applies [_cellOpacityAlpha] to [argb] when cell-level opacity is
   /// enabled and the run is not inverse. Inverse runs stay opaque so
   /// swapped fg/bg cells remain readable.
@@ -501,6 +561,24 @@ class SpriteBuilder {
     final currentAlpha = (argb >>> 24) & 0xFF;
     final newAlpha = (currentAlpha * _cellOpacityAlpha + 127) ~/ 255;
     return (newAlpha << 24) | (argb & 0x00FFFFFF);
+  }
+
+  // Resolves a selection override (foreground or background) against the
+  // current cell. Defaults let selection invert the cell visually: when no
+  // override is set, selection fg falls back to the terminal background and
+  // selection bg to the terminal foreground.
+  int _resolveSelectionColor(
+    _RowCursor cursor,
+    DynamicColor? override,
+    int fallbackArgb,
+  ) {
+    if (override == null) return fallbackArgb;
+    return override
+        .resolve(
+          cellForeground: Color(cursor.baseForeground),
+          cellBackground: Color(cursor.baseBackground),
+        )
+        .toARGB32();
   }
 }
 

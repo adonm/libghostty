@@ -27,11 +27,7 @@ class TerminalTextPainter implements TerminalPainter {
     final image = _atlas.image;
     if (image == null) return;
 
-    final hasRegular = _regular.count > 0;
-    final hasWide = _wide.count > 0;
-    if (!hasRegular && !hasWide) return;
-
-    if (hasRegular) {
+    if (_regular.hasSprites) {
       canvas.drawRawAtlas(
         image,
         _regular.sealedTransforms,
@@ -42,8 +38,7 @@ class TerminalTextPainter implements TerminalPainter {
         _paint,
       );
     }
-
-    if (hasWide) {
+    if (_wide.hasSprites) {
       canvas.drawRawAtlas(
         image,
         _wide.sealedTransforms,

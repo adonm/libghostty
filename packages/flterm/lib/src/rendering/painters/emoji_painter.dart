@@ -22,14 +22,13 @@ class EmojiPainter implements TerminalPainter {
   void paint(Canvas canvas) {
     final image = _atlas.image;
     final emoji = _sprites.emoji;
-    if (image == null || emoji.count == 0) return;
-
+    if (image == null || !emoji.hasSprites) return;
     canvas.drawRawAtlas(
       image,
       emoji.sealedTransforms,
       emoji.sealedRects,
       null,
-      .src,
+      BlendMode.src,
       null,
       _paint,
     );

@@ -188,7 +188,6 @@ class TerminalRenderBox extends RenderBox {
   OnResize? _onResize;
   var _performingLayout = false;
   var _needsContentSync = false;
-  var _needsSpriteRebuild = false;
   var _stickToBottom = true;
   var _lastScrollbackRows = 0;
   var _lastCursor = const Cursor();
@@ -271,7 +270,7 @@ class TerminalRenderBox extends RenderBox {
   set blinkVisible(bool value) {
     if (_paintState.blinkVisible == value) return;
     _paintState.blinkVisible = value;
-    _needsSpriteRebuild = true;
+    _spriteBuilder.dirtyRows.markAll();
     markNeedsPaint();
   }
 
@@ -387,6 +386,7 @@ class TerminalRenderBox extends RenderBox {
     _paintState.rows = 0;
     _paintState.cols = 0;
     _spriteBuilder.dispose();
+    _sprites.dispose();
     _renderState.dispose();
     super.detach();
   }
@@ -446,8 +446,8 @@ class TerminalRenderBox extends RenderBox {
       _paintState.cols = newCols;
       _paintState.rows = newRows;
       _paintState.devicePixelRatio = dpr;
-      _sprites.resize(newRows * newCols);
       if (newCols > 0 && newRows > 0) {
+        _spriteBuilder.configure(newRows, newCols);
         // Cell size is reported in physical pixels so size-report
         // escapes and Kitty graphics geometry match a native terminal
         // at the same DPI.
@@ -465,9 +465,13 @@ class TerminalRenderBox extends RenderBox {
 
     _syncScrollLayout();
 
-    // Only rebuild sprites when grid dimensions or atlas changed.
-    // Sub-cell pixel resize steps skip the expensive sprite build.
-    if (gridChanged || atlasReconfigured) _markTerminalDirty();
+    // Grid or atlas changes invalidate every row's sprite slot layout
+    // (grid) or atlas rect references (atlas), so re-emit every row on
+    // the next paint. Sub-cell pixel resize steps skip the work.
+    if (gridChanged || atlasReconfigured) {
+      _spriteBuilder.dirtyRows.markAll();
+      _markTerminalDirty();
+    }
 
     _performingLayout = false;
   }
@@ -495,11 +499,20 @@ class TerminalRenderBox extends RenderBox {
     final newSelection = _renderObserver.selection;
     _paintState.selection = newSelection;
     _paintState.cursorFocused = _renderObserver.hasFocus;
-    // Selection membership changes each cell's bg and fg, so rebuild
-    // sprites when the selection actually moves.
-    if (previousSelection != newSelection) _needsSpriteRebuild = true;
+    if (previousSelection != newSelection) {
+      _markSelectionRowsDirty(previousSelection);
+      _markSelectionRowsDirty(newSelection);
+    }
     _resolveCursorGlyph();
     markNeedsPaint();
+  }
+
+  void _markSelectionRowsDirty(TerminalSelection? selection) {
+    if (selection == null || _paintState.rows == 0) return;
+    final viewportOffset = _terminal.scrollbar.offset;
+    final top = selection.topRow - viewportOffset;
+    final bottom = selection.bottomRow - viewportOffset;
+    _spriteBuilder.dirtyRows.markRange(top, bottom + 1);
   }
 
   void _onScroll() {
@@ -559,16 +572,17 @@ class TerminalRenderBox extends RenderBox {
       _paintState.cursor = cursor.copyWith(visible: false);
       _paintState.cursorWide = false;
       _paintState.cursorGlyphEntry = null;
-      _resolveCursorFillColor(null);
       return;
     }
 
-    var col = cursor.col;
-    if (cursor.wideTail && col > 0) col -= 1;
-    final effectiveCursor = col != cursor.col
-        ? cursor.copyWith(col: col)
+    final effectiveCursor = cursor.wideTail && cursor.col > 0
+        ? cursor.copyWith(col: cursor.col - 1)
         : cursor;
-    final ref = GridRef.at(_terminal, col: col, row: cursor.row);
+    final ref = GridRef.at(
+      _terminal,
+      col: effectiveCursor.col,
+      row: effectiveCursor.row,
+    );
     final cursorCell = CursorCell(ref.content, ref.style, wide: ref.isWide);
     ref.dispose();
 
@@ -684,25 +698,18 @@ class TerminalRenderBox extends RenderBox {
     _stickToBottom = maxExtent <= 0 || _offset.pixels >= maxExtent - cellHeight;
   }
 
-  // Reads terminal state and builds sprites for the current frame.
-  //
-  // Called at the start of paint(). After this method returns, all painters
-  // read only from pre-built sprite data with zero terminal access.
-  //
-  // Content sync: snapshots the terminal, reads colors, builds sprites,
-  // resolves cursor. Triggered by terminal output, scroll, theme, or resize.
-  //
-  // Sprite-only rebuild: re-iterates the existing snapshot to rebuild
-  // sprites without FFI overhead. Triggered by blink visibility changes
-  // when no content change is pending.
+  // Reads terminal state and builds sprites for the current frame. The
+  // build runs when libghostty reports any change OR when a flterm-side
+  // source (selection, blink, atlas reconfigure, layout) has marked
+  // rows dirty via [_spriteBuilder.dirtyRows].
   void _syncTerminalState() {
     if (_paintState.rows == 0) return;
 
+    final dirtyRows = _spriteBuilder.dirtyRows;
     if (_needsContentSync) {
       _needsContentSync = false;
-      _needsSpriteRebuild = false;
 
-      _renderState.update(_terminal);
+      final dirty = _renderState.update(_terminal);
 
       final scrollbar = _terminal.scrollbar;
       _paintState.viewportOffset = scrollbar.offset;
@@ -714,13 +721,14 @@ class TerminalRenderBox extends RenderBox {
           _terminal.background?.toArgb32 ??
           _paintState.theme.background.toARGB32();
 
-      _spriteBuilder.build(_renderState);
-      _renderState.dirty = DirtyState.clean;
+      if (dirty != .clean || dirtyRows.anyDirty) {
+        _spriteBuilder.build(_renderState, dirty: dirty);
+        _renderState.dirty = .clean;
+      }
 
       _resolveCursor(_renderState, scrollbar);
-    } else if (_needsSpriteRebuild) {
-      _needsSpriteRebuild = false;
-      _spriteBuilder.build(_renderState);
+    } else if (dirtyRows.anyDirty) {
+      _spriteBuilder.build(_renderState, dirty: .partial);
     }
 
     _syncKittyPlacements();
