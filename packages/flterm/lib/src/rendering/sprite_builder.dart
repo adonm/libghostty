@@ -5,7 +5,7 @@ import 'package:libghostty/libghostty.dart';
 
 import '../foundation/dynamic_color.dart';
 import '../foundation/terminal_selection.dart';
-import 'atlas/glyph_atlas.dart';
+import 'atlas/atlas.dart';
 import 'atlas/sprite_buffer.dart';
 import 'paint_state.dart';
 
@@ -114,7 +114,7 @@ class RowDirtyTracker {
 ///   String allocation.
 /// - Background color runs are coalesced across adjacent same-color cells.
 class SpriteBuilder {
-  final GlyphAtlas _atlas;
+  final Atlas _atlas;
   final SpriteBuffer _sprites;
   final TerminalPaintState _state;
   final _StyleCache _styleCache;
@@ -312,7 +312,10 @@ class SpriteBuilder {
       bold: style.bold,
       italic: style.italic,
     );
-    final sprites = entry.isSprite ? _sprites.sprite : _sprites.regular;
+    final sprites = switch (entry.lane) {
+      .sprite => _sprites.sprite,
+      _ => _sprites.regular,
+    };
     sprites.add(x, cursor.rowY, entry, _inverseDpr, cursor.foreground);
   }
 
@@ -470,10 +473,10 @@ class SpriteBuilder {
           cursor.foreground,
         );
       } else {
-        final isEmoji = !isCjkCodepoint(cp);
+        final renderAsEmoji = !isCjkCodepoint(cp);
         final key = (text: content, bold: style.bold, italic: style.italic);
-        final entry = _atlas.add(key, span: 2, emoji: isEmoji);
-        if (isEmoji) {
+        final entry = _atlas.add(key, span: 2, emoji: renderAsEmoji);
+        if (renderAsEmoji) {
           _sprites.emoji.add(cursor.spriteX, cursor.rowY, entry, _inverseDpr);
         } else {
           _sprites.wide.add(

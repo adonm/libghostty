@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui';
 
-import 'glyph_entry.dart';
+import 'atlas_entry.dart';
 
 /// Sprite data for [Canvas.drawRawAtlas] calls, organized as fixed per-row
 /// slot ranges for incremental row-dirty rebuilds.
@@ -55,7 +55,7 @@ class AtlasSprites {
   void add(
     double x,
     double y,
-    GlyphEntry entry,
+    AtlasEntry entry,
     double inverseDpr, [
     int argb = 0,
   ]) {

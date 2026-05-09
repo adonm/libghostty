@@ -3,17 +3,13 @@ import 'dart:ui';
 
 import 'package:libghostty/libghostty.dart' show UnderlineStyle;
 
-import '../sprite/sprite_face.dart';
-import 'glyph_atlas_config.dart';
-import 'glyph_atlas_texture.dart';
-import 'glyph_entry.dart';
+import '../atlas_config.dart';
+import '../atlas_entry.dart';
+import 'atlas_lane.dart';
 
-/// Rasterizes built-in sprite glyphs or decoration sprites into an atlas.
-class GlyphSpriteRasterizer {
-  final GlyphAtlasTexture _texture;
-  final List<(SpriteGlyph, GlyphEntry)> _pendingSprites = [];
-  final List<(UnderlineStyle, GlyphEntry)> _pendingDecorations = [];
-  final _spriteContext = SpriteContext();
+/// Rasterizes underline decoration geometry into the decoration atlas.
+class DecorationLane extends AtlasLane {
+  final List<(UnderlineStyle, AtlasEntry)> _pending = [];
 
   var _pxCellWidth = 0.0;
   var _pxCellHeight = 0.0;
@@ -24,17 +20,17 @@ class GlyphSpriteRasterizer {
   // curly and double underlines to extend below the cell boundary.
   var _pxDecorationPadding = 0.0;
 
-  GlyphSpriteRasterizer(this._texture);
+  DecorationLane({super.initialSize, super.maxSize})
+    : super(entryLane: .decoration);
 
-  bool get hasPending =>
-      _pendingSprites.isNotEmpty || _pendingDecorations.isNotEmpty;
+  @override
+  bool get hasPending => _pending.isNotEmpty;
 
-  void clear() {
-    _pendingSprites.clear();
-    _pendingDecorations.clear();
-  }
+  @override
+  void clearPending() => _pending.clear();
 
-  void configure(GlyphAtlasConfig config) {
+  @override
+  void configure(AtlasConfig config) {
     _pxCellWidth = config.metrics.cellWidth * config.devicePixelRatio;
     _pxCellHeight = config.metrics.cellHeight * config.devicePixelRatio;
     _pxUnderlinePosition =
@@ -47,22 +43,9 @@ class GlyphSpriteRasterizer {
     _pxDecorationPadding = (_pxCellHeight / 4).ceilToDouble();
   }
 
-  void compositePending(Canvas canvas) {
-    for (final (glyph, entry) in _pendingSprites) {
-      final rect = Rect.fromLTRB(
-        entry.srcLeft,
-        entry.srcTop,
-        entry.srcRight,
-        entry.srcBottom,
-      );
-      canvas.save();
-      canvas.clipRect(rect);
-      _spriteContext.reset();
-      glyph.paint(canvas, rect, _spriteContext);
-      canvas.restore();
-    }
-
-    for (final (style, entry) in _pendingDecorations) {
+  @override
+  void paintPending(Canvas canvas) {
+    for (final (style, entry) in _pending) {
       canvas.save();
       canvas.clipRect(
         Rect.fromLTRB(
@@ -72,52 +55,23 @@ class GlyphSpriteRasterizer {
           entry.srcBottom,
         ),
       );
-      _compositeDecoration(canvas, style, entry);
+      _paintDecoration(canvas, style, entry);
       canvas.restore();
     }
-
-    _pendingSprites.clear();
-    _pendingDecorations.clear();
+    _pending.clear();
   }
 
   /// Rasterizes an underline decoration sprite for the given [style].
   ///
   /// Draws the underline pattern into the atlas in white; per-sprite color
   /// tinting is applied at draw time via [BlendMode.modulate].
-  ///
-  /// Sprite height = cell height + padding, allowing curly and double
-  /// underlines to extend below the cell boundary.
-  GlyphEntry rasterizeDecoration(UnderlineStyle style) {
+  AtlasEntry rasterizeDecoration(UnderlineStyle style) {
     final pxWidth = _pxCellWidth.ceil().toDouble();
     // Sprite is taller than cell to accommodate decorations extending below.
     final pxHeight = (_pxCellHeight + _pxDecorationPadding).ceil().toDouble();
-    final entry = _texture.allocate(
-      width: pxWidth,
-      height: pxHeight,
-      bearingY: 0,
-      lane: GlyphEntryLane.decoration,
-    );
+    final entry = allocate(width: pxWidth, height: pxHeight, bearingY: 0);
 
-    _pendingDecorations.add((style, entry));
-    return entry;
-  }
-
-  /// Reserves an atlas slot for [glyph] and returns its [GlyphEntry].
-  ///
-  /// The sprite is painted by its own geometry (no font rasterization) into
-  /// the reserved rect on the next [compositePending]. [span] controls how
-  /// many cell widths the glyph occupies.
-  GlyphEntry rasterizeSprite(SpriteGlyph glyph, {int span = 1}) {
-    final pxWidth = (_pxCellWidth * span).ceil().toDouble();
-    final pxHeight = _pxCellHeight.ceil().toDouble();
-    final entry = _texture.allocate(
-      width: pxWidth,
-      height: pxHeight,
-      bearingY: 0,
-      lane: GlyphEntryLane.sprite,
-    );
-
-    _pendingSprites.add((glyph, entry));
+    _pending.add((style, entry));
     return entry;
   }
 
@@ -127,11 +81,7 @@ class GlyphSpriteRasterizer {
   /// stays within the sprite bounds (cell height + padding). The padding
   /// allows curly and double underlines to extend below the cell boundary
   /// without being clipped.
-  void _compositeDecoration(
-    Canvas canvas,
-    UnderlineStyle style,
-    GlyphEntry entry,
-  ) {
+  void _paintDecoration(Canvas canvas, UnderlineStyle style, AtlasEntry entry) {
     final width = entry.srcRight - entry.srcLeft;
     final ox = entry.srcLeft;
     final oy = entry.srcTop;

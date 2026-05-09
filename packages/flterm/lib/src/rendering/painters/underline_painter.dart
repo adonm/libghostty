@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/painting.dart';
 
-import '../atlas/glyph_atlas.dart';
+import '../atlas/atlas.dart';
 import '../atlas/sprite_buffer.dart';
 import 'terminal_painter.dart';
 
@@ -14,7 +14,7 @@ import 'terminal_painter.dart';
 /// intersections.
 class UnderlinePainter implements TerminalPainter {
   final Paint _paint;
-  final GlyphAtlas _atlas;
+  final Atlas _atlas;
   final SpriteBuffer _sprites;
 
   UnderlinePainter(this._atlas, this._sprites) : _paint = Paint();

@@ -1,28 +1,43 @@
 import 'dart:ui';
 
 import 'package:flterm/src/foundation/cell_metrics.dart';
-import 'package:flterm/src/rendering/atlas/glyph_atlas_cache.dart';
-import 'package:flterm/src/rendering/atlas/glyph_atlas_config.dart';
-import 'package:flterm/src/rendering/atlas/glyph_rasterizer.dart';
+import 'package:flterm/src/rendering/atlas/atlas_cache.dart';
+import 'package:flterm/src/rendering/atlas/atlas_config.dart';
+import 'package:flterm/src/rendering/atlas/lanes/decoration_lane.dart';
+import 'package:flterm/src/rendering/atlas/lanes/emoji_lane.dart';
+import 'package:flterm/src/rendering/atlas/lanes/sprite_lane.dart';
+import 'package:flterm/src/rendering/atlas/lanes/text_lane.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart';
 
 void main() {
-  group('GlyphAtlasCache', () {
-    late GlyphRasterizer rasterizer;
-    late GlyphAtlasCache cache;
+  group('AtlasCache', () {
+    late TextLane textLane;
+    late EmojiLane emojiLane;
+    late SpriteLane spriteLane;
+    late DecorationLane decorationLane;
+    late AtlasCache cache;
 
     setUp(() {
-      rasterizer = GlyphRasterizer()..configure(_config());
-      cache = GlyphAtlasCache(
-        textRasterizer: rasterizer.textRasterizer,
-        emojiRasterizer: rasterizer.emojiRasterizer,
-        spriteRasterizer: rasterizer.spriteRasterizer,
-        decorationRasterizer: rasterizer.decorationRasterizer,
+      final config = _config();
+      textLane = TextLane()..configure(config);
+      emojiLane = EmojiLane()..configure(config);
+      spriteLane = SpriteLane()..configure(config);
+      decorationLane = DecorationLane()..configure(config);
+      cache = AtlasCache(
+        textLane: textLane,
+        emojiLane: emojiLane,
+        spriteLane: spriteLane,
+        decorationLane: decorationLane,
       );
     });
 
-    tearDown(() => rasterizer.dispose());
+    tearDown(() {
+      textLane.dispose();
+      emojiLane.dispose();
+      spriteLane.dispose();
+      decorationLane.dispose();
+    });
 
     test('shares text entries for matching keys', () {
       const key = (text: 'A', bold: false, italic: false);
@@ -146,8 +161,8 @@ void main() {
       );
     });
 
-    test('preseedCommonGlyphs seeds ASCII and decorations only', () {
-      cache.preseedCommonGlyphs();
+    test('preseedCommonEntries seeds ASCII and decorations only', () {
+      cache.preseedCommonEntries();
 
       final preseedSize = 94 * 4 + UnderlineStyle.values.length - 1;
       expect(cache.size, preseedSize);
@@ -163,8 +178,8 @@ void main() {
   });
 }
 
-GlyphAtlasConfig _config() {
-  return GlyphAtlasConfig(
+AtlasConfig _config() {
+  return AtlasConfig(
     fontSize: 14,
     fontWeight: FontWeight.normal,
     fontFamily: 'monospace',

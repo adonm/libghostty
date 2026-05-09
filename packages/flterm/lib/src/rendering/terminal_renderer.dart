@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:libghostty/libghostty.dart';
 
 import '../foundation.dart';
-import 'atlas/glyph_atlas_config.dart';
+import 'atlas/atlas_config.dart';
 import 'atlas/sprite_buffer.dart';
 import 'kitty_image_cache.dart';
 import 'paint_state.dart';
@@ -195,7 +195,7 @@ class TerminalRenderBox extends RenderBox {
   TerminalRenderObserver _renderObserver;
   OnResize? _onResize;
   TerminalRenderCache _renderCache;
-  late TerminalGlyphAtlasHandle _atlasHandle;
+  late TerminalAtlasHandle _atlasHandle;
   var _performingLayout = false;
   var _needsContentSync = false;
   var _stickToBottom = true;
@@ -239,7 +239,7 @@ class TerminalRenderBox extends RenderBox {
       ..blinkVisible = blinkVisible
       ..selection = renderObserver.selection
       ..cursorFocused = renderObserver.hasFocus;
-    _atlasHandle = _renderCache.acquireGlyphAtlas(
+    _atlasHandle = _renderCache.acquireAtlas(
       .fromTheme(
         theme: theme,
         metrics: metrics,
@@ -511,7 +511,7 @@ class TerminalRenderBox extends RenderBox {
   }
 
   bool _acquireAtlasForCurrentConfig({double? dpr, bool force = false}) {
-    final config = GlyphAtlasConfig.fromTheme(
+    final config = AtlasConfig.fromTheme(
       theme: _paintState.theme,
       metrics: _paintState.metrics,
       devicePixelRatio: dpr ?? _currentDevicePixelRatio,
@@ -521,7 +521,7 @@ class TerminalRenderBox extends RenderBox {
     final previousHandle = _atlasHandle;
     final previousBuilder = _spriteBuilder;
 
-    _atlasHandle = _renderCache.acquireGlyphAtlas(config);
+    _atlasHandle = _renderCache.acquireAtlas(config);
     _bindAtlasDependents();
     if (_paintState.rows > 0 && _paintState.cols > 0) {
       _spriteBuilder.configure(_paintState.rows, _paintState.cols);
@@ -642,7 +642,7 @@ class TerminalRenderBox extends RenderBox {
       _lastCursorCell = null;
       _paintState.cursor = cursor.copyWith(visible: false);
       _paintState.cursorWide = false;
-      _paintState.cursorGlyphEntry = null;
+      _paintState.cursorAtlasEntry = null;
       return;
     }
 
@@ -698,7 +698,7 @@ class TerminalRenderBox extends RenderBox {
   // Builds the block cursor glyph from cached cursor cell data.
   // Called after cursor resolution and on focus changes.
   void _resolveCursorGlyph() {
-    _paintState.cursorGlyphEntry = null;
+    _paintState.cursorAtlasEntry = null;
     final cell = _lastCursorCell;
     if (cell == null ||
         !_paintState.cursorFocused ||
@@ -718,13 +718,13 @@ class TerminalRenderBox extends RenderBox {
       if (cell.wide &&
           !_atlasHandle.atlas.hasSprite(codepoint) &&
           !isCjkCodepoint(codepoint)) {
-        _paintState.cursorGlyphEntry = _atlasHandle.atlas.add(
+        _paintState.cursorAtlasEntry = _atlasHandle.atlas.add(
           (text: cell.content, bold: style.bold, italic: style.italic),
           span: span,
           emoji: true,
         );
       } else {
-        _paintState.cursorGlyphEntry = _atlasHandle.atlas.addCodepoint(
+        _paintState.cursorAtlasEntry = _atlasHandle.atlas.addCodepoint(
           codepoint,
           bold: style.bold,
           italic: style.italic,
@@ -736,7 +736,7 @@ class TerminalRenderBox extends RenderBox {
       final emoji =
           cell.content.contains('\uFE0F') ||
           (cell.wide && !isCjkCodepoint(codepoint));
-      _paintState.cursorGlyphEntry = _atlasHandle.atlas.add(
+      _paintState.cursorAtlasEntry = _atlasHandle.atlas.add(
         (text: cell.content, bold: style.bold, italic: style.italic),
         span: cell.wide ? 2 : 1,
         emoji: emoji,

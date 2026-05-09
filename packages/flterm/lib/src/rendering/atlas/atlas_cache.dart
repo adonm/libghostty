@@ -1,54 +1,51 @@
 import 'package:libghostty/libghostty.dart' show UnderlineStyle;
 
 import '../sprite/sprite_face.dart';
-import 'glyph_entry.dart';
-import 'glyph_sprite_rasterizer.dart';
-import 'glyph_text_rasterizer.dart';
+import 'atlas_entry.dart';
+import 'lanes/decoration_lane.dart';
+import 'lanes/emoji_lane.dart';
+import 'lanes/sprite_lane.dart';
+import 'lanes/text_lane.dart';
 
-/// Lookup key for a cached glyph. Two glyphs with the same text, bold,
+/// Lookup key for a cached text glyph. Two glyphs with the same text, bold,
 /// and italic state share the same atlas entry.
-typedef TextGlyphKey = ({String text, bool bold, bool italic});
-
-typedef _CodepointGlyphKey = ({
-  int codepoint,
-  bool bold,
-  bool italic,
-  int span,
-});
-typedef _GlyphCacheKey = ({String text, bool bold, bool italic, int span});
+typedef TextAtlasKey = ({String text, bool bold, bool italic});
+typedef _CodepointKey = ({int codepoint, bool bold, bool italic, int span});
+typedef _TextKey = ({String text, bool bold, bool italic, int span});
 typedef _SpriteKey = ({int codepoint, int span});
 
-/// Caches glyph atlas entries and delegates rasterization on cache miss.
-class GlyphAtlasCache {
-  final GlyphTextRasterizer _textRasterizer;
-  final GlyphTextRasterizer _emojiRasterizer;
-  final GlyphSpriteRasterizer _spriteRasterizer;
-  final GlyphSpriteRasterizer _decorationRasterizer;
+/// Caches atlas entries and delegates rasterization on cache miss.
+class AtlasCache {
   final SpriteFace _spriteFace;
+  final TextLane _textLane;
+  final EmojiLane _emojiLane;
+  final SpriteLane _spriteLane;
+  final DecorationLane _decorationLane;
 
-  final Map<_GlyphCacheKey, GlyphEntry> _text = {};
-  final Map<_GlyphCacheKey, GlyphEntry> _emoji = {};
-  final Map<_CodepointGlyphKey, GlyphEntry> _codepoints = {};
-  final Map<_SpriteKey, GlyphEntry> _sprites = {};
-  final Map<UnderlineStyle, GlyphEntry> _decorations = {};
+  final Map<_TextKey, AtlasEntry> _text = {};
+  final Map<_TextKey, AtlasEntry> _emoji = {};
+  final Map<_SpriteKey, AtlasEntry> _sprites = {};
+  final Map<_CodepointKey, AtlasEntry> _codepoints = {};
+  final Map<UnderlineStyle, AtlasEntry> _decorations = {};
 
-  GlyphAtlasCache({
-    required GlyphTextRasterizer textRasterizer,
-    required GlyphTextRasterizer emojiRasterizer,
-    required GlyphSpriteRasterizer spriteRasterizer,
-    required GlyphSpriteRasterizer decorationRasterizer,
+  AtlasCache({
+    required TextLane textLane,
+    required EmojiLane emojiLane,
+    required SpriteLane spriteLane,
+    required DecorationLane decorationLane,
     SpriteFace? spriteFace,
-  }) : _textRasterizer = textRasterizer,
-       _emojiRasterizer = emojiRasterizer,
-       _spriteRasterizer = spriteRasterizer,
-       _decorationRasterizer = decorationRasterizer,
+  }) : _textLane = textLane,
+       _emojiLane = emojiLane,
+       _spriteLane = spriteLane,
+       _decorationLane = decorationLane,
        _spriteFace = spriteFace ?? SpriteFace();
 
-  int get size =>
-      _text.length + _emoji.length + _sprites.length + _decorations.length;
+  int get size {
+    return _text.length + _emoji.length + _sprites.length + _decorations.length;
+  }
 
   /// Returns or creates a text or emoji glyph for [key].
-  GlyphEntry add(TextGlyphKey key, {int span = 1, bool emoji = false}) {
+  AtlasEntry add(TextAtlasKey key, {int span = 1, bool emoji = false}) {
     return emoji ? _addEmoji(key, span: span) : _addText(key, span: span);
   }
 
@@ -57,7 +54,7 @@ class GlyphAtlasCache {
   /// Built-in sprite codepoints bypass font rasterization entirely and
   /// render from geometry. Non-sprite codepoints route through the text
   /// lane so single-codepoint and text-keyed callers share entries.
-  GlyphEntry addCodepoint(
+  AtlasEntry addCodepoint(
     int codepoint, {
     required bool bold,
     required bool italic,
@@ -80,10 +77,8 @@ class GlyphAtlasCache {
   }
 
   /// Returns or creates a decoration sprite for the given underline [style].
-  GlyphEntry addDecoration(UnderlineStyle style) {
-    return _decorations[style] ??= _decorationRasterizer.rasterizeDecoration(
-      style,
-    );
+  AtlasEntry addDecoration(UnderlineStyle style) {
+    return _decorations[style] ??= _decorationLane.rasterizeDecoration(style);
   }
 
   void clear() {
@@ -102,19 +97,19 @@ class GlyphAtlasCache {
   /// every frame. Built-in sprites stay lazy so they do not consume memory
   /// until a terminal actually renders them. Decorations are seeded because
   /// they are few and avoid mid-frame atlas composites.
-  void preseedCommonGlyphs() {
+  void preseedCommonEntries() {
     _preseedAscii();
     _preseedDecorations();
   }
 
-  GlyphEntry _addEmoji(TextGlyphKey key, {int span = 1}) {
+  AtlasEntry _addEmoji(TextAtlasKey key, {int span = 1}) {
     final cacheKey = (
       text: key.text,
       bold: key.bold,
       italic: key.italic,
       span: span,
     );
-    return _emoji[cacheKey] ??= _emojiRasterizer.rasterizeEmoji(
+    return _emoji[cacheKey] ??= _emojiLane.rasterizeEmoji(
       key.text,
       bold: key.bold,
       italic: key.italic,
@@ -122,25 +117,22 @@ class GlyphAtlasCache {
     );
   }
 
-  GlyphEntry? _addSpriteCodepoint(int codepoint, {int span = 1}) {
+  AtlasEntry? _addSpriteCodepoint(int codepoint, {int span = 1}) {
     final glyph = _spriteFace.glyphFor(codepoint);
     if (glyph == null) return null;
 
     final key = (codepoint: codepoint, span: span);
-    return _sprites[key] ??= _spriteRasterizer.rasterizeSprite(
-      glyph,
-      span: span,
-    );
+    return _sprites[key] ??= _spriteLane.rasterizeSprite(glyph, span: span);
   }
 
-  GlyphEntry _addText(TextGlyphKey key, {int span = 1}) {
+  AtlasEntry _addText(TextAtlasKey key, {int span = 1}) {
     final cacheKey = (
       text: key.text,
       bold: key.bold,
       italic: key.italic,
       span: span,
     );
-    return _text[cacheKey] ??= _textRasterizer.rasterizeText(
+    return _text[cacheKey] ??= _textLane.rasterizeText(
       key.text,
       bold: key.bold,
       italic: key.italic,
