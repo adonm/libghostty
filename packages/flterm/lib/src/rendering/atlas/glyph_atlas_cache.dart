@@ -63,12 +63,10 @@ class GlyphAtlasCache {
 
   /// Pre-seeds glyphs that are expected to appear in nearly every terminal.
   ///
-  /// Text and sprite lanes own their specific preseed rules so callers do
-  /// not need to know which codepoints are font-rasterized vs. built-in
-  /// geometry.
+  /// Text and decoration lanes own their specific preseed rules so callers
+  /// do not need to know which glyphs are pre-rasterized.
   void preseedCommonGlyphs() {
     _text.preseedAscii();
-    _sprites.preseedCodepoints();
     _sprites.preseedDecorations();
   }
 }

@@ -89,7 +89,8 @@ void main() {
     test('preseedCommonGlyphs delegates common preseed work to lanes', () {
       cache.preseedCommonGlyphs();
 
-      expect(cache.size, greaterThan(94 * 4));
+      final preseedSize = 94 * 4 + UnderlineStyle.values.length - 1;
+      expect(cache.size, preseedSize);
       final ascii = cache.addCodepoint(0x41, bold: false, italic: false);
       final sprite = cache.addCodepoint(0x2500, bold: false, italic: false);
       final decoration = cache.addDecoration(UnderlineStyle.single);
@@ -97,7 +98,7 @@ void main() {
       expect(ascii, isNotNull);
       expect(sprite, isNotNull);
       expect(decoration, isNotNull);
-      expect(cache.size, greaterThan(94 * 4));
+      expect(cache.size, preseedSize + 1);
     });
   });
 }

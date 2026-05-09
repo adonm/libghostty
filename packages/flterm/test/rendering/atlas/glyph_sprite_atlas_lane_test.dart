@@ -23,7 +23,6 @@ void main() {
     tearDown(() => rasterizer.dispose());
 
     test('reports supported codepoints', () {
-      expect(lane.supportedCodepoints, contains(0x2500));
       expect(lane.hasCodepoint(0x2500), isTrue);
       expect(lane.hasCodepoint(0x41), isFalse);
     });
@@ -73,20 +72,6 @@ void main() {
       expect(spriteAfter, isNot(same(spriteBefore)));
       expect(decorationAfter, isNot(same(decorationBefore)));
     });
-
-    test(
-      'preseedCodepoints creates one entry for every supported codepoint',
-      () {
-        final supportedCount = lane.supportedCodepoints.length;
-
-        lane.preseedCodepoints();
-
-        expect(lane.size, supportedCount);
-        final preseeded = lane.addCodepoint(0x2500);
-        expect(lane.size, supportedCount);
-        expect(preseeded, isNotNull);
-      },
-    );
 
     test('preseedDecorations creates reusable decoration entries', () {
       lane.preseedDecorations();

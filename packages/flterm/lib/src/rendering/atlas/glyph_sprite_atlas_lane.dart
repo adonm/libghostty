@@ -24,8 +24,6 @@ class GlyphSpriteAtlasLane {
 
   int get size => _codepoints.length + _decorations.length;
 
-  Iterable<int> get supportedCodepoints => _spriteFace.supportedCodepoints;
-
   GlyphEntry? addCodepoint(int codepoint, {int span = 1}) {
     final glyph = _spriteFace.glyphFor(codepoint);
     if (glyph == null) return null;
@@ -50,12 +48,6 @@ class GlyphSpriteAtlasLane {
   }
 
   bool hasCodepoint(int codepoint) => _spriteFace.hasCodepoint(codepoint);
-
-  void preseedCodepoints() {
-    for (final codepoint in supportedCodepoints) {
-      addCodepoint(codepoint);
-    }
-  }
 
   void preseedDecorations() {
     for (final style in UnderlineStyle.values) {

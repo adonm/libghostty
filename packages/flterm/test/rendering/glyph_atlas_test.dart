@@ -22,21 +22,25 @@ void main() {
         expect(atlas.devicePixelRatio, 2.0);
         expect(atlas.cacheSize, greaterThan(0));
         expect(atlas.image, isNotNull);
+        expect(atlas.spriteImage, isNull);
       });
 
       test('lane image accessors expose separate atlas textures', () {
         expect(atlas.image, same(atlas.textImage));
         expect(atlas.textImage, isNotNull);
-        expect(atlas.spriteImage, isNotNull);
+        expect(atlas.spriteImage, isNull);
         expect(atlas.decorationImage, isNotNull);
-        expect(atlas.spriteImage, isNot(same(atlas.textImage)));
-        expect(atlas.decorationImage, isNot(same(atlas.spriteImage)));
+        expect(atlas.decorationImage, isNot(same(atlas.textImage)));
 
         atlas.add((text: '\u{1F600}', bold: false, italic: false), emoji: true);
+        atlas.addCodepoint(0x2500, bold: false, italic: false);
         atlas.ensureImage();
 
         expect(atlas.emojiImage, isNotNull);
+        expect(atlas.spriteImage, isNotNull);
         expect(atlas.emojiImage, isNot(same(atlas.textImage)));
+        expect(atlas.spriteImage, isNot(same(atlas.textImage)));
+        expect(atlas.decorationImage, isNot(same(atlas.spriteImage)));
       });
 
       test('defers preseed when cell dimensions are not available', () {
@@ -102,6 +106,19 @@ void main() {
           doubleWidth.srcRight - doubleWidth.srcLeft,
           greaterThan(single.srcRight - single.srcLeft),
         );
+      });
+
+      test('sprite codepoints are rasterized lazily on first use', () {
+        final sizeBefore = atlas.cacheSize;
+        expect(atlas.spriteImage, isNull);
+
+        final entry = atlas.addCodepoint(0x2500, bold: false, italic: false);
+        expect(entry.srcRight, greaterThan(entry.srcLeft));
+        expect(atlas.cacheSize, sizeBefore + 1);
+        expect(atlas.spriteImage, isNull);
+
+        atlas.ensureImage();
+        expect(atlas.spriteImage, isNotNull);
       });
     });
 

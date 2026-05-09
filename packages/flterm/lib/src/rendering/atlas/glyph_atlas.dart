@@ -94,12 +94,10 @@ class GlyphAtlas {
   ///
   /// Rasterizing all printable ASCII in every bold/italic combination up
   /// front avoids per-frame cache misses for the most common characters.
-  /// The entire sprite registry is also pre-seeded: lazy-rasterizing
-  /// sprites would shift every later glyph's atlas position, and Skia's
-  /// hinted text rasterization is not invariant under that shift, which
-  /// drifts emoji/CJK anti-aliasing and breaks goldens that have nothing
-  /// to do with the sprite path. All underline styles are pre-seeded too
-  /// so decoration rendering never triggers a mid-frame atlas composite.
+  /// Built-in sprite glyphs are rasterized lazily into their own atlas
+  /// texture, so first use no longer shifts text/emoji atlas positions.
+  /// All underline styles are pre-seeded so decoration rendering never
+  /// triggers a mid-frame atlas composite.
   void _preseed() {
     _cache.preseedCommonGlyphs();
     ensureImage();
