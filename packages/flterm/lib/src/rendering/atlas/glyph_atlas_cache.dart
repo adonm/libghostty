@@ -1,9 +1,10 @@
 import 'package:libghostty/libghostty.dart' show UnderlineStyle;
 
 import 'glyph_entry.dart';
-import 'glyph_rasterizer.dart';
 import 'glyph_sprite_atlas_lane.dart';
+import 'glyph_sprite_rasterizer.dart';
 import 'glyph_text_atlas_lane.dart';
+import 'glyph_text_rasterizer.dart';
 
 export 'glyph_text_atlas_lane.dart' show TextGlyphKey;
 
@@ -12,9 +13,11 @@ class GlyphAtlasCache {
   final GlyphTextAtlasLane _text;
   final GlyphSpriteAtlasLane _sprites;
 
-  GlyphAtlasCache(GlyphRasterizer rasterizer)
-    : _text = GlyphTextAtlasLane(rasterizer),
-      _sprites = GlyphSpriteAtlasLane(rasterizer);
+  GlyphAtlasCache({
+    required GlyphTextRasterizer textRasterizer,
+    required GlyphSpriteRasterizer spriteRasterizer,
+  }) : _text = GlyphTextAtlasLane(textRasterizer),
+       _sprites = GlyphSpriteAtlasLane(spriteRasterizer);
 
   int get size => _text.size + _sprites.size;
 

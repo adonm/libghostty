@@ -1,5 +1,5 @@
 import 'glyph_entry.dart';
-import 'glyph_rasterizer.dart';
+import 'glyph_text_rasterizer.dart';
 
 /// Lookup key for a cached glyph. Two glyphs with the same text, bold,
 /// and italic state share the same atlas entry.
@@ -15,7 +15,7 @@ typedef _GlyphCacheKey = ({String text, bool bold, bool italic, int span});
 
 /// Atlas lane for font-rasterized text and emoji glyphs.
 class GlyphTextAtlasLane {
-  final GlyphRasterizer _rasterizer;
+  final GlyphTextRasterizer _rasterizer;
   final Map<_GlyphCacheKey, GlyphEntry> _glyphs = {};
   final Map<_CodepointGlyphKey, GlyphEntry> _codepoints = {};
 

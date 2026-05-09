@@ -14,7 +14,10 @@ void main() {
 
     setUp(() {
       rasterizer = GlyphRasterizer()..configure(_config());
-      cache = GlyphAtlasCache(rasterizer);
+      cache = GlyphAtlasCache(
+        textRasterizer: rasterizer.textRasterizer,
+        spriteRasterizer: rasterizer.spriteRasterizer,
+      );
     });
 
     tearDown(() => rasterizer.dispose());

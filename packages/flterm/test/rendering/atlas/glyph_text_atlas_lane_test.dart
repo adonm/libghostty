@@ -13,7 +13,7 @@ void main() {
 
     setUp(() {
       rasterizer = GlyphRasterizer()..configure(_config());
-      lane = GlyphTextAtlasLane(rasterizer);
+      lane = GlyphTextAtlasLane(rasterizer.textRasterizer);
     });
 
     tearDown(() => rasterizer.dispose());

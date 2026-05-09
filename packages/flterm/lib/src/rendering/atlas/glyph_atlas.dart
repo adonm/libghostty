@@ -22,7 +22,10 @@ export 'glyph_entry.dart';
 /// pending glyphs, [dispose] when detached.
 class GlyphAtlas {
   final _rasterizer = GlyphRasterizer();
-  late final _cache = GlyphAtlasCache(_rasterizer);
+  late final _cache = GlyphAtlasCache(
+    textRasterizer: _rasterizer.textRasterizer,
+    spriteRasterizer: _rasterizer.spriteRasterizer,
+  );
 
   final GlyphAtlasConfig _config;
 

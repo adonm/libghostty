@@ -14,7 +14,7 @@ void main() {
 
     setUp(() {
       rasterizer = GlyphRasterizer()..configure(_config());
-      lane = GlyphSpriteAtlasLane(rasterizer);
+      lane = GlyphSpriteAtlasLane(rasterizer.spriteRasterizer);
     });
 
     tearDown(() => rasterizer.dispose());

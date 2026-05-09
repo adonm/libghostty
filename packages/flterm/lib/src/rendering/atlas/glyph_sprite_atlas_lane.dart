@@ -2,14 +2,14 @@ import 'package:libghostty/libghostty.dart' show UnderlineStyle;
 
 import '../sprite/sprite_face.dart';
 import 'glyph_entry.dart';
-import 'glyph_rasterizer.dart';
+import 'glyph_sprite_rasterizer.dart';
 
 typedef _SpriteKey = ({int codepoint, int span});
 
 /// Atlas lane for built-in sprite glyphs and generated decoration sprites.
 class GlyphSpriteAtlasLane {
   final SpriteFace _spriteFace;
-  final GlyphRasterizer _rasterizer;
+  final GlyphSpriteRasterizer _rasterizer;
   final Map<_SpriteKey, GlyphEntry> _codepoints = {};
   final Map<UnderlineStyle, GlyphEntry> _decorations = {};
 
