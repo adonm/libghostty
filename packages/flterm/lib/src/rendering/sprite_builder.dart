@@ -19,7 +19,7 @@ bool _hasDecoration(Style style) {
 /// as full-color image sprites. Flutter doesn't expose a font-level
 /// `isColorGlyph()` check, so codepoint range classification is the
 /// pragmatic way to distinguish CJK text from emoji in the hot loop.
-bool _isCjk(int cp) {
+bool isCjkCodepoint(int cp) {
   return (cp >= 0x2E80 && cp <= 0x9FFF) || // CJK radicals, unified ideographs
       (cp >= 0xAC00 && cp <= 0xD7AF) || // Hangul Syllables
       (cp >= 0xF900 && cp <= 0xFAFF) || // CJK Compatibility Ideographs
@@ -312,7 +312,10 @@ class SpriteBuilder {
       bold: style.bold,
       italic: style.italic,
     );
-    _sprites.regular.add(x, cursor.rowY, entry, _inverseDpr, cursor.foreground);
+    final sprites = _atlas.hasSprite(codepoint)
+        ? _sprites.sprite
+        : _sprites.regular;
+    sprites.add(x, cursor.rowY, entry, _inverseDpr, cursor.foreground);
   }
 
   /// Emits decoration sprites (underline, strikethrough, overline).
@@ -461,7 +464,7 @@ class SpriteBuilder {
           italic: style.italic,
           span: 2,
         );
-        _sprites.wide.add(
+        _sprites.sprite.add(
           cursor.spriteX,
           cursor.rowY,
           entry,
@@ -469,7 +472,7 @@ class SpriteBuilder {
           cursor.foreground,
         );
       } else {
-        final isEmoji = !_isCjk(cp);
+        final isEmoji = !isCjkCodepoint(cp);
         final key = (text: content, bold: style.bold, italic: style.italic);
         final entry = _atlas.add(key, span: 2, emoji: isEmoji);
         if (isEmoji) {

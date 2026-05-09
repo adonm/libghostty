@@ -113,6 +113,7 @@ class GlyphSpriteRasterizer {
       width: pxWidth,
       height: pxHeight,
       bearingY: 0,
+      isSprite: true,
     );
 
     _pendingSprites.add((glyph, entry));

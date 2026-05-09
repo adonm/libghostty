@@ -64,6 +64,7 @@ class GlyphAtlasTexture {
     required double bearingY,
     double bearingX = 0.0,
     bool isEmoji = false,
+    bool isSprite = false,
   }) {
     _pack(width, height);
 
@@ -75,6 +76,7 @@ class GlyphAtlasTexture {
       bearingY: bearingY,
       bearingX: bearingX,
       isEmoji: isEmoji,
+      isSprite: isSprite,
     );
 
     _packX += width + padding;

@@ -34,6 +34,9 @@ final class GlyphEntry {
   /// while text glyphs use [BlendMode.modulate] for per-sprite coloring.
   final bool isEmoji;
 
+  /// Whether this glyph lives in the built-in sprite atlas.
+  final bool isSprite;
+
   const GlyphEntry({
     required this.srcLeft,
     required this.srcTop,
@@ -42,5 +45,6 @@ final class GlyphEntry {
     required this.bearingY,
     this.bearingX = 0.0,
     this.isEmoji = false,
+    this.isSprite = false,
   });
 }

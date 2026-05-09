@@ -12,6 +12,7 @@ import 'painters/cursor_painter.dart';
 import 'painters/decoration_painter.dart';
 import 'painters/emoji_painter.dart';
 import 'painters/kitty_graphics_painter.dart';
+import 'painters/sprite_painter.dart';
 import 'painters/terminal_text_painter.dart';
 import 'painters/underline_painter.dart';
 import 'sprite_builder.dart';
@@ -208,6 +209,7 @@ class TerminalRenderBox extends RenderBox {
 
   late EmojiPainter _emojiPainter;
   late CursorPainter _cursorPainter;
+  late SpritePainter _spritePainter;
   late TerminalTextPainter _textPainter;
   late UnderlinePainter _underlinePainter;
   late final TerminalPaintState _paintState;
@@ -431,6 +433,7 @@ class TerminalRenderBox extends RenderBox {
     // at intersections.
     _underlinePainter.paint(canvas);
     _textPainter.paint(canvas);
+    _spritePainter.paint(canvas);
     _cursorPainter.paint(canvas);
     _emojiPainter.paint(canvas);
     // Strikethrough and overline drawn after text so strikethrough visibly
@@ -533,6 +536,7 @@ class TerminalRenderBox extends RenderBox {
     final atlas = _atlasHandle.atlas;
     _spriteBuilder = SpriteBuilder(atlas, _sprites, _paintState);
     _textPainter = TerminalTextPainter(atlas, _sprites.wide, _sprites.regular);
+    _spritePainter = SpritePainter(atlas, _sprites);
     _cursorPainter = CursorPainter(_paintState, atlas);
     _emojiPainter = EmojiPainter(atlas, _sprites);
     _underlinePainter = UnderlinePainter(atlas, _sprites);
@@ -709,18 +713,34 @@ class TerminalRenderBox extends RenderBox {
     }
     final runes = cell.content.runes;
     if (runes.length == 1) {
-      _paintState.cursorGlyphEntry = _atlasHandle.atlas.addCodepoint(
-        runes.first,
-        bold: style.bold,
-        italic: style.italic,
-        span: cell.wide ? 2 : 1,
-      );
+      final codepoint = runes.first;
+      final span = cell.wide ? 2 : 1;
+      if (cell.wide &&
+          !_atlasHandle.atlas.hasSprite(codepoint) &&
+          !isCjkCodepoint(codepoint)) {
+        _paintState.cursorGlyphEntry = _atlasHandle.atlas.add(
+          (text: cell.content, bold: style.bold, italic: style.italic),
+          span: span,
+          emoji: true,
+        );
+      } else {
+        _paintState.cursorGlyphEntry = _atlasHandle.atlas.addCodepoint(
+          codepoint,
+          bold: style.bold,
+          italic: style.italic,
+          span: span,
+        );
+      }
     } else {
-      _paintState.cursorGlyphEntry = _atlasHandle.atlas.add((
-        text: cell.content,
-        bold: style.bold,
-        italic: style.italic,
-      ), span: cell.wide ? 2 : 1);
+      final codepoint = runes.first;
+      final emoji =
+          cell.content.contains('\uFE0F') ||
+          (cell.wide && !isCjkCodepoint(codepoint));
+      _paintState.cursorGlyphEntry = _atlasHandle.atlas.add(
+        (text: cell.content, bold: style.bold, italic: style.italic),
+        span: cell.wide ? 2 : 1,
+        emoji: emoji,
+      );
     }
 
     // The character under a block cursor paints in [CursorTheme.text] (or

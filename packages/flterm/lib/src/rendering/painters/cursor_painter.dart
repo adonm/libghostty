@@ -71,8 +71,13 @@ class CursorPainter implements TerminalPainter {
           );
         } else {
           final entry = _state.cursorGlyphEntry;
-          final atlasImage = _atlas.image;
-          if (entry != null && atlasImage != null) {
+          if (entry != null) {
+            final atlasImage = entry.isEmoji
+                ? _atlas.emojiImage
+                : entry.isSprite
+                ? _atlas.spriteImage
+                : _atlas.textImage;
+            if (atlasImage == null) return;
             final inverseDpr = 1.0 / _atlas.devicePixelRatio;
             canvas.drawImageRect(
               atlasImage,
