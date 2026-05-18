@@ -70,6 +70,9 @@ class TerminalConfig {
     .graphemeCluster(): true,
   };
 
+  /// Default APC payload buffer limit.
+  static const defaultApcBufferLimit = 65 * 1024 * 1024;
+
   /// Initial terminal width in cells. Must be positive.
   final int cols;
 
@@ -88,6 +91,12 @@ class TerminalConfig {
   /// graphics protocol. Defaults to 64 MiB. Set to 0 to reject every
   /// image payload.
   final int kittyImageStorageLimit;
+
+  /// Maximum bytes buffered for APC payloads.
+  ///
+  /// Caps incoming APC control-string payloads before they are parsed.
+  /// Defaults to 65 MiB. Set to 0 to reject APC payload data.
+  final int apcBufferLimit;
 
   /// Initial cursor shape. Terminal programs can override via DECSCUSR.
   final CursorShape cursorStyle;
@@ -145,6 +154,7 @@ class TerminalConfig {
     this.rows = 24,
     this.wordPattern,
     this.cursorBlink,
+    this.apcBufferLimit = defaultApcBufferLimit,
     this.enquiryResponse = '',
     this.modes = defaultModes,
     this.cursorStyle = .block,
@@ -159,7 +169,8 @@ class TerminalConfig {
        assert(
          kittyImageStorageLimit >= 0,
          'kittyImageStorageLimit must be non-negative',
-       );
+       ),
+       assert(apcBufferLimit >= 0, 'apcBufferLimit must be non-negative');
 
   @override
   int get hashCode => Object.hash(
@@ -167,6 +178,7 @@ class TerminalConfig {
     rows,
     scrollbackLimit,
     kittyImageStorageLimit,
+    apcBufferLimit,
     cursorStyle,
     cursorBlink,
     .hashAllUnordered(modes.entries.map((e) => .hash(e.key, e.value))),
@@ -185,6 +197,7 @@ class TerminalConfig {
           rows == other.rows &&
           scrollbackLimit == other.scrollbackLimit &&
           kittyImageStorageLimit == other.kittyImageStorageLimit &&
+          apcBufferLimit == other.apcBufferLimit &&
           cursorStyle == other.cursorStyle &&
           cursorBlink == other.cursorBlink &&
           _modesEqual(modes, other.modes) &&
@@ -200,6 +213,7 @@ class TerminalConfig {
     int? rows,
     int? scrollbackLimit,
     int? kittyImageStorageLimit,
+    int? apcBufferLimit,
     CursorShape? cursorStyle,
     bool? cursorBlink,
     Map<TerminalMode, bool>? modes,
@@ -215,6 +229,7 @@ class TerminalConfig {
       scrollbackLimit: scrollbackLimit ?? this.scrollbackLimit,
       kittyImageStorageLimit:
           kittyImageStorageLimit ?? this.kittyImageStorageLimit,
+      apcBufferLimit: apcBufferLimit ?? this.apcBufferLimit,
       cursorStyle: cursorStyle ?? this.cursorStyle,
       cursorBlink: cursorBlink ?? this.cursorBlink,
       modes: modes ?? this.modes,

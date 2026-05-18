@@ -4,7 +4,7 @@ import 'package:libghostty/libghostty.dart';
 
 void main() {
   group('TerminalConfig', () {
-    test('default values match Ghostty defaults', () {
+    test('default values match terminal defaults', () {
       const config = TerminalConfig();
 
       expect(config.cols, 80);
@@ -12,12 +12,13 @@ void main() {
       expect(config.scrollbackLimit, 10000000);
       expect(config.cursorStyle, CursorShape.block);
       expect(config.cursorBlink, isNull);
+      expect(config.apcBufferLimit, TerminalConfig.defaultApcBufferLimit);
       expect(config.scrollToBottom, ScrollToBottom.onKeystroke);
       expect(config.selectionClearOnTyping, isTrue);
       expect(config.enquiryResponse, isEmpty);
     });
 
-    test('defaultModes contains Ghostty mode defaults', () {
+    test('defaultModes contains terminal mode defaults', () {
       const modes = TerminalConfig.defaultModes;
 
       expect(modes[const TerminalMode.srm()], isTrue);
@@ -59,10 +60,12 @@ void main() {
       const config = TerminalConfig();
       final updated = config.copyWith(
         scrollbackLimit: 99999,
+        apcBufferLimit: 1024,
         cursorBlink: false,
       );
 
       expect(updated.scrollbackLimit, 99999);
+      expect(updated.apcBufferLimit, 1024);
       expect(updated.cursorBlink, isFalse);
       expect(updated.cols, config.cols);
     });
@@ -115,6 +118,15 @@ void main() {
       expect(nullBlink, isNot(equals(trueBlink)));
       expect(nullBlink, isNot(equals(falseBlink)));
       expect(trueBlink, isNot(equals(falseBlink)));
+    });
+
+    test('APC buffer limit participates in equality', () {
+      const a = TerminalConfig(apcBufferLimit: 1024);
+      const b = TerminalConfig(apcBufferLimit: 2048);
+      const c = TerminalConfig(apcBufferLimit: 1024);
+
+      expect(a, equals(c));
+      expect(a, isNot(equals(b)));
     });
   });
 }

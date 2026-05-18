@@ -451,6 +451,28 @@ void main() {
         controller.config = const TerminalConfig(cols: 120, rows: 40);
         expect(controller.config.cols, 120);
       });
+
+      test('initial config applies APC size limits', () {
+        final custom = TerminalControllerImpl(
+          config: const TerminalConfig(
+            kittyImageStorageLimit: 1 << 20,
+            apcBufferLimit: 1,
+          ),
+        );
+        addTearDown(custom.dispose);
+
+        custom.write(_transmitRedPixel(id: 91));
+
+        expect(KittyGraphics.of(custom.terminal)!.image(91), isNull);
+      });
+
+      test('setter applies APC buffer limits', () {
+        controller.config = const TerminalConfig(apcBufferLimit: 1);
+
+        controller.write(_transmitRedPixel(id: 92));
+
+        expect(KittyGraphics.of(controller.terminal)!.image(92), isNull);
+      });
     });
 
     group('modeGet and modeSet', () {
@@ -674,6 +696,10 @@ void main() {
       });
     });
   });
+}
+
+Uint8List _transmitRedPixel({int id = 42}) {
+  return .fromList('\x1b_Gf=24,s=1,v=1,a=t,i=$id;/wAA\x1b\\'.codeUnits);
 }
 
 extension on Terminal {

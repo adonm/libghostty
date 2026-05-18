@@ -73,7 +73,7 @@ class TerminalControllerImpl extends TerminalController
       ),
       super.base() {
     installDefaultKittyPngDecoder();
-    terminal.kittyImageStorageLimit = config.kittyImageStorageLimit;
+    _applyTerminalOptions();
     _textInput
       ..onTextCommitted = _handleTextCommitted
       ..onDelete = _handleDelete
@@ -99,6 +99,7 @@ class TerminalControllerImpl extends TerminalController
   set config(TerminalConfig value) {
     if (_config == value) return;
     _config = value;
+    _applyTerminalOptions();
     _applyModes();
     _wireTerminalCallbacks();
     notifyListeners();
@@ -575,6 +576,11 @@ class TerminalControllerImpl extends TerminalController
     for (final entry in _config.modes.entries) {
       terminal.modeSet(entry.key, value: entry.value);
     }
+  }
+
+  void _applyTerminalOptions() {
+    terminal.kittyImageStorageLimit = _config.kittyImageStorageLimit;
+    terminal.setApcBufferLimit(_config.apcBufferLimit);
   }
 
   Mods _currentMods() {
