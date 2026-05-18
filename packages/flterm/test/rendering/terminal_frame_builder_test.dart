@@ -18,6 +18,23 @@ import 'package:libghostty/libghostty.dart';
 
 void main() {
   group('TerminalFrameBuilder', () {
+    const metrics = CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12);
+
+    AtlasConfig config() {
+      return AtlasConfig(
+        fontSize: 14,
+        fontWeight: FontWeight.normal,
+        fontFamily: 'monospace',
+        fontFamilyFallback: const [],
+        metrics: metrics,
+        devicePixelRatio: 1.0,
+      );
+    }
+
+    void writeUtf8(Terminal terminal, String text) {
+      terminal.write(Uint8List.fromList(utf8.encode(text)));
+    }
+
     late Terminal terminal;
     late Atlas atlas;
     late SpriteBuffer sprites;
@@ -26,9 +43,9 @@ void main() {
 
     setUp(() {
       terminal = Terminal(cols: 8, rows: 2);
-      atlas = Atlas(_config());
+      atlas = Atlas(config());
       sprites = SpriteBuffer();
-      state = TerminalPaintState(TerminalTheme.dark(), _metrics)
+      state = TerminalPaintState(TerminalTheme.dark(), metrics)
         ..cols = 8
         ..rows = 2;
       builder = TerminalFrameBuilder(atlas, sprites, state)..configure(2, 8);
@@ -42,7 +59,7 @@ void main() {
     });
 
     test('sync emits text, sprite, and emoji channels', () {
-      terminal.writeUtf8('A\u2500\u{1F600}');
+      writeUtf8(terminal, 'A\u2500\u{1F600}');
 
       builder.sync(terminal, terminalDirty: true);
 
@@ -55,7 +72,7 @@ void main() {
 
     test('sync emits operator ligatures without adding text atlas entries', () {
       final initialCacheSize = atlas.cacheSize;
-      terminal.writeUtf8('=> !=');
+      writeUtf8(terminal, '=> !=');
 
       builder.sync(terminal, terminalDirty: true);
 
@@ -65,9 +82,9 @@ void main() {
 
     test('sync chunks long operator runs without adding atlas entries', () {
       final localTerminal = Terminal(cols: 260, rows: 1);
-      final localAtlas = Atlas(_config());
+      final localAtlas = Atlas(config());
       final localSprites = SpriteBuffer();
-      final localState = TerminalPaintState(TerminalTheme.dark(), _metrics)
+      final localState = TerminalPaintState(TerminalTheme.dark(), metrics)
         ..cols = 260
         ..rows = 1;
       final localBuilder = TerminalFrameBuilder(
@@ -82,7 +99,7 @@ void main() {
         localTerminal.dispose();
       });
       final initialCacheSize = localAtlas.cacheSize;
-      localTerminal.writeUtf8(List.filled(260, r'$').join());
+      writeUtf8(localTerminal, List.filled(260, r'$').join());
 
       localBuilder.sync(localTerminal, terminalDirty: true);
 
@@ -95,7 +112,7 @@ void main() {
         for (var i = 0; i < 256; i++)
           i == 1 ? const RgbColor(1, 2, 3) : const RgbColor(0, 0, 0),
       ];
-      terminal.writeUtf8('\x1b[31mA');
+      writeUtf8(terminal, '\x1b[31mA');
 
       builder.sync(terminal, terminalDirty: true);
 
@@ -112,7 +129,7 @@ void main() {
         for (var i = 0; i < 256; i++)
           i == 1 ? const RgbColor(1, 2, 3) : const RgbColor(0, 0, 0),
       ];
-      terminal.writeUtf8('\x1b[31mA\x1b[1;1H');
+      writeUtf8(terminal, '\x1b[31mA\x1b[1;1H');
 
       builder.sync(terminal, terminalDirty: true);
 
@@ -124,7 +141,7 @@ void main() {
         for (var i = 0; i < 256; i++)
           i == 1 ? const RgbColor(1, 2, 3) : const RgbColor(0, 0, 0),
       ];
-      terminal.writeUtf8('\x1b[4;58;5;1mA');
+      writeUtf8(terminal, '\x1b[4;58;5;1mA');
 
       builder.sync(terminal, terminalDirty: true);
 
@@ -134,7 +151,7 @@ void main() {
     test(
       'sync emits selection background without terminal access in paint',
       () {
-        terminal.writeUtf8('hello');
+        writeUtf8(terminal, 'hello');
         state.selection = const TerminalSelection(
           startRow: 0,
           startCol: 1,
@@ -149,7 +166,7 @@ void main() {
     );
 
     test('sync resolves block cursor glyph from cached frame state', () {
-      terminal.writeUtf8('A\x1b[1;1H');
+      writeUtf8(terminal, 'A\x1b[1;1H');
       builder.sync(terminal, terminalDirty: true);
 
       expect(state.cursor.visible, isTrue);
@@ -166,7 +183,7 @@ void main() {
 
     test('sync skips cursor glyph when the terminal is unfocused', () {
       state.cursorFocused = false;
-      terminal.writeUtf8('A\x1b[1;1H');
+      writeUtf8(terminal, 'A\x1b[1;1H');
 
       builder.sync(terminal, terminalDirty: true);
 
@@ -180,7 +197,7 @@ void main() {
           cursor: const CursorTheme(shape: CursorShape.underline),
         ),
       );
-      terminal.writeUtf8('A\x1b[1;1H');
+      writeUtf8(terminal, 'A\x1b[1;1H');
 
       builder.sync(terminal, terminalDirty: true);
 
@@ -190,7 +207,7 @@ void main() {
     });
 
     test('sync skips cursor glyph on invisible text', () {
-      terminal.writeUtf8('\x1b[8mA\x1b[1;1H');
+      writeUtf8(terminal, '\x1b[8mA\x1b[1;1H');
 
       builder.sync(terminal, terminalDirty: true);
 
@@ -200,7 +217,7 @@ void main() {
 
     test('sync skips cursor glyph on blink-hidden text', () {
       state.blinkVisible = false;
-      terminal.writeUtf8('\x1b[5mA\x1b[1;1H');
+      writeUtf8(terminal, '\x1b[5mA\x1b[1;1H');
 
       builder.sync(terminal, terminalDirty: true);
 
@@ -208,21 +225,4 @@ void main() {
       expect(state.cursorAtlasEntry, isNull);
     });
   });
-}
-
-const _metrics = CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12);
-
-AtlasConfig _config() {
-  return AtlasConfig(
-    fontSize: 14,
-    fontWeight: FontWeight.normal,
-    fontFamily: 'monospace',
-    fontFamilyFallback: const [],
-    metrics: _metrics,
-    devicePixelRatio: 1.0,
-  );
-}
-
-extension on Terminal {
-  void writeUtf8(String text) => write(Uint8List.fromList(utf8.encode(text)));
 }

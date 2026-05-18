@@ -12,10 +12,21 @@ import 'package:libghostty/libghostty.dart' show UnderlineStyle;
 
 void main() {
   group('AtlasLane', () {
+    AtlasConfig createConfig({required CellMetrics metrics}) {
+      return AtlasConfig(
+        fontSize: 8,
+        fontWeight: FontWeight.normal,
+        fontFamily: 'monospace',
+        fontFamilyFallback: const [],
+        metrics: metrics,
+        devicePixelRatio: 1.0,
+      );
+    }
+
     test('ensureImage composites pending text through the text texture', () {
       final lane = TextLane(initialSize: 16, maxSize: 64)
         ..configure(
-          _config(
+          createConfig(
             metrics: const CellMetrics(
               cellWidth: 40,
               cellHeight: 8,
@@ -34,7 +45,7 @@ void main() {
     });
 
     test('keeps lane textures physically separate', () {
-      final config = _config(
+      final config = createConfig(
         metrics: const CellMetrics(cellWidth: 8, cellHeight: 8, baseline: 6),
       );
       final text = TextLane(initialSize: 16, maxSize: 64)..configure(config);
@@ -67,15 +78,4 @@ void main() {
       expect(decoration.image, isNot(same(sprite.image)));
     });
   });
-}
-
-AtlasConfig _config({required CellMetrics metrics}) {
-  return AtlasConfig(
-    fontSize: 8,
-    fontWeight: FontWeight.normal,
-    fontFamily: 'monospace',
-    fontFamilyFallback: const [],
-    metrics: metrics,
-    devicePixelRatio: 1.0,
-  );
 }

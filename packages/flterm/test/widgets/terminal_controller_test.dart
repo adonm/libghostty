@@ -22,199 +22,212 @@ void main() {
 
     tearDown(() => controller.dispose());
 
-    test('factory returns a TerminalViewBinding', () {
-      expect(controller, isA<TerminalViewBinding>());
+    void replaceController(TerminalConfig config) {
+      controller.dispose();
+      controller = TerminalControllerImpl(config: config);
+    }
+
+    void writeControllerUtf8(TerminalControllerImpl controller, String text) {
+      controller.write(Uint8List.fromList(utf8.encode(text)));
+    }
+
+    void writeTerminalUtf8(Terminal terminal, String text) {
+      terminal.write(Uint8List.fromList(utf8.encode(text)));
+    }
+
+    group('constructor', () {
+      test('returns a TerminalViewBinding', () {
+        expect(controller, isA<TerminalViewBinding>());
+      });
+
+      test('starts without selection, selected text, or focus', () {
+        expect(controller.selection, isNull);
+        expect(controller.selectedText(), '');
+        expect(controller.hasFocus, isFalse);
+      });
     });
 
-    test('initial state has null selection, empty selectedText, no focus', () {
-      expect(controller.selection, isNull);
-      expect(controller.selectedText(), '');
-      expect(controller.hasFocus, isFalse);
+    group('sendText', () {
+      test('emits UTF-8 bytes via onOutput', () {
+        final output = <Uint8List>[];
+        controller.onOutput = output.add;
+
+        controller.sendText('hello');
+
+        expect(output, hasLength(1));
+        expect(utf8.decode(output.first), 'hello');
+      });
+
+      test('does not emit for empty text', () {
+        final output = <Uint8List>[];
+        controller.onOutput = output.add;
+
+        controller.sendText('');
+
+        expect(output, isEmpty);
+      });
     });
 
-    test('sendText emits bytes via onOutput', () {
-      final output = <Uint8List>[];
-      controller.onOutput = output.add;
+    group('sendKey', () {
+      test('encodes key output', () {
+        final output = <Uint8List>[];
+        controller.onOutput = output.add;
 
-      controller.sendText('hello');
+        controller.sendKey(Key.a);
 
-      expect(output, hasLength(1));
-      expect(utf8.decode(output.first), 'hello');
+        expect(output, hasLength(1));
+        expect(utf8.decode(output.first), 'a');
+      });
+
+      test('ignores missing output callback', () {
+        expect(() => controller.sendKey(Key.a), returnsNormally);
+      });
     });
 
-    test('sendText with empty string does not emit', () {
-      final output = <Uint8List>[];
-      controller.onOutput = output.add;
+    group('selection', () {
+      test('setter notifies listeners', () {
+        var notified = false;
+        controller.addListener(() => notified = true);
 
-      controller.sendText('');
+        controller.selection = const TerminalSelection(
+          startRow: 0,
+          startCol: 0,
+          endRow: 0,
+          endCol: 5,
+        );
 
-      expect(output, isEmpty);
+        expect(notified, isTrue);
+        expect(controller.selection, isNotNull);
+      });
+
+      test('setter skips notification when value is unchanged', () {
+        const sel = TerminalSelection(
+          startRow: 0,
+          startCol: 0,
+          endRow: 0,
+          endCol: 5,
+        );
+        controller.selection = sel;
+
+        var notified = false;
+        controller.addListener(() => notified = true);
+
+        controller.selection = sel;
+
+        expect(notified, isFalse);
+      });
+
+      test('clearSelection notifies only when selection was active', () {
+        var notifyCount = 0;
+        controller.addListener(() => notifyCount++);
+
+        controller.clearSelection();
+        expect(notifyCount, 0);
+
+        controller.selection = const TerminalSelection(
+          startRow: 0,
+          startCol: 0,
+          endRow: 0,
+          endCol: 5,
+        );
+        notifyCount = 0;
+
+        controller.clearSelection();
+        expect(notifyCount, 1);
+        expect(controller.selection, isNull);
+      });
     });
 
-    test('sendKey encodes and emits output', () {
-      final output = <Uint8List>[];
-      controller.onOutput = output.add;
+    group('selectAll', () {
+      test('selects through the last content column', () {
+        writeControllerUtf8(controller, 'hello\r\nworld');
 
-      controller.sendKey(Key.a);
+        controller.selectAll();
 
-      expect(output, hasLength(1));
-      expect(utf8.decode(output.first), 'a');
+        final sel = controller.selection!;
+        expect(sel.startRow, 0);
+        expect(sel.startCol, 0);
+        expect(sel.endRow, 1);
+        expect(sel.endCol, 5);
+      });
+
+      test('leaves selection empty on an empty screen', () {
+        controller.selectAll();
+
+        expect(controller.selection, isNull);
+      });
+
+      test('selects a single content row', () {
+        writeControllerUtf8(controller, 'abc');
+
+        controller.selectAll();
+
+        final sel = controller.selection!;
+        expect(sel.startRow, 0);
+        expect(sel.startCol, 0);
+        expect(sel.endRow, 0);
+        expect(sel.endCol, 3);
+      });
     });
 
-    test('sendKey does not emit when onOutput is null', () {
-      controller.sendKey(Key.a);
-    });
+    group('selectedText', () {
+      test('returns selected screen text', () {
+        replaceController(const TerminalConfig(cols: 20, rows: 5));
+        writeControllerUtf8(controller, 'hello world');
 
-    test('selection setter notifies listeners', () {
-      var notified = false;
-      controller.addListener(() => notified = true);
+        controller.selection = const TerminalSelection(
+          startRow: 0,
+          startCol: 0,
+          endRow: 0,
+          endCol: 5,
+        );
 
-      controller.selection = const TerminalSelection(
-        startRow: 0,
-        startCol: 0,
-        endRow: 0,
-        endCol: 5,
-      );
+        expect(controller.selectedText(), 'hello');
+      });
 
-      expect(notified, isTrue);
-      expect(controller.selection, isNotNull);
-    });
+      test('uses the requested formatter', () {
+        replaceController(const TerminalConfig(cols: 20, rows: 5));
+        writeControllerUtf8(controller, '\x1b[31mhi\x1b[0m');
 
-    test('selection setter does not notify when value unchanged', () {
-      const sel = TerminalSelection(
-        startRow: 0,
-        startCol: 0,
-        endRow: 0,
-        endCol: 5,
-      );
-      controller.selection = sel;
+        controller.selection = const TerminalSelection(
+          startRow: 0,
+          startCol: 0,
+          endRow: 0,
+          endCol: 2,
+        );
 
-      var notified = false;
-      controller.addListener(() => notified = true);
+        expect(controller.selectedText(), 'hi');
+        expect(
+          controller.selectedText(format: FormatterFormat.vt),
+          contains('hi'),
+        );
+        expect(
+          controller.selectedText(format: FormatterFormat.html),
+          contains('<'),
+        );
+      });
 
-      controller.selection = sel;
+      test('excludes wide-character spacer tails', () {
+        replaceController(const TerminalConfig(cols: 20, rows: 5));
+        controller.write(Uint8List.fromList(utf8.encode('日本語')));
 
-      expect(notified, isFalse);
-    });
+        controller.selection = const TerminalSelection(
+          startRow: 0,
+          startCol: 0,
+          endRow: 0,
+          endCol: 6,
+        );
+        expect(controller.selectedText(), '日本語');
 
-    test('clearSelection notifies only when selection was active', () {
-      var notifyCount = 0;
-      controller.addListener(() => notifyCount++);
-
-      controller.clearSelection();
-      expect(notifyCount, 0);
-
-      controller.selection = const TerminalSelection(
-        startRow: 0,
-        startCol: 0,
-        endRow: 0,
-        endCol: 5,
-      );
-      notifyCount = 0;
-
-      controller.clearSelection();
-      expect(notifyCount, 1);
-      expect(controller.selection, isNull);
-    });
-
-    test('selectAll selects up to last row and col with content', () {
-      controller.writeUtf8('hello\r\nworld');
-
-      controller.selectAll();
-
-      final sel = controller.selection!;
-      expect(sel.startRow, 0);
-      expect(sel.startCol, 0);
-      expect(sel.endRow, 1);
-      expect(sel.endCol, 5);
-    });
-
-    test('selectAll does nothing on empty screen', () {
-      controller.selectAll();
-
-      expect(controller.selection, isNull);
-    });
-
-    test('selectAll with single row selects that row only', () {
-      controller.writeUtf8('abc');
-
-      controller.selectAll();
-
-      final sel = controller.selection!;
-      expect(sel.startRow, 0);
-      expect(sel.startCol, 0);
-      expect(sel.endRow, 0);
-      expect(sel.endCol, 3);
-    });
-
-    test('selectedText returns text from screen', () {
-      controller = TerminalControllerImpl(
-        config: const TerminalConfig(cols: 20, rows: 5),
-      );
-      controller.writeUtf8('hello world');
-
-      controller.selection = const TerminalSelection(
-        startRow: 0,
-        startCol: 0,
-        endRow: 0,
-        endCol: 5,
-      );
-
-      expect(controller.selectedText(), 'hello');
-    });
-
-    test('selectedText honors requested formatter format', () {
-      controller = TerminalControllerImpl(
-        config: const TerminalConfig(cols: 20, rows: 5),
-      );
-      controller.writeUtf8('\x1b[31mhi\x1b[0m');
-
-      controller.selection = const TerminalSelection(
-        startRow: 0,
-        startCol: 0,
-        endRow: 0,
-        endCol: 2,
-      );
-
-      expect(controller.selectedText(), 'hi');
-      expect(
-        controller.selectedText(format: FormatterFormat.vt),
-        contains('hi'),
-      );
-      expect(
-        controller.selectedText(format: FormatterFormat.html),
-        contains('<'),
-      );
-    });
-
-    test('selectedText excludes spacer tails from wide characters', () {
-      controller = TerminalControllerImpl(
-        config: const TerminalConfig(cols: 20, rows: 5),
-      );
-      controller.write(
-        Uint8List.fromList([
-          0xE6, 0x97, 0xA5, // 日
-          0xE6, 0x9C, 0xAC, // 本
-          0xE8, 0xAA, 0x9E, // 語
-        ]),
-      );
-
-      controller.selection = const TerminalSelection(
-        startRow: 0,
-        startCol: 0,
-        endRow: 0,
-        endCol: 6,
-      );
-      expect(controller.selectedText(), '日本語');
-
-      controller.selection = const TerminalSelection(
-        startRow: 0,
-        startCol: 0,
-        endRow: 0,
-        endCol: 6,
-        mode: TerminalSelectionMode.block,
-      );
-      expect(controller.selectedText(), '日本語');
+        controller.selection = const TerminalSelection(
+          startRow: 0,
+          startCol: 0,
+          endRow: 0,
+          endCol: 6,
+          mode: TerminalSelectionMode.block,
+        );
+        expect(controller.selectedText(), '日本語');
+      });
     });
 
     group('scrollback selection', () {
@@ -229,7 +242,7 @@ void main() {
       tearDown(() => smallController.dispose());
 
       void writeLines(List<String> lines) {
-        smallController.writeUtf8(lines.join('\r\n'));
+        writeControllerUtf8(smallController, lines.join('\r\n'));
       }
 
       test('selectAll includes scrollback rows', () {
@@ -290,7 +303,7 @@ void main() {
           config: const TerminalConfig(cols: 5, rows: 3),
         );
         addTearDown(wrapController.dispose);
-        wrapController.writeUtf8('abcdefgh');
+        writeControllerUtf8(wrapController, 'abcdefgh');
 
         wrapController.selectAll();
 
@@ -304,15 +317,7 @@ void main() {
           config: const TerminalConfig(cols: 5, rows: 3),
         );
         addTearDown(wrapController.dispose);
-        wrapController.write(
-          Uint8List.fromList([
-            ...utf8.encode('A'),
-            0xE6, 0x97, 0xA5, // 日
-            ...utf8.encode('B'),
-            0xE6, 0x97, 0xA5, // 日
-            ...utf8.encode('C'),
-          ]),
-        );
+        wrapController.write(Uint8List.fromList(utf8.encode('A日B日C')));
         wrapController.selectAll();
 
         expect(wrapController.selectedText(), 'A日B日C');
@@ -367,7 +372,7 @@ void main() {
       });
 
       test('writes erase scrollback to terminal', () {
-        controller.writeUtf8('hello\r\nworld\r\n');
+        writeControllerUtf8(controller, 'hello\r\nworld\r\n');
 
         controller.clear();
 
@@ -377,7 +382,7 @@ void main() {
       test('does nothing on alternate screen', () {
         final output = <Uint8List>[];
         controller.onOutput = output.add;
-        controller.writeUtf8('\x1b[?1049h');
+        writeControllerUtf8(controller, '\x1b[?1049h');
 
         controller.clear();
 
@@ -437,6 +442,10 @@ void main() {
     });
 
     group('config', () {
+      Uint8List transmitRedPixel({int id = 42}) {
+        return .fromList('\x1b_Gf=24,s=1,v=1,a=t,i=$id;/wAA\x1b\\'.codeUnits);
+      }
+
       test('getter returns initial config', () {
         final custom = TerminalControllerImpl(
           config: const TerminalConfig(cols: 120, rows: 40),
@@ -461,7 +470,7 @@ void main() {
         );
         addTearDown(custom.dispose);
 
-        custom.write(_transmitRedPixel(id: 91));
+        custom.write(transmitRedPixel(id: 91));
 
         expect(KittyGraphics.of(custom.terminal)!.image(91), isNull);
       });
@@ -469,7 +478,7 @@ void main() {
       test('setter applies APC buffer limits', () {
         controller.config = const TerminalConfig(apcBufferLimit: 1);
 
-        controller.write(_transmitRedPixel(id: 92));
+        controller.write(transmitRedPixel(id: 92));
 
         expect(KittyGraphics.of(controller.terminal)!.image(92), isNull);
       });
@@ -491,7 +500,7 @@ void main() {
       });
 
       test('switches to alternate via escape sequence', () {
-        controller.terminal.writeUtf8('\x1b[?1049h');
+        writeTerminalUtf8(controller.terminal, '\x1b[?1049h');
         expect(controller.activeScreen, TerminalScreen.alternate);
       });
     });
@@ -502,7 +511,7 @@ void main() {
       });
 
       test('updates via OSC 0 escape sequence', () {
-        controller.terminal.writeUtf8('\x1b]0;my title\x1b\\');
+        writeTerminalUtf8(controller.terminal, '\x1b]0;my title\x1b\\');
         expect(controller.title, 'my title');
       });
 
@@ -510,7 +519,7 @@ void main() {
         var fired = false;
         controller.onTitleChanged = () => fired = true;
 
-        controller.terminal.writeUtf8('\x1b]0;new title\x1b\\');
+        writeTerminalUtf8(controller.terminal, '\x1b]0;new title\x1b\\');
 
         expect(fired, isTrue);
       });
@@ -518,10 +527,8 @@ void main() {
 
     group('selectWord', () {
       test('selects word at position', () {
-        controller = TerminalControllerImpl(
-          config: const TerminalConfig(cols: 20, rows: 5),
-        );
-        controller.terminal.writeUtf8('hello world');
+        replaceController(const TerminalConfig(cols: 20, rows: 5));
+        writeTerminalUtf8(controller.terminal, 'hello world');
 
         (controller as TerminalViewBinding).selectWord(0, 1);
 
@@ -533,10 +540,8 @@ void main() {
 
     group('selectLine', () {
       test('selects line content at row', () {
-        controller = TerminalControllerImpl(
-          config: const TerminalConfig(cols: 20, rows: 5),
-        );
-        controller.terminal.writeUtf8('hello world');
+        replaceController(const TerminalConfig(cols: 20, rows: 5));
+        writeTerminalUtf8(controller.terminal, 'hello world');
 
         (controller as TerminalViewBinding).selectLine(0, .content);
 
@@ -546,10 +551,8 @@ void main() {
       });
 
       test('selects full row width in full mode', () {
-        controller = TerminalControllerImpl(
-          config: const TerminalConfig(cols: 20, rows: 5),
-        );
-        controller.terminal.writeUtf8('hello');
+        replaceController(const TerminalConfig(cols: 20, rows: 5));
+        writeTerminalUtf8(controller.terminal, 'hello');
 
         (controller as TerminalViewBinding).selectLine(0, .full);
 
@@ -560,10 +563,10 @@ void main() {
     });
 
     group('dispose', () {
-      test('can be called without error', () {
+      test('releases resources', () {
         final disposable = TerminalControllerImpl();
 
-        disposable.dispose();
+        expect(disposable.dispose, returnsNormally);
       });
     });
 
@@ -696,16 +699,4 @@ void main() {
       });
     });
   });
-}
-
-Uint8List _transmitRedPixel({int id = 42}) {
-  return .fromList('\x1b_Gf=24,s=1,v=1,a=t,i=$id;/wAA\x1b\\'.codeUnits);
-}
-
-extension on Terminal {
-  void writeUtf8(String text) => write(Uint8List.fromList(utf8.encode(text)));
-}
-
-extension on TerminalControllerImpl {
-  void writeUtf8(String text) => write(Uint8List.fromList(utf8.encode(text)));
 }

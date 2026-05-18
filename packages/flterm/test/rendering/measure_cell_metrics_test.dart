@@ -1,7 +1,7 @@
 import 'package:flterm/src/rendering/font/measure_cell_metrics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../helpers/font_loader.dart';
+import 'helpers/font_loader.dart';
 
 void main() {
   setUpAll(loadBundledFonts);
@@ -43,8 +43,6 @@ void main() {
     testWidgets('extracts JetBrains Mono decoration metrics with fontData', (
       tester,
     ) async {
-      // JetBrains Mono: underlineThickness=50, strikethroughSize=50,
-      // unitsPerEm=1000. At 14px: 50/1000 * 14 = 0.7, ceil to 1.
       final metrics = measureCellMetrics(
         fontFamily: 'JetBrains Mono',
         fontSize: 14.0,
@@ -63,7 +61,6 @@ void main() {
     });
 
     testWidgets('underline thickness scales with font size', (tester) async {
-      // At 24px: 50/1000 * 24 = 1.2, ceil to 2.
       final metrics = measureCellMetrics(
         fontFamily: 'JetBrains Mono',
         fontSize: 24.0,

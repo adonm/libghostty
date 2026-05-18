@@ -13,23 +13,106 @@ import 'package:libghostty/libghostty.dart' show Mods, MouseTracking, Terminal;
 
 void main() {
   group('TerminalGestureDetector', () {
+    const defaultMetrics = CellMetrics(
+      cellWidth: 8,
+      cellHeight: 16,
+      baseline: 12,
+    );
+    final enableNormalMouse = Uint8List.fromList(utf8.encode('\x1b[?1000h'));
+    final enableX10Mouse = Uint8List.fromList(utf8.encode('\x1b[?9h'));
+
+    TerminalViewBinding bindingFor(TerminalController controller) {
+      return controller as TerminalViewBinding;
+    }
+
+    Terminal terminalFor(TerminalController controller) {
+      return bindingFor(controller).terminal;
+    }
+
+    void writeToTerminal(TerminalController controller, String text) {
+      terminalFor(controller).write(Uint8List.fromList(utf8.encode(text)));
+    }
+
+    Widget buildHandler({
+      required TerminalController controller,
+      CellMetrics metrics = defaultMetrics,
+      TerminalGestureSettings gestureSettings = const TerminalGestureSettings(),
+      ScrollController? scrollController,
+      int visibleRows = 24,
+    }) {
+      return Directionality(
+        textDirection: TextDirection.ltr,
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: TerminalGestureDetector(
+            binding: controller as TerminalViewBinding,
+            metrics: metrics,
+            settings: gestureSettings,
+            scrollController: scrollController,
+            visibleRows: visibleRows,
+            child: const SizedBox(width: 640, height: 384),
+          ),
+        ),
+      );
+    }
+
+    void enableMouseTracking(
+      TerminalController controller, {
+      MouseTracking mode = .normal,
+    }) {
+      final seq = switch (mode) {
+        .normal => enableNormalMouse,
+        .x10 => enableX10Mouse,
+        _ => enableNormalMouse,
+      };
+      final viewBinding = bindingFor(controller);
+      viewBinding.terminal.write(seq);
+      viewBinding.handleResize(
+        cols: 80,
+        rows: 24,
+        metrics: defaultMetrics,
+        padding: EdgeInsets.zero,
+        devicePixelRatio: 1.0,
+      );
+    }
+
+    Future<TestGesture> mouseDown(
+      WidgetTester tester,
+      Offset pos, {
+      int buttons = kPrimaryButton,
+    }) {
+      return tester.startGesture(pos, kind: .mouse, buttons: buttons);
+    }
+
     late TerminalController controller;
 
     setUp(() => controller = TerminalController());
 
     tearDown(() => controller.dispose());
 
-    testWidgets('tap does not throw', (tester) async {
-      await tester.pumpWidget(_buildHandler(controller: controller));
+    Future<void> tapMouse(
+      WidgetTester tester,
+      Offset position, {
+      int count = 1,
+    }) async {
+      for (var i = 0; i < count; i++) {
+        final gesture = await mouseDown(tester, position);
+        await gesture.up();
+      }
+    }
 
-      final gesture = await _mouseDown(tester, const Offset(40, 16));
-      await gesture.up();
+    testWidgets('tap leaves selection empty', (tester) async {
+      await tester.pumpWidget(buildHandler(controller: controller));
+
+      await tapMouse(tester, const Offset(40, 16));
+
+      expect(controller.selection, isNull);
     });
 
     testWidgets('drag creates selection with correct cells', (tester) async {
-      await tester.pumpWidget(_buildHandler(controller: controller));
+      await tester.pumpWidget(buildHandler(controller: controller));
 
-      final gesture = await _mouseDown(tester, const Offset(8, 0));
+      final gesture = await mouseDown(tester, const Offset(8, 0));
       await gesture.moveTo(const Offset(40, 16));
       await gesture.up();
 
@@ -42,9 +125,9 @@ void main() {
     });
 
     testWidgets('mouse up ends selection drag', (tester) async {
-      await tester.pumpWidget(_buildHandler(controller: controller));
+      await tester.pumpWidget(buildHandler(controller: controller));
 
-      final gesture = await _mouseDown(tester, Offset.zero);
+      final gesture = await mouseDown(tester, Offset.zero);
       await gesture.moveTo(const Offset(80, 32));
       await gesture.up();
 
@@ -54,9 +137,9 @@ void main() {
     });
 
     testWidgets('drag to same cell does not change selection', (tester) async {
-      await tester.pumpWidget(_buildHandler(controller: controller));
+      await tester.pumpWidget(buildHandler(controller: controller));
 
-      final gesture = await _mouseDown(tester, const Offset(8, 0));
+      final gesture = await mouseDown(tester, const Offset(8, 0));
       await gesture.moveTo(const Offset(40, 16));
       final selAfterFirst = controller.selection;
 
@@ -69,15 +152,11 @@ void main() {
     });
 
     testWidgets('double click selects word', (tester) async {
-      _writeToTerminal(controller, 'hello world');
+      writeToTerminal(controller, 'hello world');
 
-      await tester.pumpWidget(_buildHandler(controller: controller));
+      await tester.pumpWidget(buildHandler(controller: controller));
 
-      var gesture = await _mouseDown(tester, const Offset(8, 0));
-      await gesture.up();
-
-      gesture = await _mouseDown(tester, const Offset(8, 0));
-      await gesture.up();
+      await tapMouse(tester, const Offset(8, 0), count: 2);
 
       final selection = controller.selection!;
       expect(selection.startRow, 0);
@@ -86,15 +165,11 @@ void main() {
     });
 
     testWidgets('double click on second word selects it', (tester) async {
-      _writeToTerminal(controller, 'hello world');
+      writeToTerminal(controller, 'hello world');
 
-      await tester.pumpWidget(_buildHandler(controller: controller));
+      await tester.pumpWidget(buildHandler(controller: controller));
 
-      var gesture = await _mouseDown(tester, const Offset(56, 0));
-      await gesture.up();
-
-      gesture = await _mouseDown(tester, const Offset(56, 0));
-      await gesture.up();
+      await tapMouse(tester, const Offset(56, 0), count: 2);
 
       final selection = controller.selection!;
       expect(selection.startCol, 6);
@@ -102,14 +177,11 @@ void main() {
     });
 
     testWidgets('triple click selects line content only', (tester) async {
-      _writeToTerminal(controller, 'Hello');
+      writeToTerminal(controller, 'Hello');
 
-      await tester.pumpWidget(_buildHandler(controller: controller));
+      await tester.pumpWidget(buildHandler(controller: controller));
 
-      for (var i = 0; i < 3; i++) {
-        final gesture = await _mouseDown(tester, const Offset(40, 0));
-        await gesture.up();
-      }
+      await tapMouse(tester, const Offset(40, 0), count: 3);
 
       final selection = controller.selection!;
       expect(selection.startCol, 0);
@@ -124,14 +196,11 @@ void main() {
       );
       addTearDown(narrowController.dispose);
 
-      _writeToTerminal(narrowController, 'ABCDEFGHIJKLMNO');
+      writeToTerminal(narrowController, 'ABCDEFGHIJKLMNO');
 
-      await tester.pumpWidget(_buildHandler(controller: narrowController));
+      await tester.pumpWidget(buildHandler(controller: narrowController));
 
-      for (var i = 0; i < 3; i++) {
-        final gesture = await _mouseDown(tester, const Offset(8, 16));
-        await gesture.up();
-      }
+      await tapMouse(tester, const Offset(8, 16), count: 3);
 
       final selection = narrowController.selection!;
       expect(selection.startRow, 0);
@@ -148,32 +217,26 @@ void main() {
       );
       addTearDown(wideController.dispose);
 
-      _writeToTerminal(wideController, 'Hello');
+      writeToTerminal(wideController, 'Hello');
 
       await tester.pumpWidget(
-        _buildHandler(
+        buildHandler(
           controller: wideController,
           gestureSettings: const TerminalGestureSettings(lineSelectMode: .full),
         ),
       );
 
-      for (var i = 0; i < 3; i++) {
-        final gesture = await _mouseDown(tester, const Offset(8, 0));
-        await gesture.up();
-      }
+      await tapMouse(tester, const Offset(8, 0), count: 3);
 
       final selection = wideController.selection!;
       expect(selection.endCol, 20);
     });
 
     testWidgets('tap counting resets on distant clicks', (tester) async {
-      await tester.pumpWidget(_buildHandler(controller: controller));
+      await tester.pumpWidget(buildHandler(controller: controller));
 
-      var gesture = await _mouseDown(tester, const Offset(40, 16));
-      await gesture.up();
-
-      gesture = await _mouseDown(tester, const Offset(200, 200));
-      await gesture.up();
+      await tapMouse(tester, const Offset(40, 16));
+      await tapMouse(tester, const Offset(200, 200));
 
       expect(controller.selection, isNull);
     });
@@ -181,13 +244,12 @@ void main() {
     testWidgets('touch long press starts normal selection by default', (
       tester,
     ) async {
-      await tester.pumpWidget(_buildHandler(controller: controller));
+      await tester.pumpWidget(buildHandler(controller: controller));
 
       final gesture = await tester.startGesture(const Offset(40, 16));
 
       await tester.pump(const Duration(milliseconds: 550));
 
-      // Long press alone does not create a selection.
       expect(controller.selection, isNull);
 
       await gesture.moveTo(const Offset(80, 32));
@@ -200,7 +262,7 @@ void main() {
     testWidgets('touch move cancels long press if distance exceeds threshold', (
       tester,
     ) async {
-      await tester.pumpWidget(_buildHandler(controller: controller));
+      await tester.pumpWidget(buildHandler(controller: controller));
 
       final gesture = await tester.startGesture(const Offset(40, 16));
       await gesture.moveTo(const Offset(80, 16));
@@ -214,15 +276,15 @@ void main() {
     });
 
     testWidgets('new click clears existing selection', (tester) async {
-      await tester.pumpWidget(_buildHandler(controller: controller));
+      await tester.pumpWidget(buildHandler(controller: controller));
 
-      final gesture = await _mouseDown(tester, Offset.zero);
+      final gesture = await mouseDown(tester, Offset.zero);
       await gesture.moveTo(const Offset(80, 32));
       await gesture.up();
 
       expect(controller.selection, isNotNull);
 
-      final gesture2 = await _mouseDown(tester, const Offset(40, 16));
+      final gesture2 = await mouseDown(tester, const Offset(40, 16));
       await gesture2.up();
 
       expect(controller.selection, isNull);
@@ -231,9 +293,9 @@ void main() {
     testWidgets('click without existing selection keeps selection null', (
       tester,
     ) async {
-      await tester.pumpWidget(_buildHandler(controller: controller));
+      await tester.pumpWidget(buildHandler(controller: controller));
 
-      final gesture = await _mouseDown(tester, const Offset(40, 16));
+      final gesture = await mouseDown(tester, const Offset(40, 16));
       await gesture.up();
 
       expect(controller.selection, isNull);
@@ -244,7 +306,7 @@ void main() {
         tester,
       ) async {
         await tester.pumpWidget(
-          _buildHandler(
+          buildHandler(
             controller: controller,
             gestureSettings: const TerminalGestureSettings(
               enabledSelections: {},
@@ -252,7 +314,7 @@ void main() {
           ),
         );
 
-        final gesture = await _mouseDown(tester, const Offset(8, 0));
+        final gesture = await mouseDown(tester, const Offset(8, 0));
         await gesture.moveTo(const Offset(80, 32));
         await gesture.up();
 
@@ -263,7 +325,7 @@ void main() {
         tester,
       ) async {
         await tester.pumpWidget(
-          _buildHandler(
+          buildHandler(
             controller: controller,
             gestureSettings: const TerminalGestureSettings(
               enabledSelections: {},
@@ -282,10 +344,10 @@ void main() {
       testWidgets('drag disabled independently of other gestures', (
         tester,
       ) async {
-        _writeToTerminal(controller, 'hello world');
+        writeToTerminal(controller, 'hello world');
 
         await tester.pumpWidget(
-          _buildHandler(
+          buildHandler(
             controller: controller,
             gestureSettings: const TerminalGestureSettings(
               enabledSelections: {.word},
@@ -293,25 +355,23 @@ void main() {
           ),
         );
 
-        final gesture = await _mouseDown(tester, const Offset(8, 0));
+        final gesture = await mouseDown(tester, const Offset(8, 0));
         await gesture.moveTo(const Offset(80, 32));
         await gesture.up();
         expect(controller.selection, isNull);
 
-        var gesture2 = await _mouseDown(tester, const Offset(8, 0));
-        await gesture2.up();
-        gesture2 = await _mouseDown(tester, const Offset(8, 0));
-        await gesture2.up();
+        await tapMouse(tester, const Offset(8, 0), count: 2);
+
         expect(controller.selection, isNotNull);
       });
 
       testWidgets('word disabled prevents double-tap word select', (
         tester,
       ) async {
-        _writeToTerminal(controller, 'hello world');
+        writeToTerminal(controller, 'hello world');
 
         await tester.pumpWidget(
-          _buildHandler(
+          buildHandler(
             controller: controller,
             gestureSettings: const TerminalGestureSettings(
               enabledSelections: {.drag, .line, .longPress},
@@ -319,10 +379,7 @@ void main() {
           ),
         );
 
-        var gesture = await _mouseDown(tester, const Offset(8, 0));
-        await gesture.up();
-        gesture = await _mouseDown(tester, const Offset(8, 0));
-        await gesture.up();
+        await tapMouse(tester, const Offset(8, 0), count: 2);
 
         expect(controller.selection, isNull);
       });
@@ -331,7 +388,7 @@ void main() {
         tester,
       ) async {
         await tester.pumpWidget(
-          _buildHandler(
+          buildHandler(
             controller: controller,
             gestureSettings: const TerminalGestureSettings(
               enabledSelections: {.drag},
@@ -339,10 +396,7 @@ void main() {
           ),
         );
 
-        for (var i = 0; i < 3; i++) {
-          final gesture = await _mouseDown(tester, const Offset(40, 16));
-          await gesture.up();
-        }
+        await tapMouse(tester, const Offset(40, 16), count: 3);
 
         expect(controller.selection, isNull);
       });
@@ -350,10 +404,10 @@ void main() {
       testWidgets('tap count resets at triple even when line disabled', (
         tester,
       ) async {
-        _writeToTerminal(controller, 'hello world');
+        writeToTerminal(controller, 'hello world');
 
         await tester.pumpWidget(
-          _buildHandler(
+          buildHandler(
             controller: controller,
             gestureSettings: const TerminalGestureSettings(
               enabledSelections: {.word},
@@ -366,10 +420,7 @@ void main() {
           if (controller.selection != null) selectionCount++;
         });
 
-        for (var i = 0; i < 5; i++) {
-          final gesture = await _mouseDown(tester, const Offset(8, 0));
-          await gesture.up();
-        }
+        await tapMouse(tester, const Offset(8, 0), count: 5);
 
         expect(selectionCount, 2);
       });
@@ -378,7 +429,7 @@ void main() {
         tester,
       ) async {
         await tester.pumpWidget(
-          _buildHandler(
+          buildHandler(
             controller: controller,
             gestureSettings: const TerminalGestureSettings(
               longPressSelectionMode: .block,
@@ -397,7 +448,7 @@ void main() {
 
       testWidgets('empty enabledSelections still allows tap', (tester) async {
         await tester.pumpWidget(
-          _buildHandler(
+          buildHandler(
             controller: controller,
             gestureSettings: const TerminalGestureSettings(
               enabledSelections: {},
@@ -405,17 +456,19 @@ void main() {
           ),
         );
 
-        final gesture = await _mouseDown(tester, const Offset(40, 16));
+        final gesture = await mouseDown(tester, const Offset(40, 16));
         await gesture.up();
+
+        expect(controller.selection, isNull);
       });
 
       testWidgets(
         'empty enabledSelections still allows mouse tracking output',
         (tester) async {
-          _enableMouseTracking(controller);
+          enableMouseTracking(controller);
 
           await tester.pumpWidget(
-            _buildHandler(
+            buildHandler(
               controller: controller,
               gestureSettings: const TerminalGestureSettings(
                 enabledSelections: {},
@@ -426,7 +479,7 @@ void main() {
           final events = <Uint8List>[];
           controller.onOutput = events.add;
 
-          final gesture = await _mouseDown(tester, const Offset(24, 16));
+          final gesture = await mouseDown(tester, const Offset(24, 16));
           await gesture.up();
 
           expect(events, isNotEmpty);
@@ -440,9 +493,9 @@ void main() {
       ) async {
         controller.toggleMod(const Mods.alt());
 
-        await tester.pumpWidget(_buildHandler(controller: controller));
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-        final gesture = await _mouseDown(tester, const Offset(8, 0));
+        final gesture = await mouseDown(tester, const Offset(8, 0));
         await gesture.moveTo(const Offset(80, 32));
         await gesture.up();
 
@@ -455,7 +508,7 @@ void main() {
       ) async {
         controller.toggleMod(const Mods.alt());
 
-        await tester.pumpWidget(_buildHandler(controller: controller));
+        await tester.pumpWidget(buildHandler(controller: controller));
 
         final gesture = await tester.startGesture(const Offset(40, 16));
         await tester.pump(const Duration(milliseconds: 550));
@@ -469,9 +522,9 @@ void main() {
       testWidgets('toggling alt mid-drag switches selection mode', (
         tester,
       ) async {
-        await tester.pumpWidget(_buildHandler(controller: controller));
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-        final gesture = await _mouseDown(tester, const Offset(8, 0));
+        final gesture = await mouseDown(tester, const Offset(8, 0));
         await gesture.moveTo(const Offset(80, 32));
         expect(controller.selection!.mode, TerminalSelectionMode.normal);
 
@@ -488,14 +541,14 @@ void main() {
 
       testWidgets('virtual shift bypasses mouse tracking', (tester) async {
         controller.toggleMod(const Mods.shift());
-        _enableMouseTracking(controller);
+        enableMouseTracking(controller);
 
         final events = <Uint8List>[];
         controller.onOutput = events.add;
 
-        await tester.pumpWidget(_buildHandler(controller: controller));
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-        final gesture = await _mouseDown(tester, const Offset(24, 16));
+        final gesture = await mouseDown(tester, const Offset(24, 16));
         await gesture.up();
 
         expect(events, isEmpty);
@@ -504,19 +557,13 @@ void main() {
 
     group('wide character selection snapping', () {
       setUp(() {
-        _terminal(controller).write(
-          Uint8List.fromList([
-            ...utf8.encode('AB'),
-            0xE6, 0x97, 0xA5, // 日 U+65E5
-            ...utf8.encode('CD'),
-          ]),
-        );
+        terminalFor(controller).write(Uint8List.fromList(utf8.encode('AB日CD')));
       });
 
       testWidgets('drag from spacer snaps anchor inclusive', (tester) async {
-        await tester.pumpWidget(_buildHandler(controller: controller));
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-        final gesture = await _mouseDown(tester, const Offset(24, 0));
+        final gesture = await mouseDown(tester, const Offset(24, 0));
         await gesture.moveTo(const Offset(40, 0));
         await gesture.up();
 
@@ -528,9 +575,9 @@ void main() {
       testWidgets('drag ending on wide char snaps end exclusive', (
         tester,
       ) async {
-        await tester.pumpWidget(_buildHandler(controller: controller));
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-        final gesture = await _mouseDown(tester, Offset.zero);
+        final gesture = await mouseDown(tester, Offset.zero);
         await gesture.moveTo(const Offset(24, 0));
         expect(controller.selection!.endCol, 4);
 
@@ -543,9 +590,9 @@ void main() {
       testWidgets('leftward drag from spacer snaps anchor exclusive', (
         tester,
       ) async {
-        await tester.pumpWidget(_buildHandler(controller: controller));
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-        final gesture = await _mouseDown(tester, const Offset(24, 0));
+        final gesture = await mouseDown(tester, const Offset(24, 0));
         await gesture.moveTo(Offset.zero);
         await gesture.up();
 
@@ -555,9 +602,9 @@ void main() {
       });
 
       testWidgets('narrow cells pass through unaffected', (tester) async {
-        await tester.pumpWidget(_buildHandler(controller: controller));
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-        final gesture = await _mouseDown(tester, Offset.zero);
+        final gesture = await mouseDown(tester, Offset.zero);
         await gesture.moveTo(const Offset(8, 0));
         await gesture.up();
 
@@ -567,12 +614,9 @@ void main() {
       });
 
       testWidgets('double click on spacer selects wide char', (tester) async {
-        await tester.pumpWidget(_buildHandler(controller: controller));
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-        var gesture = await _mouseDown(tester, const Offset(24, 0));
-        await gesture.up();
-        gesture = await _mouseDown(tester, const Offset(24, 0));
-        await gesture.up();
+        await tapMouse(tester, const Offset(24, 0), count: 2);
 
         final selection = controller.selection!;
         expect(selection.startCol, 2);
@@ -584,28 +628,28 @@ void main() {
       testWidgets('click fires press and release when mode is normal', (
         tester,
       ) async {
-        _enableMouseTracking(controller);
+        enableMouseTracking(controller);
 
         final events = <Uint8List>[];
         controller.onOutput = events.add;
 
-        await tester.pumpWidget(_buildHandler(controller: controller));
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-        final gesture = await _mouseDown(tester, const Offset(24, 16));
+        final gesture = await mouseDown(tester, const Offset(24, 16));
         await gesture.up();
 
         expect(events.length, 2);
       });
 
       testWidgets('click fires press only when mode is x10', (tester) async {
-        _enableMouseTracking(controller, mode: .x10);
+        enableMouseTracking(controller, mode: .x10);
 
         final events = <Uint8List>[];
         controller.onOutput = events.add;
 
-        await tester.pumpWidget(_buildHandler(controller: controller));
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-        final gesture = await _mouseDown(tester, const Offset(24, 16));
+        final gesture = await mouseDown(tester, const Offset(24, 16));
         await gesture.up();
 
         expect(events.length, 1);
@@ -615,80 +659,13 @@ void main() {
         final events = <Uint8List>[];
         controller.onOutput = events.add;
 
-        await tester.pumpWidget(_buildHandler(controller: controller));
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-        final gesture = await _mouseDown(tester, const Offset(24, 16));
+        final gesture = await mouseDown(tester, const Offset(24, 16));
         await gesture.up();
 
         expect(events, isEmpty);
       });
     });
   });
-}
-
-const _metrics = CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12);
-final _enableNormalMouse = Uint8List.fromList(utf8.encode('\x1b[?1000h'));
-final _enableX10Mouse = Uint8List.fromList(utf8.encode('\x1b[?9h'));
-
-TerminalViewBinding _binding(TerminalController controller) {
-  return controller as TerminalViewBinding;
-}
-
-Widget _buildHandler({
-  required TerminalController controller,
-  CellMetrics metrics = _metrics,
-  TerminalGestureSettings gestureSettings = const TerminalGestureSettings(),
-  ScrollController? scrollController,
-  int visibleRows = 24,
-}) {
-  return Directionality(
-    textDirection: TextDirection.ltr,
-    child: Align(
-      alignment: Alignment.topLeft,
-      child: TerminalGestureDetector(
-        binding: controller as TerminalViewBinding,
-        metrics: metrics,
-        settings: gestureSettings,
-        scrollController: scrollController,
-        visibleRows: visibleRows,
-        child: const SizedBox(width: 640, height: 384),
-      ),
-    ),
-  );
-}
-
-void _enableMouseTracking(
-  TerminalController controller, {
-  MouseTracking mode = .normal,
-}) {
-  final seq = switch (mode) {
-    .normal => _enableNormalMouse,
-    .x10 => _enableX10Mouse,
-    _ => _enableNormalMouse,
-  };
-  final binding = _binding(controller);
-  binding.terminal.write(seq);
-  binding.handleResize(
-    cols: 80,
-    rows: 24,
-    metrics: _metrics,
-    padding: EdgeInsets.zero,
-    devicePixelRatio: 1.0,
-  );
-}
-
-Future<TestGesture> _mouseDown(
-  WidgetTester tester,
-  Offset pos, {
-  int buttons = kPrimaryButton,
-}) {
-  return tester.startGesture(pos, kind: .mouse, buttons: buttons);
-}
-
-Terminal _terminal(TerminalController controller) {
-  return _binding(controller).terminal;
-}
-
-void _writeToTerminal(TerminalController controller, String text) {
-  _terminal(controller).write(Uint8List.fromList(utf8.encode(text)));
 }

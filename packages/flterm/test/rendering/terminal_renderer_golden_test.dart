@@ -12,12 +12,102 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart';
 
-import '../helpers/font_loader.dart';
+import 'helpers/font_loader.dart';
 
 void main() {
   setUpAll(loadBundledFonts);
 
   group('TerminalRenderer goldens', () {
+    const defaultCols = 25;
+    const customAnsiColors = [
+      Color(0xFF282828),
+      Color(0xFF00FFFF),
+      Color(0xFF66994C),
+      Color(0xFFE5B566),
+      Color(0xFF668ECC),
+      Color(0xFFB266B2),
+      Color(0xFF4CB2B2),
+      Color(0xFFAAAAAA),
+      Color(0xFF505050),
+      Color(0xFFE66464),
+      Color(0xFF8CBE6E),
+      Color(0xFFF0C878),
+      Color(0xFF82A0DC),
+      Color(0xFFC882C8),
+      Color(0xFF64C8C8),
+      Color(0xFFDCDCDC),
+    ];
+    const defaultMetrics = CellMetrics(
+      cellWidth: 8,
+      cellHeight: 16,
+      baseline: 12,
+    );
+    const defaultRows = 5;
+
+    final cjkTheme = TerminalTheme.dark().copyWith(
+      fontFamilyFallback: const ['Noto Sans JP', 'JetBrains Mono'],
+    );
+
+    final emojiTheme = TerminalTheme.dark().copyWith(
+      fontFamilyFallback: const ['Noto Emoji', 'JetBrains Mono'],
+    );
+
+    bool needsWhiteFg(ColorPalette palette, int colorIndex) {
+      final c = palette[colorIndex];
+      return (0.299 * c.r * 255 + 0.587 * c.g * 255 + 0.114 * c.b * 255) < 128;
+    }
+
+    TerminalRenderCache renderCache() {
+      final cache = TerminalRenderCache();
+      addTearDown(cache.dispose);
+      return cache;
+    }
+
+    void writeUtf8(Terminal terminal, String text) {
+      terminal.write(Uint8List.fromList(utf8.encode(text)));
+    }
+
+    Widget wrap(
+      Terminal terminal, {
+      TerminalTheme? theme,
+      CellMetrics metrics = defaultMetrics,
+      TerminalSelection? selection,
+      double? maxWidth,
+      double? maxHeight,
+      bool focused = true,
+      bool blinkVisible = true,
+      OnResize? onResize,
+    }) {
+      final width = maxWidth ?? defaultCols * metrics.cellWidth;
+      final height = maxHeight ?? defaultRows * metrics.cellHeight;
+      return Directionality(
+        textDirection: TextDirection.ltr,
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: width, maxHeight: height),
+            child: TerminalRenderer(
+              terminal: terminal,
+              theme:
+                  theme ??
+                  TerminalTheme.dark().copyWith(
+                    fontFamilyFallback: bundledFontFamilyFallback,
+                  ),
+              metrics: metrics,
+              offset: ViewportOffset.zero(),
+              renderCache: renderCache(),
+              renderObserver: _TestRenderObserver(
+                selection: selection,
+                hasFocus: focused,
+              ),
+              blinkVisible: blinkVisible,
+              onResize: onResize,
+            ),
+          ),
+        ),
+      );
+    }
+
     final theme = TerminalTheme.dark().copyWith(
       fontSize: 24.0,
       fontFamilyFallback: bundledFontFamilyFallback,
@@ -26,7 +116,7 @@ void main() {
     late CellMetrics goldenMetrics;
 
     setUp(() {
-      terminal = Terminal(cols: _cols, rows: _rows);
+      terminal = Terminal(cols: defaultCols, rows: defaultRows);
       goldenMetrics = measureCellMetrics(
         fontFamily: theme.fontFamily,
         fontSize: theme.fontSize,
@@ -43,7 +133,7 @@ void main() {
     }) async {
       tester.view.devicePixelRatio = 1.0;
       await tester.pumpWidget(
-        _wrap(
+        wrap(
           terminal,
           theme: overrideTheme ?? theme,
           selection: selection,
@@ -54,18 +144,11 @@ void main() {
 
     group('text rendering', () {
       testWidgets('text styles', (tester) async {
-        // Each row demonstrates one text attribute. Inspect for:
-        //  1. Normal: baseline glyph shapes
-        //  2. Bold: heavier strokes, same baseline
-        //  3. Italic: slanted glyphs, no right-edge clipping
-        //  4. Faint: reduced opacity (~50%)
-        //  5. Inverse: swapped fg/bg colors
-        //  6. BG color: green background behind text
-        //  7. Ligatures: => ≠ ≡≡≡ shaped as single glyphs
         const cols = 25;
         const rows = 7;
         final terminal = Terminal(cols: cols, rows: rows);
-        terminal.writeUtf8(
+        writeUtf8(
+          terminal,
           'Normal text\r\n'
           '\x1b[1mBold text\x1b[0m\r\n'
           '\x1b[3mItalic text\x1b[0m\r\n'
@@ -76,7 +159,7 @@ void main() {
         );
         tester.view.devicePixelRatio = 1.0;
         await tester.pumpWidget(
-          _wrap(
+          wrap(
             terminal,
             theme: theme,
             metrics: goldenMetrics,
@@ -94,19 +177,11 @@ void main() {
 
     group('text decorations', () {
       testWidgets('decoration styles', (tester) async {
-        // Each row demonstrates one decoration type. Inspect for:
-        //  1-5. Underline variants: line below text, no overlap
-        //  6. Colored underline: red (#FF5050) line
-        //  7. Strikethrough: centered horizontal line through text
-        //  8. Overline: line at cell top edge
-        //  9. Combined: underline + strikethrough together
-        // 10. Italic underline: decoration under slanted text
-        // 11. Italic curly: wavy line under slanted text
-        // 12. Italic double: two lines under slanted text
         const cols = 25;
         const rows = 12;
         final terminal = Terminal(cols: cols, rows: rows);
-        terminal.writeUtf8(
+        writeUtf8(
+          terminal,
           '\x1b[4mSingle underline\x1b[0m\r\n'
           '\x1b[4:2mDouble underline\x1b[0m\r\n'
           '\x1b[4:3mCurly underline\x1b[0m\r\n'
@@ -122,7 +197,7 @@ void main() {
         );
         tester.view.devicePixelRatio = 1.0;
         await tester.pumpWidget(
-          _wrap(
+          wrap(
             terminal,
             theme: theme,
             metrics: goldenMetrics,
@@ -140,9 +215,7 @@ void main() {
 
     group('wide characters', () {
       testWidgets('CJK mixed with ASCII', (tester) async {
-        // Row 1: ASCII label + CJK chars (日本語) in double-width cells.
-        // Row 2: interleaved ASCII and CJK to verify grid alignment.
-        final cjk24 = _cjkTheme.copyWith(fontSize: 24.0);
+        final cjk24 = cjkTheme.copyWith(fontSize: 24.0);
         final cjkMetrics = measureCellMetrics(
           fontFamily: cjk24.fontFamily,
           fontSize: cjk24.fontSize,
@@ -151,23 +224,25 @@ void main() {
         const cols = 25;
         const rows = 2;
         final terminal = Terminal(cols: cols, rows: rows);
+        // dart format off
         terminal.write(
           Uint8List.fromList([
-            0x57, 0x69, 0x64, 0x65, 0x3A, 0x20, // 'Wide: '
-            0xE6, 0x97, 0xA5, // 日
-            0xE6, 0x9C, 0xAC, // 本
-            0xE8, 0xAA, 0x9E, // 語
-            0x0D, 0x0A, // \r\n
+            0x57, 0x69, 0x64, 0x65, 0x3A, 0x20,
+            0xE6, 0x97, 0xA5,
+            0xE6, 0x9C, 0xAC,
+            0xE8, 0xAA, 0x9E,
+            0x0D, 0x0A,
             ...utf8.encode('A'),
-            0xE6, 0x97, 0xA5, // 日
+            0xE6, 0x97, 0xA5,
             ...utf8.encode('B'),
-            0xE6, 0x9C, 0xAC, // 本
+            0xE6, 0x9C, 0xAC,
             ...utf8.encode('C'),
           ]),
         );
+        // dart format on
         tester.view.devicePixelRatio = 1.0;
         await tester.pumpWidget(
-          _wrap(
+          wrap(
             terminal,
             theme: cjk24,
             metrics: cjkMetrics,
@@ -183,9 +258,7 @@ void main() {
       });
 
       testWidgets('emoji mixed with ASCII', (tester) async {
-        // Row 1: OK✅NO❌ (emoji adjacent to ASCII).
-        // Row 2: alternating A✅B❌C✅D to verify no text drift.
-        final emoji24 = _emojiTheme.copyWith(fontSize: 24.0);
+        final emoji24 = emojiTheme.copyWith(fontSize: 24.0);
         final emojiMetrics = measureCellMetrics(
           fontFamily: emoji24.fontFamily,
           fontSize: emoji24.fontSize,
@@ -194,25 +267,27 @@ void main() {
         const cols = 25;
         const rows = 2;
         final terminal = Terminal(cols: cols, rows: rows);
+        // dart format off
         terminal.write(
           Uint8List.fromList([
             ...utf8.encode('OK'),
-            0xE2, 0x9C, 0x85, // ✅
+            0xE2, 0x9C, 0x85,
             ...utf8.encode('NO'),
-            0xE2, 0x9D, 0x8C, // ❌
-            0x0D, 0x0A, // \r\n
+            0xE2, 0x9D, 0x8C,
+            0x0D, 0x0A,
             ...utf8.encode('A'),
-            0xE2, 0x9C, 0x85, // ✅
+            0xE2, 0x9C, 0x85,
             ...utf8.encode('B'),
-            0xE2, 0x9D, 0x8C, // ❌
+            0xE2, 0x9D, 0x8C,
             ...utf8.encode('C'),
-            0xE2, 0x9C, 0x85, // ✅
+            0xE2, 0x9C, 0x85,
             ...utf8.encode('D'),
           ]),
         );
+        // dart format on
         tester.view.devicePixelRatio = 1.0;
         await tester.pumpWidget(
-          _wrap(
+          wrap(
             terminal,
             theme: emoji24,
             metrics: emojiMetrics,
@@ -230,7 +305,7 @@ void main() {
 
     group('selection', () {
       testWidgets('single row', (tester) async {
-        terminal.writeUtf8('Hello, World!');
+        writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
           selection: const TerminalSelection(
@@ -247,7 +322,7 @@ void main() {
       });
 
       testWidgets('multi-row', (tester) async {
-        terminal.writeUtf8('Line one\r\nLine two\r\nLine three');
+        writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
           selection: const TerminalSelection(
@@ -264,7 +339,7 @@ void main() {
       });
 
       testWidgets('reversed direction', (tester) async {
-        terminal.writeUtf8('Hello, World!');
+        writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
           selection: const TerminalSelection(
@@ -281,7 +356,7 @@ void main() {
       });
 
       testWidgets('spanning three rows', (tester) async {
-        terminal.writeUtf8('Line one\r\nLine two\r\nLine three');
+        writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
           selection: const TerminalSelection(
@@ -298,7 +373,7 @@ void main() {
       });
 
       testWidgets('multi-row reversed', (tester) async {
-        terminal.writeUtf8('Line one\r\nLine two\r\nLine three');
+        writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
           selection: const TerminalSelection(
@@ -315,14 +390,14 @@ void main() {
       });
 
       testWidgets('full row', (tester) async {
-        terminal.writeUtf8('Hello, World!');
+        writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
           selection: const TerminalSelection(
             startRow: 0,
             startCol: 0,
             endRow: 0,
-            endCol: _cols,
+            endCol: defaultCols,
           ),
         );
         await expectLater(
@@ -332,7 +407,7 @@ void main() {
       });
 
       testWidgets('single cell', (tester) async {
-        terminal.writeUtf8('Hello, World!');
+        writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
           selection: const TerminalSelection(
@@ -349,7 +424,7 @@ void main() {
       });
 
       testWidgets('first row full-width in multi-row', (tester) async {
-        terminal.writeUtf8('Line one\r\nLine two\r\nLine three');
+        writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
           selection: const TerminalSelection(
@@ -366,14 +441,14 @@ void main() {
       });
 
       testWidgets('last row full-width in multi-row', (tester) async {
-        terminal.writeUtf8('Line one\r\nLine two\r\nLine three');
+        writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
           selection: const TerminalSelection(
             startRow: 0,
             startCol: 5,
             endRow: 2,
-            endCol: _cols,
+            endCol: defaultCols,
           ),
         );
         await expectLater(
@@ -383,7 +458,7 @@ void main() {
       });
 
       testWidgets('beyond grid bounds', (tester) async {
-        terminal.writeUtf8('Hello, World!');
+        writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
           selection: const TerminalSelection(
@@ -402,7 +477,7 @@ void main() {
 
     group('block selection', () {
       testWidgets('single row', (tester) async {
-        terminal.writeUtf8('Hello, World!');
+        writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
           selection: const TerminalSelection(
@@ -420,7 +495,7 @@ void main() {
       });
 
       testWidgets('multi-row', (tester) async {
-        terminal.writeUtf8('Line one\r\nLine two\r\nLine three');
+        writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
           selection: const TerminalSelection(
@@ -438,7 +513,7 @@ void main() {
       });
 
       testWidgets('reversed', (tester) async {
-        terminal.writeUtf8('Line one\r\nLine two\r\nLine three');
+        writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
           selection: const TerminalSelection(
@@ -456,7 +531,7 @@ void main() {
       });
 
       testWidgets('single cell', (tester) async {
-        terminal.writeUtf8('Hello, World!');
+        writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
           selection: const TerminalSelection(
@@ -474,7 +549,7 @@ void main() {
       });
 
       testWidgets('single-row reversed', (tester) async {
-        terminal.writeUtf8('Hello, World!');
+        writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
           selection: const TerminalSelection(
@@ -492,7 +567,7 @@ void main() {
       });
 
       testWidgets('beyond grid bounds keeps columns', (tester) async {
-        terminal.writeUtf8('Line one\r\nLine two\r\nLine three');
+        writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
           selection: const TerminalSelection(
@@ -512,17 +587,11 @@ void main() {
 
     group('theme rendering', () {
       testWidgets('color modes', (tester) async {
-        // Merged test for all color modes using the default dark theme.
-        //  1. ANSI colors: Red, Green, Blue foreground
-        //  2. Bold bright: bold+red → bright red
-        //  3. Extended palette: colors 100 and 200
-        //  4. Grayscale ramp: 232, 240, 248, 255
-        //  5. True color RGB: orange, teal
-        //  6. BG palette: red and blue backgrounds
         const cols = 30;
         const rows = 6;
         final terminal = Terminal(cols: cols, rows: rows);
-        terminal.writeUtf8(
+        writeUtf8(
+          terminal,
           '\x1b[31mRed\x1b[0m \x1b[32mGreen\x1b[0m \x1b[34mBlue\x1b[0m\r\n'
           '\x1b[1;31mBold Red (bright)\x1b[0m\r\n'
           '\x1b[38;5;100mColor 100\x1b[0m \x1b[38;5;200mColor 200\x1b[0m\r\n'
@@ -536,7 +605,7 @@ void main() {
         );
         tester.view.devicePixelRatio = 1.0;
         await tester.pumpWidget(
-          _wrap(
+          wrap(
             terminal,
             theme: theme,
             metrics: goldenMetrics,
@@ -552,7 +621,7 @@ void main() {
       });
 
       testWidgets('selection background color', (tester) async {
-        terminal.writeUtf8('Selected text here');
+        writeUtf8(terminal, 'Selected text here');
         await pump(
           tester,
           overrideTheme: theme.copyWith(
@@ -574,7 +643,7 @@ void main() {
       });
 
       testWidgets('faint text uses theme opacity', (tester) async {
-        terminal.writeUtf8('\x1b[2mFaint text\x1b[0m Normal');
+        writeUtf8(terminal, '\x1b[2mFaint text\x1b[0m Normal');
         await pump(tester, overrideTheme: theme.copyWith(faintOpacity: 0.2));
         await expectLater(
           find.byType(TerminalRenderer),
@@ -583,7 +652,7 @@ void main() {
       });
 
       testWidgets('cursor opacity', (tester) async {
-        terminal.writeUtf8('X');
+        writeUtf8(terminal, 'X');
         await pump(
           tester,
           overrideTheme: theme.copyWith(
@@ -597,7 +666,7 @@ void main() {
       });
 
       testWidgets('cursor color', (tester) async {
-        terminal.writeUtf8('X');
+        writeUtf8(terminal, 'X');
         await pump(
           tester,
           overrideTheme: theme.copyWith(
@@ -613,7 +682,7 @@ void main() {
       });
 
       testWidgets('cursor text color', (tester) async {
-        terminal.writeUtf8('AB');
+        writeUtf8(terminal, 'AB');
         await pump(
           tester,
           overrideTheme: theme.copyWith(
@@ -630,7 +699,7 @@ void main() {
       });
 
       testWidgets('cursor color tracks cell foreground', (tester) async {
-        terminal.writeUtf8('\x1b[31mR\x1b[0m\x1b[34mB\x1b[0m');
+        writeUtf8(terminal, '\x1b[31mR\x1b[0m\x1b[34mB\x1b[0m');
         await pump(
           tester,
           overrideTheme: theme.copyWith(
@@ -644,7 +713,7 @@ void main() {
       });
 
       testWidgets('selection foreground tints selected text', (tester) async {
-        terminal.writeUtf8('\x1b[31mRed\x1b[0m \x1b[32mGreen\x1b[0m');
+        writeUtf8(terminal, '\x1b[31mRed\x1b[0m \x1b[32mGreen\x1b[0m');
         await pump(
           tester,
           overrideTheme: theme.copyWith(
@@ -669,7 +738,7 @@ void main() {
       testWidgets('selection foreground tracks cell background', (
         tester,
       ) async {
-        terminal.writeUtf8('\x1b[41mA\x1b[0m\x1b[44mB\x1b[0m');
+        writeUtf8(terminal, '\x1b[41mA\x1b[0m\x1b[44mB\x1b[0m');
         await pump(
           tester,
           overrideTheme: theme.copyWith(
@@ -692,7 +761,7 @@ void main() {
       });
 
       testWidgets('boldColor overrides bold foreground', (tester) async {
-        terminal.writeUtf8('\x1b[31mRed\x1b[0m \x1b[1;31mBold Red\x1b[0m');
+        writeUtf8(terminal, '\x1b[31mRed\x1b[0m \x1b[1;31mBold Red\x1b[0m');
         await pump(
           tester,
           overrideTheme: theme.copyWith(boldColor: const Color(0xFF00FFFF)),
@@ -704,12 +773,12 @@ void main() {
       });
 
       testWidgets('custom ANSI colors', (tester) async {
-        terminal.writeUtf8('\x1b[31mThis should be cyan\x1b[0m');
+        writeUtf8(terminal, '\x1b[31mThis should be cyan\x1b[0m');
         await pump(
           tester,
           overrideTheme: TerminalTheme(
             palette: ColorPalette(
-              ansiColors: _customAnsiColors,
+              ansiColors: customAnsiColors,
               background: theme.background,
               foreground: theme.foreground,
             ),
@@ -723,12 +792,12 @@ void main() {
       });
 
       testWidgets('custom foreground and background', (tester) async {
-        terminal.writeUtf8('Hello world');
+        writeUtf8(terminal, 'Hello world');
         await pump(
           tester,
           overrideTheme: TerminalTheme(
             palette: ColorPalette(
-              ansiColors: _customAnsiColors,
+              ansiColors: customAnsiColors,
               background: const Color(0xFF000080),
               foreground: const Color(0xFF00FF00),
             ),
@@ -742,7 +811,7 @@ void main() {
       });
 
       testWidgets('bold text with boldIsBright false', (tester) async {
-        terminal.writeUtf8('\x1b[1;31mBold Red\x1b[0m');
+        writeUtf8(terminal, '\x1b[1;31mBold Red\x1b[0m');
         await pump(tester, overrideTheme: theme.copyWith(boldIsBright: false));
         await expectLater(
           find.byType(TerminalRenderer),
@@ -751,23 +820,19 @@ void main() {
       });
 
       testWidgets('256-color palette', (tester) async {
-        // Full 256-color palette with auto-contrast foreground labels.
-        // Layout: 16 standard colors (2 rows of 8), blank, 216-cube colors
-        // (12 rows of 18), blank, 24 grayscale (2 rows of 12).
-        // Each cell is 4 chars: right-padded index number.
         const cols = 72;
         const rows = 19;
         final terminal = Terminal(cols: cols, rows: rows);
         final buf = StringBuffer();
 
         for (var i = 0; i < 8; i++) {
-          final fg = _needsWhiteFg(theme.palette, i) ? '38;5;15' : '38;5;0';
+          final fg = needsWhiteFg(theme.palette, i) ? '38;5;15' : '38;5;0';
           buf.write('\x1b[$fg;48;5;${i}m${i.toString().padLeft(3)} \x1b[0m');
         }
         buf.write('\r\n');
 
         for (var i = 8; i < 16; i++) {
-          final fg = _needsWhiteFg(theme.palette, i) ? '38;5;15' : '38;5;0';
+          final fg = needsWhiteFg(theme.palette, i) ? '38;5;15' : '38;5;0';
           buf.write('\x1b[$fg;48;5;${i}m${i.toString().padLeft(3)} \x1b[0m');
         }
         buf.write('\r\n');
@@ -775,7 +840,7 @@ void main() {
         buf.write('\r\n');
 
         for (var i = 16; i < 232; i++) {
-          final fg = _needsWhiteFg(theme.palette, i) ? '38;5;15' : '38;5;0';
+          final fg = needsWhiteFg(theme.palette, i) ? '38;5;15' : '38;5;0';
           buf.write('\x1b[$fg;48;5;${i}m${i.toString().padLeft(3)} \x1b[0m');
           if ((i - 16 + 1) % 18 == 0) buf.write('\r\n');
         }
@@ -783,15 +848,15 @@ void main() {
         buf.write('\r\n');
 
         for (var i = 232; i < 256; i++) {
-          final fg = _needsWhiteFg(theme.palette, i) ? '38;5;15' : '38;5;0';
+          final fg = needsWhiteFg(theme.palette, i) ? '38;5;15' : '38;5;0';
           buf.write('\x1b[$fg;48;5;${i}m${i.toString().padLeft(3)} \x1b[0m');
           if ((i - 232 + 1) % 12 == 0 && i < 255) buf.write('\r\n');
         }
 
-        terminal.writeUtf8(buf.toString());
+        writeUtf8(terminal, buf.toString());
         tester.view.devicePixelRatio = 1.0;
         await tester.pumpWidget(
-          _wrap(
+          wrap(
             terminal,
             theme: theme,
             metrics: goldenMetrics,
@@ -809,91 +874,6 @@ void main() {
   });
 }
 
-const _cols = 25;
-const _customAnsiColors = [
-  Color(0xFF282828),
-  Color(0xFF00FFFF),
-  Color(0xFF66994C),
-  Color(0xFFE5B566),
-  Color(0xFF668ECC),
-  Color(0xFFB266B2),
-  Color(0xFF4CB2B2),
-  Color(0xFFAAAAAA),
-  Color(0xFF505050),
-  Color(0xFFE66464),
-  Color(0xFF8CBE6E),
-  Color(0xFFF0C878),
-  Color(0xFF82A0DC),
-  Color(0xFFC882C8),
-  Color(0xFF64C8C8),
-  Color(0xFFDCDCDC),
-];
-const _metrics = CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12);
-const _rows = 5;
-
-final _cjkTheme = TerminalTheme.dark().copyWith(
-  fontFamilyFallback: const ['Noto Sans JP', 'JetBrains Mono'],
-);
-
-final _emojiTheme = TerminalTheme.dark().copyWith(
-  fontFamilyFallback: const ['Noto Emoji', 'JetBrains Mono'],
-);
-
-/// Returns true if the cell at [colorIndex] has a dark enough background
-/// that white foreground text reads better than black.
-bool _needsWhiteFg(ColorPalette palette, int colorIndex) {
-  final c = palette[colorIndex];
-  // sRGB luma (< 128 on 0-255 scale).
-  return (0.299 * c.r * 255 + 0.587 * c.g * 255 + 0.114 * c.b * 255) < 128;
-}
-
-Widget _wrap(
-  Terminal terminal, {
-  TerminalTheme? theme,
-  CellMetrics metrics = _metrics,
-  TerminalSelection? selection,
-  double? maxWidth,
-  double? maxHeight,
-  bool focused = true,
-  bool blinkVisible = true,
-  OnResize? onResize,
-}) {
-  final width = maxWidth ?? _cols * metrics.cellWidth;
-  final height = maxHeight ?? _rows * metrics.cellHeight;
-  return Directionality(
-    textDirection: TextDirection.ltr,
-    child: Align(
-      alignment: Alignment.topLeft,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: width, maxHeight: height),
-        child: TerminalRenderer(
-          terminal: terminal,
-          theme:
-              theme ??
-              TerminalTheme.dark().copyWith(
-                fontFamilyFallback: bundledFontFamilyFallback,
-              ),
-          metrics: metrics,
-          offset: ViewportOffset.zero(),
-          renderCache: _renderCache(),
-          renderObserver: _TestRenderObserver(
-            selection: selection,
-            hasFocus: focused,
-          ),
-          blinkVisible: blinkVisible,
-          onResize: onResize,
-        ),
-      ),
-    ),
-  );
-}
-
-TerminalRenderCache _renderCache() {
-  final cache = TerminalRenderCache();
-  addTearDown(cache.dispose);
-  return cache;
-}
-
 class _TestRenderObserver implements TerminalRenderObserver {
   @override
   final TerminalSelection? selection;
@@ -908,8 +888,4 @@ class _TestRenderObserver implements TerminalRenderObserver {
 
   @override
   void removeListener(VoidCallback listener) {}
-}
-
-extension on Terminal {
-  void writeUtf8(String text) => write(Uint8List.fromList(utf8.encode(text)));
 }

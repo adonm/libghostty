@@ -6,6 +6,32 @@ import 'package:flterm/src/rendering/atlas/sprite_buffer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  AtlasEntry entry({
+    double srcLeft = 0,
+    double srcTop = 0,
+    double srcRight = 8,
+    double srcBottom = 16,
+  }) => AtlasEntry(
+    srcLeft: srcLeft,
+    srcTop: srcTop,
+    srcRight: srcRight,
+    srcBottom: srcBottom,
+    bearingY: 0,
+  );
+
+  ShapedRun shapedRun(String text) {
+    final paragraph =
+        (ParagraphBuilder(
+            ParagraphStyle(textDirection: TextDirection.ltr),
+          )..addText(text)).build()
+          ..layout(const ParagraphConstraints(width: double.infinity));
+    return ShapedRun(
+      paragraph: paragraph,
+      offset: Offset.zero,
+      clip: Rect.largest,
+    );
+  }
+
   group('AtlasSprites', () {
     test('count and hasSprites are zero before any emit', () {
       final sprites = AtlasSprites()..configure(4, 4);
@@ -21,7 +47,7 @@ void main() {
       sprites.add(
         100.0,
         200.0,
-        _entry(srcLeft: 10, srcTop: 20, srcRight: 18, srcBottom: 36),
+        entry(srcLeft: 10, srcTop: 20, srcRight: 18, srcBottom: 36),
         0.5,
         0xFFAABBCC,
       );
@@ -40,7 +66,7 @@ void main() {
     test('seal drops unused tail slots', () {
       final sprites = AtlasSprites()..configure(2, 4);
       sprites.beginRow(0);
-      sprites.add(10, 20, _entry(), 1.0);
+      sprites.add(10, 20, entry(), 1.0);
       sprites.endRow();
       sprites.seal();
 
@@ -51,15 +77,15 @@ void main() {
     test('shrinking a row drops dropped sprites from the packed output', () {
       final sprites = AtlasSprites()..configure(2, 4);
       sprites.beginRow(0);
-      sprites.add(10, 0, _entry(), 1.0, 0x11111111);
-      sprites.add(20, 0, _entry(), 1.0, 0x22222222);
-      sprites.add(30, 0, _entry(), 1.0, 0x33333333);
+      sprites.add(10, 0, entry(), 1.0, 0x11111111);
+      sprites.add(20, 0, entry(), 1.0, 0x22222222);
+      sprites.add(30, 0, entry(), 1.0, 0x33333333);
       sprites.endRow();
       sprites.seal();
       expect(sprites.count, 3);
 
       sprites.beginRow(0);
-      sprites.add(40, 0, _entry(), 1.0, 0x44444444);
+      sprites.add(40, 0, entry(), 1.0, 0x44444444);
       sprites.endRow();
       sprites.seal();
 
@@ -71,7 +97,7 @@ void main() {
     test('configure resets active slot count when reusing the buffer', () {
       final sprites = AtlasSprites()..configure(4, 6);
       sprites.beginRow(3);
-      sprites.add(1, 2, _entry(), 1.0);
+      sprites.add(1, 2, entry(), 1.0);
       sprites.endRow();
       sprites.seal();
       expect(sprites.count, 1);
@@ -85,7 +111,7 @@ void main() {
     test('dispose releases buffers and resets counters', () {
       final sprites = AtlasSprites()..configure(4, 6);
       sprites.beginRow(0);
-      sprites.add(1, 2, _entry(), 1.0);
+      sprites.add(1, 2, entry(), 1.0);
       sprites.endRow();
       sprites.seal();
 
@@ -99,7 +125,7 @@ void main() {
     test('repeat seal with no dirty rows keeps packed contents stable', () {
       final sprites = AtlasSprites()..configure(3, 4);
       sprites.beginRow(1);
-      sprites.add(7, 8, _entry(), 1.0, 0xFFAABBCC);
+      sprites.add(7, 8, entry(), 1.0, 0xFFAABBCC);
       sprites.endRow();
       sprites.seal();
 
@@ -115,25 +141,22 @@ void main() {
     test('incremental seal preserves clean row prefix', () {
       final sprites = AtlasSprites()..configure(3, 4);
       sprites.beginRow(0);
-      sprites.add(1, 2, _entry(), 1.0, 0xFF111111);
+      sprites.add(1, 2, entry(), 1.0, 0xFF111111);
       sprites.endRow();
       sprites.beginRow(2);
-      sprites.add(3, 4, _entry(), 1.0, 0xFF333333);
+      sprites.add(3, 4, entry(), 1.0, 0xFF333333);
       sprites.endRow();
       sprites.seal();
       expect(sprites.count, 2);
 
-      // Rewrite only row 2.
       sprites.beginRow(2);
-      sprites.add(9, 9, _entry(), 1.0, 0xFF999999);
+      sprites.add(9, 9, entry(), 1.0, 0xFF999999);
       sprites.endRow();
       sprites.seal();
 
       expect(sprites.count, 2);
-      // Row 0 preserved at packed offset 0.
       expect(sprites.sealedColors[0], 0xFF111111.toSigned(32));
       expect(sprites.sealedTransforms[2], 1.0);
-      // Row 2 rewritten at packed offset 1.
       expect(sprites.sealedColors[1], 0xFF999999.toSigned(32));
       expect(sprites.sealedTransforms[4 + 2], 9.0);
     });
@@ -269,7 +292,7 @@ void main() {
     test('seal builds backgroundVertices when any row has bg rects', () {
       final buffer = SpriteBuffer()..configure(2, 4);
       buffer.beginRow(0);
-      buffer.regular.add(0, 0, _entry(), 1.0, 0xFF111111);
+      buffer.regular.add(0, 0, entry(), 1.0, 0xFF111111);
       buffer.background.add(0, 0, 100, 50, 0xFFAABBCC);
       buffer.endRow();
       buffer.seal();
@@ -281,16 +304,15 @@ void main() {
     test('clean rows keep sprites across a partial rebuild', () {
       final buffer = SpriteBuffer()..configure(3, 4);
       buffer.beginRow(0);
-      buffer.regular.add(1, 2, _entry(), 0.5, 0xFF112233);
+      buffer.regular.add(1, 2, entry(), 0.5, 0xFF112233);
       buffer.endRow();
       buffer.beginRow(2);
-      buffer.regular.add(3, 4, _entry(), 0.5, 0xFF445566);
+      buffer.regular.add(3, 4, entry(), 0.5, 0xFF445566);
       buffer.endRow();
       buffer.seal();
 
-      // Only row 2 is dirty; row 0's sprite stays.
       buffer.beginRow(2);
-      buffer.regular.add(9, 9, _entry(), 0.5, 0xFF778899);
+      buffer.regular.add(9, 9, entry(), 0.5, 0xFF778899);
       buffer.endRow();
       buffer.seal();
 
@@ -300,8 +322,8 @@ void main() {
     test('clean rows keep shaped runs across a partial rebuild', () {
       final buffer = SpriteBuffer()..configure(3, 4);
       addTearDown(buffer.dispose);
-      final row0 = _shapedRun('=>');
-      final row2 = _shapedRun('!=');
+      final row0 = shapedRun('=>');
+      final row2 = shapedRun('!=');
       buffer.beginRow(0);
       buffer.shaped.add(row0);
       buffer.endRow();
@@ -310,7 +332,7 @@ void main() {
       buffer.endRow();
       buffer.seal();
 
-      final replacement = _shapedRun('==');
+      final replacement = shapedRun('==');
       buffer.beginRow(2);
       buffer.shaped.add(replacement);
       buffer.endRow();
@@ -324,13 +346,13 @@ void main() {
     test('dirty rows replace shaped runs', () {
       final buffer = SpriteBuffer()..configure(1, 4);
       addTearDown(buffer.dispose);
-      final first = _shapedRun('=>');
+      final first = shapedRun('=>');
       buffer.beginRow(0);
       buffer.shaped.add(first);
       buffer.endRow();
       buffer.seal();
 
-      final second = _shapedRun('!=');
+      final second = shapedRun('!=');
       buffer.beginRow(0);
       buffer.shaped.add(second);
       buffer.endRow();
@@ -342,7 +364,7 @@ void main() {
 
     test('configure and dispose clear shaped runs', () {
       final buffer = SpriteBuffer()..configure(2, 4);
-      final first = _shapedRun('=>');
+      final first = shapedRun('=>');
       buffer.beginRow(1);
       buffer.shaped.add(first);
       buffer.endRow();
@@ -353,7 +375,7 @@ void main() {
       expect(buffer.shaped.rows.length, 1);
 
       buffer.beginRow(0);
-      buffer.shaped.add(_shapedRun('!='));
+      buffer.shaped.add(shapedRun('!='));
       buffer.endRow();
       expect(buffer.shaped.count, 1);
 
@@ -365,7 +387,7 @@ void main() {
     test('dispose releases every channel', () {
       final buffer = SpriteBuffer()..configure(2, 4);
       buffer.beginRow(0);
-      buffer.regular.add(0, 0, _entry(), 1.0, 0xFF111111);
+      buffer.regular.add(0, 0, entry(), 1.0, 0xFF111111);
       buffer.background.add(0, 0, 100, 50, 0xFFAABBCC);
       buffer.endRow();
       buffer.seal();
@@ -378,30 +400,4 @@ void main() {
       expect(buffer.backgroundVertices, isNull);
     });
   });
-}
-
-AtlasEntry _entry({
-  double srcLeft = 0,
-  double srcTop = 0,
-  double srcRight = 8,
-  double srcBottom = 16,
-}) => AtlasEntry(
-  srcLeft: srcLeft,
-  srcTop: srcTop,
-  srcRight: srcRight,
-  srcBottom: srcBottom,
-  bearingY: 0,
-);
-
-ShapedRun _shapedRun(String text) {
-  final paragraph =
-      (ParagraphBuilder(
-          ParagraphStyle(textDirection: TextDirection.ltr),
-        )..addText(text)).build()
-        ..layout(const ParagraphConstraints(width: double.infinity));
-  return ShapedRun(
-    paragraph: paragraph,
-    offset: Offset.zero,
-    clip: Rect.largest,
-  );
 }

@@ -9,11 +9,21 @@ import 'package:libghostty/libghostty.dart';
 
 void main() {
   group('DecorationLane', () {
+    AtlasConfig config() {
+      return AtlasConfig(
+        fontSize: 14,
+        fontWeight: FontWeight.normal,
+        fontFamily: 'monospace',
+        fontFamilyFallback: const [],
+        metrics: const CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12),
+        devicePixelRatio: 1.0,
+      );
+    }
+
     late DecorationLane lane;
 
     setUp(() {
-      lane = DecorationLane(initialSize: 32, maxSize: 128)
-        ..configure(_config());
+      lane = DecorationLane(initialSize: 32, maxSize: 128)..configure(config());
     });
 
     tearDown(() {
@@ -41,15 +51,4 @@ void main() {
       },
     );
   });
-}
-
-AtlasConfig _config() {
-  return AtlasConfig(
-    fontSize: 14,
-    fontWeight: FontWeight.normal,
-    fontFamily: 'monospace',
-    fontFamilyFallback: const [],
-    metrics: const CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12),
-    devicePixelRatio: 1.0,
-  );
 }

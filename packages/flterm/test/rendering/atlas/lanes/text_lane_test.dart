@@ -9,10 +9,27 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('TextLane', () {
+    AtlasConfig config({
+      CellMetrics metrics = const CellMetrics(
+        cellWidth: 8,
+        cellHeight: 16,
+        baseline: 12,
+      ),
+    }) {
+      return AtlasConfig(
+        fontSize: 14,
+        fontWeight: FontWeight.normal,
+        fontFamily: 'monospace',
+        fontFamilyFallback: const [],
+        metrics: metrics,
+        devicePixelRatio: 1.0,
+      );
+    }
+
     late TextLane lane;
 
     setUp(() {
-      lane = TextLane(initialSize: 32, maxSize: 128)..configure(_config());
+      lane = TextLane(initialSize: 32, maxSize: 128)..configure(config());
     });
 
     tearDown(() {
@@ -51,7 +68,7 @@ void main() {
     test('throws when a single slot exceeds the max atlas size', () {
       final lane = TextLane(initialSize: 16, maxSize: 32)
         ..configure(
-          _config(
+          config(
             metrics: const CellMetrics(
               cellWidth: 32,
               cellHeight: 8,
@@ -70,7 +87,7 @@ void main() {
     test('throws before returning out-of-bounds entries when full', () {
       final lane = TextLane(initialSize: 16, maxSize: 32)
         ..configure(
-          _config(
+          config(
             metrics: const CellMetrics(
               cellWidth: 8,
               cellHeight: 8,
@@ -102,21 +119,4 @@ void main() {
       expect(full, isNotNull);
     });
   });
-}
-
-AtlasConfig _config({
-  CellMetrics metrics = const CellMetrics(
-    cellWidth: 8,
-    cellHeight: 16,
-    baseline: 12,
-  ),
-}) {
-  return AtlasConfig(
-    fontSize: 14,
-    fontWeight: FontWeight.normal,
-    fontFamily: 'monospace',
-    fontFamilyFallback: const [],
-    metrics: metrics,
-    devicePixelRatio: 1.0,
-  );
 }

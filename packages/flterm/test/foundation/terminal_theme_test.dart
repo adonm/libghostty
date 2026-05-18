@@ -5,80 +5,93 @@ import 'package:libghostty/libghostty.dart';
 
 void main() {
   group('CursorTheme', () {
-    test('defaults: block shape, no color, 600ms blink, opacity 1.0', () {
-      const cursor = CursorTheme();
-      expect(cursor.shape, CursorShape.block);
-      expect(cursor.color, isNull);
-      expect(cursor.blinkInterval, const Duration(milliseconds: 600));
-      expect(cursor.opacity, 1.0);
+    group('constructor', () {
+      test('uses default values', () {
+        const cursor = CursorTheme();
+
+        expect(cursor.shape, CursorShape.block);
+        expect(cursor.color, isNull);
+        expect(cursor.blinkInterval, const Duration(milliseconds: 600));
+        expect(cursor.opacity, 1.0);
+      });
+
+      test('stores custom values', () {
+        const cursor = CursorTheme(
+          shape: CursorShape.bar,
+          color: DynamicColor.fixed(Color(0xFFFF0000)),
+          text: DynamicColor.cellBackground(),
+          blinkInterval: Duration(milliseconds: 500),
+          opacity: 0.7,
+        );
+
+        expect(cursor.shape, CursorShape.bar);
+        expect(cursor.color, const DynamicColor.fixed(Color(0xFFFF0000)));
+        expect(cursor.text, const DynamicColor.cellBackground());
+        expect(cursor.blinkInterval, const Duration(milliseconds: 500));
+        expect(cursor.opacity, 0.7);
+      });
     });
 
-    test('stores custom values', () {
-      const cursor = CursorTheme(
-        shape: CursorShape.bar,
-        color: DynamicColor.fixed(Color(0xFFFF0000)),
-        text: DynamicColor.cellBackground(),
-        blinkInterval: Duration(milliseconds: 500),
-        opacity: 0.7,
-      );
-      expect(cursor.shape, CursorShape.bar);
-      expect(cursor.color, const DynamicColor.fixed(Color(0xFFFF0000)));
-      expect(cursor.text, const DynamicColor.cellBackground());
-      expect(cursor.blinkInterval, const Duration(milliseconds: 500));
-      expect(cursor.opacity, 0.7);
+    group('equality', () {
+      test('compares cursor themes by value', () {
+        const a = CursorTheme();
+        const b = CursorTheme();
+
+        expect(a, equals(b));
+        expect(a.hashCode, b.hashCode);
+        expect(a, isNot(equals(const CursorTheme(shape: CursorShape.bar))));
+        expect(a, isNot(equals(const CursorTheme(opacity: 0.5))));
+        expect(
+          a,
+          isNot(equals(const CursorTheme(text: DynamicColor.cellBackground()))),
+        );
+      });
     });
 
-    test('equality and hashCode', () {
-      const a = CursorTheme();
-      const b = CursorTheme();
-      expect(a, equals(b));
-      expect(a.hashCode, b.hashCode);
-      expect(a, isNot(equals(const CursorTheme(shape: CursorShape.bar))));
-      expect(a, isNot(equals(const CursorTheme(opacity: 0.5))));
-      expect(
-        a,
-        isNot(equals(const CursorTheme(text: DynamicColor.cellBackground()))),
-      );
-    });
+    group('lerp', () {
+      test('returns endpoints at boundaries', () {
+        const a = CursorTheme(
+          color: DynamicColor.fixed(Color(0xFF000000)),
+          blinkInterval: Duration(milliseconds: 400),
+          opacity: 0.2,
+        );
+        const b = CursorTheme(
+          shape: CursorShape.bar,
+          color: DynamicColor.fixed(Color(0xFFFFFFFF)),
+          blinkInterval: Duration(milliseconds: 800),
+          opacity: 0.8,
+        );
 
-    test('lerp at boundaries returns endpoints', () {
-      const a = CursorTheme(
-        color: DynamicColor.fixed(Color(0xFF000000)),
-        blinkInterval: Duration(milliseconds: 400),
-        opacity: 0.2,
-      );
-      const b = CursorTheme(
-        shape: CursorShape.bar,
-        color: DynamicColor.fixed(Color(0xFFFFFFFF)),
-        blinkInterval: Duration(milliseconds: 800),
-        opacity: 0.8,
-      );
-      final at0 = CursorTheme.lerp(a, b, 0.0)!;
-      expect(at0.shape, CursorShape.block);
-      expect(at0.blinkInterval, const Duration(milliseconds: 400));
-      expect(at0.opacity, 0.2);
+        final at0 = CursorTheme.lerp(a, b, 0.0)!;
+        expect(at0.shape, CursorShape.block);
+        expect(at0.blinkInterval, const Duration(milliseconds: 400));
+        expect(at0.opacity, 0.2);
 
-      final at1 = CursorTheme.lerp(a, b, 1.0)!;
-      expect(at1.shape, CursorShape.bar);
-      expect(at1.blinkInterval, const Duration(milliseconds: 800));
-      expect(at1.opacity, 0.8);
-    });
+        final at1 = CursorTheme.lerp(a, b, 1.0)!;
+        expect(at1.shape, CursorShape.bar);
+        expect(at1.blinkInterval, const Duration(milliseconds: 800));
+        expect(at1.opacity, 0.8);
+      });
 
-    test('lerp interpolates opacity and snaps shape at midpoint', () {
-      const a = CursorTheme(opacity: 0.0);
-      const b = CursorTheme(shape: CursorShape.bar);
-      final mid = CursorTheme.lerp(a, b, 0.5)!;
-      expect(mid.opacity, 0.5);
-      expect(CursorTheme.lerp(a, b, 0.49)!.shape, CursorShape.block);
-      expect(CursorTheme.lerp(a, b, 0.5)!.shape, CursorShape.bar);
-    });
+      test('interpolates opacity and snaps shape at midpoint', () {
+        const a = CursorTheme(opacity: 0.0);
+        const b = CursorTheme(shape: CursorShape.bar);
 
-    test('lerp with null returns other at boundary', () {
-      const a = CursorTheme();
-      expect(CursorTheme.lerp(a, null, 0.0), a);
-      expect(CursorTheme.lerp(a, null, 1.0), isNull);
-      expect(CursorTheme.lerp(null, a, 0.0), isNull);
-      expect(CursorTheme.lerp(null, a, 1.0), a);
+        final mid = CursorTheme.lerp(a, b, 0.5)!;
+
+        expect(mid.opacity, 0.5);
+        expect(CursorTheme.lerp(a, b, 0.49)!.shape, CursorShape.block);
+        expect(CursorTheme.lerp(a, b, 0.5)!.shape, CursorShape.bar);
+      });
+
+      test('returns nullable endpoints at boundaries', () {
+        const a = CursorTheme();
+
+        expect(CursorTheme.lerp(a, null, 0.0), a);
+        expect(CursorTheme.lerp(a, null, 1.0), isNull);
+        expect(CursorTheme.lerp(null, a, 0.0), isNull);
+        expect(CursorTheme.lerp(null, a, 1.0), a);
+      });
     });
   });
 
@@ -244,22 +257,26 @@ void main() {
   });
 
   group('TerminalTheme', () {
-    test('dark() produces valid dark theme', () {
-      final theme = TerminalTheme.dark();
-      expect((theme.foreground.a * 255.0).round(), 255);
-      expect((theme.background.a * 255.0).round(), 255);
+    void expectPaletteIndexesReadable(TerminalTheme theme) {
       for (var i = 0; i < 256; i++) {
         expect(() => theme.palette[i], returnsNormally, reason: 'index $i');
       }
+    }
+
+    test('dark() produces valid dark theme', () {
+      final theme = TerminalTheme.dark();
+
+      expect((theme.foreground.a * 255.0).round(), 255);
+      expect((theme.background.a * 255.0).round(), 255);
+      expectPaletteIndexesReadable(theme);
     });
 
     test('light() produces valid light theme', () {
       final theme = TerminalTheme.light();
+
       expect((theme.foreground.a * 255.0).round(), 255);
       expect((theme.background.a * 255.0).round(), 255);
-      for (var i = 0; i < 256; i++) {
-        expect(() => theme.palette[i], returnsNormally, reason: 'index $i');
-      }
+      expectPaletteIndexesReadable(theme);
     });
 
     test('defaults: boldIsBright, faintOpacity, minimumContrast, '

@@ -13,24 +13,78 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart';
 
-import '../helpers/font_loader.dart';
+import 'helpers/font_loader.dart';
 
 void main() {
   setUpAll(loadBundledFonts);
 
+  const altMetrics = CellMetrics(cellWidth: 10, cellHeight: 20, baseline: 15);
+  const defaultCols = 25;
+  const defaultMetrics = CellMetrics(
+    cellWidth: 8,
+    cellHeight: 16,
+    baseline: 12,
+  );
+  const defaultRows = 5;
+
+  TerminalRenderCache createRenderCache() {
+    final cache = TerminalRenderCache();
+    addTearDown(cache.dispose);
+    return cache;
+  }
+
+  Widget wrap(
+    Terminal terminal, {
+    TerminalTheme? theme,
+    CellMetrics metrics = defaultMetrics,
+    TerminalSelection? selection,
+    double? maxWidth,
+    double? maxHeight,
+    bool focused = true,
+    bool blinkVisible = true,
+    OnResize? onResize,
+    TerminalRenderCache? renderCache,
+  }) {
+    renderCache ??= createRenderCache();
+    final width = maxWidth ?? defaultCols * metrics.cellWidth;
+    final height = maxHeight ?? defaultRows * metrics.cellHeight;
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: width, maxHeight: height),
+          child: TerminalRenderer(
+            terminal: terminal,
+            theme: theme ?? TerminalTheme.dark(),
+            metrics: metrics,
+            offset: ViewportOffset.zero(),
+            renderCache: renderCache,
+            renderObserver: _TestRenderObserver(
+              selection: selection,
+              hasFocus: focused,
+            ),
+            blinkVisible: blinkVisible,
+            onResize: onResize,
+          ),
+        ),
+      ),
+    );
+  }
+
   group('TerminalRenderBox layout', () {
     late Terminal terminal;
 
-    setUp(() => terminal = Terminal(cols: _cols, rows: _rows));
+    setUp(() => terminal = Terminal(cols: defaultCols, rows: defaultRows));
 
     tearDown(() => terminal.dispose());
 
     testWidgets('snaps width to whole-cell multiples', (tester) async {
       await tester.pumpWidget(
-        _wrap(
+        wrap(
           terminal,
           maxWidth: 163.7,
-          maxHeight: _rows * _metrics.cellHeight,
+          maxHeight: defaultRows * defaultMetrics.cellHeight,
         ),
       );
       final box = tester.renderObject<TerminalRenderBox>(
@@ -41,7 +95,11 @@ void main() {
 
     testWidgets('snaps height to whole-cell multiples', (tester) async {
       await tester.pumpWidget(
-        _wrap(terminal, maxWidth: _cols * _metrics.cellWidth, maxHeight: 85.3),
+        wrap(
+          terminal,
+          maxWidth: defaultCols * defaultMetrics.cellWidth,
+          maxHeight: 85.3,
+        ),
       );
       final box = tester.renderObject<TerminalRenderBox>(
         find.byType(TerminalRenderer),
@@ -50,13 +108,13 @@ void main() {
     });
 
     testWidgets('metrics change triggers layout', (tester) async {
-      await tester.pumpWidget(_wrap(terminal));
+      await tester.pumpWidget(wrap(terminal));
       final box = tester.renderObject<TerminalRenderBox>(
         find.byType(TerminalRenderer),
       );
       final sizeBefore = box.size;
 
-      await tester.pumpWidget(_wrap(terminal, metrics: _altMetrics));
+      await tester.pumpWidget(wrap(terminal, metrics: altMetrics));
       expect(box.size, isNot(equals(sizeBefore)));
     });
 
@@ -64,7 +122,7 @@ void main() {
       int? reportedCols;
       int? reportedRows;
       await tester.pumpWidget(
-        _wrap(
+        wrap(
           terminal,
           onResize: (cols, rows) {
             reportedCols = cols;
@@ -72,14 +130,14 @@ void main() {
           },
         ),
       );
-      expect(reportedCols, _cols);
-      expect(reportedRows, _rows);
+      expect(reportedCols, defaultCols);
+      expect(reportedRows, defaultRows);
     });
 
     testWidgets('theme change triggers layout', (tester) async {
       final renderCache = _TrackingRenderCache();
       addTearDown(renderCache.dispose);
-      await tester.pumpWidget(_wrap(terminal, renderCache: renderCache));
+      await tester.pumpWidget(wrap(terminal, renderCache: renderCache));
       final box = tester.renderObject<TerminalRenderBox>(
         find.byType(TerminalRenderer),
       );
@@ -88,7 +146,7 @@ void main() {
 
       final light = TerminalTheme.light();
       await tester.pumpWidget(
-        _wrap(terminal, theme: light, renderCache: renderCache),
+        wrap(terminal, theme: light, renderCache: renderCache),
       );
       expect(box.theme, light);
       expect(renderCache.acquiredKeys, hasLength(acquisitionsBefore));
@@ -97,12 +155,12 @@ void main() {
     testWidgets('font theme change reacquires atlas', (tester) async {
       final renderCache = _TrackingRenderCache();
       addTearDown(renderCache.dispose);
-      await tester.pumpWidget(_wrap(terminal, renderCache: renderCache));
+      await tester.pumpWidget(wrap(terminal, renderCache: renderCache));
       final keyBefore = renderCache.acquiredKeys.last;
 
       final larger = TerminalTheme.dark().copyWith(fontSize: 18);
       await tester.pumpWidget(
-        _wrap(terminal, theme: larger, renderCache: renderCache),
+        wrap(terminal, theme: larger, renderCache: renderCache),
       );
       await tester.pump();
 
@@ -110,14 +168,14 @@ void main() {
     });
 
     testWidgets('selection change does not trigger layout', (tester) async {
-      await tester.pumpWidget(_wrap(terminal));
+      await tester.pumpWidget(wrap(terminal));
       final box = tester.renderObject<TerminalRenderBox>(
         find.byType(TerminalRenderer),
       );
       final sizeBefore = box.size;
 
       await tester.pumpWidget(
-        _wrap(
+        wrap(
           terminal,
           selection: const TerminalSelection(
             startRow: 0,
@@ -135,84 +193,32 @@ void main() {
     late Terminal terminal;
 
     setUp(() {
-      terminal = Terminal(cols: _cols, rows: _rows);
+      terminal = Terminal(cols: defaultCols, rows: defaultRows);
       terminal.write(Uint8List.fromList(utf8.encode('hello')));
     });
 
     tearDown(() => terminal.dispose());
 
     testWidgets('blinkVisible toggles cursor visibility', (tester) async {
-      await tester.pumpWidget(_wrap(terminal));
+      await tester.pumpWidget(wrap(terminal));
       final box = tester.renderObject<TerminalRenderBox>(
         find.byType(TerminalRenderer),
       );
 
       expect(box.blinkVisible, isTrue);
 
-      await tester.pumpWidget(_wrap(terminal, blinkVisible: false));
+      await tester.pumpWidget(wrap(terminal, blinkVisible: false));
       expect(box.blinkVisible, isFalse);
 
-      await tester.pumpWidget(_wrap(terminal));
+      await tester.pumpWidget(wrap(terminal));
       expect(box.blinkVisible, isTrue);
     });
 
-    testWidgets('unfocused terminal renders without error', (tester) async {
-      await tester.pumpWidget(_wrap(terminal, focused: false));
+    testWidgets('unfocused terminal stays mounted', (tester) async {
+      await tester.pumpWidget(wrap(terminal, focused: false));
       expect(find.byType(TerminalRenderer), findsOneWidget);
     });
   });
-}
-
-const _altMetrics = CellMetrics(cellWidth: 10, cellHeight: 20, baseline: 15);
-
-const _cols = 25;
-
-const _metrics = CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12);
-const _rows = 5;
-
-Widget _wrap(
-  Terminal terminal, {
-  TerminalTheme? theme,
-  CellMetrics metrics = _metrics,
-  TerminalSelection? selection,
-  double? maxWidth,
-  double? maxHeight,
-  bool focused = true,
-  bool blinkVisible = true,
-  OnResize? onResize,
-  TerminalRenderCache? renderCache,
-}) {
-  renderCache ??= _renderCache();
-  final width = maxWidth ?? _cols * metrics.cellWidth;
-  final height = maxHeight ?? _rows * metrics.cellHeight;
-  return Directionality(
-    textDirection: TextDirection.ltr,
-    child: Align(
-      alignment: Alignment.topLeft,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: width, maxHeight: height),
-        child: TerminalRenderer(
-          terminal: terminal,
-          theme: theme ?? TerminalTheme.dark(),
-          metrics: metrics,
-          offset: ViewportOffset.zero(),
-          renderCache: renderCache,
-          renderObserver: _TestRenderObserver(
-            selection: selection,
-            hasFocus: focused,
-          ),
-          blinkVisible: blinkVisible,
-          onResize: onResize,
-        ),
-      ),
-    ),
-  );
-}
-
-TerminalRenderCache _renderCache() {
-  final cache = TerminalRenderCache();
-  addTearDown(cache.dispose);
-  return cache;
 }
 
 class _TrackingRenderCache extends TerminalRenderCache {

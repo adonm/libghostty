@@ -25,24 +25,41 @@ void main() {
 
     tearDown(() => controller.dispose());
 
-    group('attach and detach', () {
-      test('detach after attach does not throw', () {
-        final focusNode = FocusNode();
-        addTearDown(focusNode.dispose);
+    void writeUtf8(Terminal terminal, String text) {
+      terminal.write(Uint8List.fromList(utf8.encode(text)));
+    }
 
-        binding.attach(focusNode, ScrollController());
-        binding.detach();
+    void writeNumberedLines(TerminalControllerImpl target, int count) {
+      for (var i = 0; i < count; i++) {
+        writeUtf8(target.terminal, 'line $i\r\n');
+      }
+    }
+
+    group('attach and detach', () {
+      test('detaches after attach', () {
+        final focusNode = FocusNode();
+        final scrollController = ScrollController();
+        addTearDown(focusNode.dispose);
+        addTearDown(scrollController.dispose);
+
+        binding.attach(focusNode, scrollController);
+
+        expect(binding.detach, returnsNormally);
       });
 
-      test('re-attach replaces previous focus node without error', () {
+      test('re-attach replaces previous focus node', () {
         final node1 = FocusNode();
         final node2 = FocusNode();
+        final scrollController1 = ScrollController();
+        final scrollController2 = ScrollController();
         addTearDown(node1.dispose);
         addTearDown(node2.dispose);
+        addTearDown(scrollController1.dispose);
+        addTearDown(scrollController2.dispose);
 
-        binding.attach(node1, ScrollController());
-        binding.attach(node2, ScrollController());
-        binding.detach();
+        binding.attach(node1, scrollController1);
+
+        expect(() => binding.attach(node2, scrollController2), returnsNormally);
       });
     });
 
@@ -74,7 +91,7 @@ void main() {
 
     group('handleScroll', () {
       test('emits cursor key sequences on alternate screen', () {
-        controller.terminal.writeUtf8('\x1b[?1049h');
+        writeUtf8(controller.terminal, '\x1b[?1049h');
         final output = <Uint8List>[];
         controller.onOutput = output.add;
 
@@ -84,7 +101,7 @@ void main() {
         expect(output.first.length, greaterThan(0));
       });
 
-      test('is no-op on primary screen', () {
+      test('emits no output on primary screen', () {
         final output = <Uint8List>[];
         controller.onOutput = output.add;
 
@@ -93,8 +110,8 @@ void main() {
         expect(output, isEmpty);
       });
 
-      test('is no-op for zero lines', () {
-        controller.terminal.writeUtf8('\x1b[?1049h');
+      test('emits no output for zero lines', () {
+        writeUtf8(controller.terminal, '\x1b[?1049h');
         final output = <Uint8List>[];
         controller.onOutput = output.add;
 
@@ -112,13 +129,7 @@ void main() {
         addTearDown(custom.dispose);
         final customBinding = custom as TerminalViewBinding;
 
-        custom.terminal.write(
-          Uint8List.fromList([
-            ...utf8.encode('AB'),
-            0xE6, 0x97, 0xA5, // 日
-            ...utf8.encode('CD'),
-          ]),
-        );
+        custom.terminal.write(Uint8List.fromList(utf8.encode('AB日CD')));
 
         customBinding.updateSelection(0, 3, 0, 5, .normal);
 
@@ -185,13 +196,13 @@ void main() {
         );
         addTearDown(custom.dispose);
         final sc = ScrollController();
+        final focusNode = FocusNode();
+        addTearDown(focusNode.dispose);
         addTearDown(sc.dispose);
         final customBinding = custom as TerminalViewBinding;
-        customBinding.attach(FocusNode(), sc);
+        customBinding.attach(focusNode, sc);
 
-        for (var i = 0; i < 10; i++) {
-          custom.terminal.writeUtf8('line $i\r\n');
-        }
+        writeNumberedLines(custom, 10);
         custom.terminal.scrollViewport(-5);
         expect(
           custom.terminal.scrollbar.offset,
@@ -219,9 +230,7 @@ void main() {
         );
         addTearDown(custom.dispose);
 
-        for (var i = 0; i < 10; i++) {
-          custom.terminal.writeUtf8('line $i\r\n');
-        }
+        writeNumberedLines(custom, 10);
         final bottomOffset = custom.terminal.scrollbar.offset;
 
         custom.terminal.scrollViewport(-5);
@@ -235,7 +244,7 @@ void main() {
 
     group('handleMouseEvent', () {
       test('emits encoded output when tracking is enabled', () {
-        controller.terminal.writeUtf8('\x1b[?1000h');
+        writeUtf8(controller.terminal, '\x1b[?1000h');
         binding.handleResize(
           cols: 80,
           rows: 24,
@@ -276,7 +285,7 @@ void main() {
       });
 
       test('scales pixel coordinates by devicePixelRatio', () {
-        controller.terminal.writeUtf8('\x1b[?1000h');
+        writeUtf8(controller.terminal, '\x1b[?1000h');
         binding.handleResize(
           cols: 80,
           rows: 24,
@@ -311,12 +320,14 @@ void main() {
       });
     });
 
-    test('mouseTracking reflects mode changes', () {
-      expect(binding.mouseTracking, MouseTracking.none);
+    group('mouseTracking', () {
+      test('reflects mode changes', () {
+        expect(binding.mouseTracking, MouseTracking.none);
 
-      controller.terminal.writeUtf8('\x1b[?1000h');
+        writeUtf8(controller.terminal, '\x1b[?1000h');
 
-      expect(binding.mouseTracking, MouseTracking.normal);
+        expect(binding.mouseTracking, MouseTracking.normal);
+      });
     });
 
     group('cursorBlinks', () {
@@ -324,15 +335,13 @@ void main() {
         expect(binding.cursorBlinks, isFalse);
       });
 
-      test('true when focused with blinking enabled', () {
+      test('stays false without a widget focus context', () {
         final focusNode = FocusNode();
         final sc = ScrollController();
         addTearDown(focusNode.dispose);
         addTearDown(sc.dispose);
         binding.attach(focusNode, sc);
 
-        // Simulate focus by requesting it in a widget context
-        // Without a widget tree, hasFocus stays false
         expect(binding.cursorBlinks, isFalse);
       });
     });
@@ -344,9 +353,7 @@ void main() {
         );
         addTearDown(custom.dispose);
 
-        for (var i = 0; i < 10; i++) {
-          custom.terminal.writeUtf8('line $i\r\n');
-        }
+        writeNumberedLines(custom, 10);
         custom.terminal.scrollViewport(-5);
         expect(
           custom.terminal.scrollbar.offset,
@@ -360,31 +367,24 @@ void main() {
       });
     });
 
-    test('modes are re-applied on primary screen restore', () {
-      final focusNode = FocusNode();
-      final sc = ScrollController();
-      addTearDown(focusNode.dispose);
-      addTearDown(sc.dispose);
-      binding.attach(focusNode, sc);
+    group('primary screen restore', () {
+      test('re-applies configured modes', () {
+        final focusNode = FocusNode();
+        final sc = ScrollController();
+        addTearDown(focusNode.dispose);
+        addTearDown(sc.dispose);
+        binding.attach(focusNode, sc);
 
-      // cursorBlinks depends on focus, so test the mode through config
-      // Enter alternate screen, disable cursor blinking
-      controller.terminal.writeUtf8('\x1b[?1049h');
-      controller.terminal.writeUtf8('\x1b[?12l');
+        writeUtf8(controller.terminal, '\x1b[?1049h');
+        writeUtf8(controller.terminal, '\x1b[?12l');
 
-      // Exit alternate screen - modes should be re-applied from config
-      controller.terminal.writeUtf8('\x1b[?1049l');
+        writeUtf8(controller.terminal, '\x1b[?1049l');
 
-      // Config default has cursorBlink=null, so it reads from terminal
-      // mode which _applyModes restores to the config default (true)
-      expect(
-        controller.terminal.modeGet(const TerminalMode.cursorBlinking()),
-        isTrue,
-      );
+        expect(
+          controller.terminal.modeGet(const TerminalMode.cursorBlinking()),
+          isTrue,
+        );
+      });
     });
   });
-}
-
-extension on Terminal {
-  void writeUtf8(String text) => write(Uint8List.fromList(utf8.encode(text)));
 }

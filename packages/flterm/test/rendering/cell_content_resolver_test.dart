@@ -8,11 +8,24 @@ import 'package:libghostty/libghostty.dart';
 
 void main() {
   group('CellContentResolver', () {
+    const metrics = CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12);
+
+    AtlasConfig config() {
+      return AtlasConfig(
+        fontSize: 14,
+        fontWeight: FontWeight.normal,
+        fontFamily: 'monospace',
+        fontFamilyFallback: const [],
+        metrics: metrics,
+        devicePixelRatio: 1.0,
+      );
+    }
+
     late Atlas atlas;
     late CellContentResolver resolver;
 
     setUp(() {
-      atlas = Atlas(_config());
+      atlas = Atlas(config());
       resolver = CellContentResolver(atlas);
     });
 
@@ -90,17 +103,4 @@ void main() {
       expect(entry.lane, AtlasEntryLane.sprite);
     });
   });
-}
-
-const _metrics = CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12);
-
-AtlasConfig _config() {
-  return AtlasConfig(
-    fontSize: 14,
-    fontWeight: FontWeight.normal,
-    fontFamily: 'monospace',
-    fontFamilyFallback: const [],
-    metrics: _metrics,
-    devicePixelRatio: 1.0,
-  );
 }

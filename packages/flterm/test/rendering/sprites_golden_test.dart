@@ -13,12 +13,127 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart';
 
-import '../helpers/font_loader.dart';
+import 'helpers/font_loader.dart';
 
 void main() {
   setUpAll(loadBundledFonts);
 
   group('Sprite Goldens', () {
+    const cols = 25;
+    const rows = 5;
+
+    List<int> inclusiveRange(int start, int end) => [
+      for (var cp = start; cp <= end; cp++) cp,
+    ];
+
+    String codepointGridText(List<int> codepoints, int cols, int cellsPerSlot) {
+      final buffer = StringBuffer();
+      for (var i = 0; i < codepoints.length; i++) {
+        final row = i ~/ cols;
+        final col = i % cols;
+
+        buffer.write('\x1B[${row + 1};${col * cellsPerSlot + 1}H');
+        buffer.writeCharCode(codepoints[i]);
+      }
+      return buffer.toString();
+    }
+
+    List<int> geometricShapesCodepoints() {
+      final face = SpriteFace();
+      return [
+        ...inclusiveRange(0x25A0, 0x25FF),
+        0x23BF,
+        0x23FA,
+        0x26AA,
+        0x26AB,
+        0x2B1B,
+        0x2B1C,
+        0x2B24,
+        0x2B55,
+      ].where(face.hasCodepoint).toList();
+    }
+
+    List<int> legacyComputingCodepoints() => [
+      ...inclusiveRange(0x1FB00, 0x1FBAF),
+      ...inclusiveRange(0x1FBBD, 0x1FBBF),
+      ...inclusiveRange(0x1FBCE, 0x1FBEF),
+    ];
+
+    List<int> legacySupplementCodepoints() => [
+      ...inclusiveRange(0x1CC1B, 0x1CC1E),
+      ...inclusiveRange(0x1CC21, 0x1CC2F),
+      ...inclusiveRange(0x1CC30, 0x1CC3F),
+      ...inclusiveRange(0x1CD00, 0x1CDE5),
+      ...inclusiveRange(0x1CE00, 0x1CE01),
+      ...inclusiveRange(0x1CE0B, 0x1CE0C),
+      ...inclusiveRange(0x1CE16, 0x1CE19),
+      ...inclusiveRange(0x1CE51, 0x1CE8F),
+      ...inclusiveRange(0x1CE90, 0x1CEAF),
+    ];
+
+    TerminalRenderCache renderCache() {
+      final cache = TerminalRenderCache();
+      addTearDown(cache.dispose);
+      return cache;
+    }
+
+    void writeUtf8(Terminal terminal, String text) {
+      terminal.write(Uint8List.fromList(utf8.encode(text)));
+    }
+
+    Widget wrap(
+      Terminal terminal, {
+      required TerminalTheme theme,
+      required CellMetrics metrics,
+      double? maxWidth,
+      double? maxHeight,
+    }) {
+      final width = maxWidth ?? cols * metrics.cellWidth;
+      final height = maxHeight ?? rows * metrics.cellHeight;
+      return Directionality(
+        textDirection: TextDirection.ltr,
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: width, maxHeight: height),
+            child: TerminalRenderer(
+              terminal: terminal,
+              theme: theme,
+              metrics: metrics,
+              offset: ViewportOffset.zero(),
+              renderCache: renderCache(),
+              renderObserver: const _TestRenderObserver(),
+            ),
+          ),
+        ),
+      );
+    }
+
+    Future<void> pumpCodepointGrid(
+      WidgetTester tester, {
+      required TerminalTheme theme,
+      required CellMetrics metrics,
+      required List<int> codepoints,
+      required int cols,
+      int cellsPerSlot = 1,
+    }) async {
+      final rows = (codepoints.length + cols - 1) ~/ cols;
+      final terminalCols = cols * cellsPerSlot;
+      final terminal = Terminal(cols: terminalCols, rows: rows);
+      addTearDown(terminal.dispose);
+      writeUtf8(terminal, codepointGridText(codepoints, cols, cellsPerSlot));
+      tester.view.devicePixelRatio = 1.0;
+      await tester.pumpWidget(
+        wrap(
+          terminal,
+          theme: theme,
+          metrics: metrics,
+          maxWidth: terminalCols * metrics.cellWidth,
+          maxHeight: rows * metrics.cellHeight,
+        ),
+      );
+    }
+
     final theme = TerminalTheme.dark().copyWith(
       fontSize: 24.0,
       fontFamilyFallback: bundledFontFamilyFallback,
@@ -35,11 +150,11 @@ void main() {
 
     group('sprite grids', () {
       testWidgets('box drawing sheet', (tester) async {
-        await _pumpCodepointGrid(
+        await pumpCodepointGrid(
           tester,
           theme: theme,
           metrics: goldenMetrics,
-          codepoints: _inclusiveRange(0x2500, 0x257F),
+          codepoints: inclusiveRange(0x2500, 0x257F),
           cols: 16,
         );
         await expectLater(
@@ -49,11 +164,11 @@ void main() {
       });
 
       testWidgets('block elements sheet', (tester) async {
-        await _pumpCodepointGrid(
+        await pumpCodepointGrid(
           tester,
           theme: theme,
           metrics: goldenMetrics,
-          codepoints: _inclusiveRange(0x2580, 0x259F),
+          codepoints: inclusiveRange(0x2580, 0x259F),
           cols: 16,
         );
         await expectLater(
@@ -63,11 +178,11 @@ void main() {
       });
 
       testWidgets('braille sheet', (tester) async {
-        await _pumpCodepointGrid(
+        await pumpCodepointGrid(
           tester,
           theme: theme,
           metrics: goldenMetrics,
-          codepoints: _inclusiveRange(0x2800, 0x28FF),
+          codepoints: inclusiveRange(0x2800, 0x28FF),
           cols: 16,
         );
         await expectLater(
@@ -77,14 +192,13 @@ void main() {
       });
 
       testWidgets('geometric shapes sheet', (tester) async {
-        await _pumpCodepointGrid(
+        await pumpCodepointGrid(
           tester,
           theme: theme,
           metrics: goldenMetrics,
-          codepoints: _geometricShapesCodepoints(),
+          codepoints: geometricShapesCodepoints(),
           cols: 16,
-          // Block mixes narrow and wide (emoji-presentation) codepoints;
-          // 2 cells per slot keeps the grid aligned regardless of width.
+
           cellsPerSlot: 2,
         );
         await expectLater(
@@ -94,11 +208,11 @@ void main() {
       });
 
       testWidgets('powerline sheet', (tester) async {
-        await _pumpCodepointGrid(
+        await pumpCodepointGrid(
           tester,
           theme: theme,
           metrics: goldenMetrics,
-          codepoints: [..._inclusiveRange(0xE0B0, 0xE0BF), 0xE0D2, 0xE0D4],
+          codepoints: [...inclusiveRange(0xE0B0, 0xE0BF), 0xE0D2, 0xE0D4],
           cols: 10,
         );
         await expectLater(
@@ -108,11 +222,11 @@ void main() {
       });
 
       testWidgets('branch drawing sheet', (tester) async {
-        await _pumpCodepointGrid(
+        await pumpCodepointGrid(
           tester,
           theme: theme,
           metrics: goldenMetrics,
-          codepoints: _inclusiveRange(0xF5D0, 0xF60D),
+          codepoints: inclusiveRange(0xF5D0, 0xF60D),
           cols: 16,
         );
         await expectLater(
@@ -122,11 +236,11 @@ void main() {
       });
 
       testWidgets('legacy computing sheet', (tester) async {
-        await _pumpCodepointGrid(
+        await pumpCodepointGrid(
           tester,
           theme: theme,
           metrics: goldenMetrics,
-          codepoints: _legacyComputingCodepoints(),
+          codepoints: legacyComputingCodepoints(),
           cols: 16,
         );
         await expectLater(
@@ -136,11 +250,11 @@ void main() {
       });
 
       testWidgets('legacy computing supplement sheet', (tester) async {
-        await _pumpCodepointGrid(
+        await pumpCodepointGrid(
           tester,
           theme: theme,
           metrics: goldenMetrics,
-          codepoints: _legacySupplementCodepoints(),
+          codepoints: legacySupplementCodepoints(),
           cols: 16,
         );
         await expectLater(
@@ -156,7 +270,8 @@ void main() {
         const rows = 9;
         final terminal = Terminal(cols: cols, rows: rows);
         addTearDown(terminal.dispose);
-        terminal.writeUtf8(
+        writeUtf8(
+          terminal,
           'Box: ┌────────┐ ╞═╪═╡\r\n'
           '     │ sprite │ └────┘\r\n'
           'Blk: █▓▒░ ▖▗▘▙▚▛▜▝▞▟\r\n'
@@ -177,7 +292,7 @@ void main() {
         );
         tester.view.devicePixelRatio = 1.0;
         await tester.pumpWidget(
-          _wrap(
+          wrap(
             terminal,
             theme: theme,
             metrics: goldenMetrics,
@@ -192,12 +307,12 @@ void main() {
       });
 
       testWidgets('block cursor on sprite glyph', (tester) async {
-        final terminal = Terminal(cols: _cols, rows: _rows);
+        final terminal = Terminal(cols: cols, rows: rows);
         addTearDown(terminal.dispose);
-        terminal.writeUtf8('AB─CD\x1b[1;3H');
+        writeUtf8(terminal, 'AB─CD\x1b[1;3H');
         tester.view.devicePixelRatio = 1.0;
         await tester.pumpWidget(
-          _wrap(
+          wrap(
             terminal,
             theme: theme.copyWith(
               cursor: const CursorTheme(blinkInterval: Duration(hours: 1)),
@@ -214,120 +329,6 @@ void main() {
   });
 }
 
-const _cols = 25;
-const _rows = 5;
-
-String _codepointGridText(List<int> codepoints, int cols, int cellsPerSlot) {
-  final buffer = StringBuffer();
-  for (var i = 0; i < codepoints.length; i++) {
-    final row = i ~/ cols;
-    final col = i % cols;
-    // Absolute cursor positioning per slot so wide codepoints (emoji
-    // presentation, etc.) don't auto-wrap mid-row when [cellsPerSlot] > 1.
-    buffer.write('\x1B[${row + 1};${col * cellsPerSlot + 1}H');
-    buffer.writeCharCode(codepoints[i]);
-  }
-  return buffer.toString();
-}
-
-// Geometric Shapes (U+25A0..25FF) is sparse; filter to registered
-// codepoints so the golden doesn't include .notdef tofu.
-List<int> _geometricShapesCodepoints() {
-  final face = SpriteFace();
-  return [
-    ..._inclusiveRange(0x25A0, 0x25FF),
-    0x23BF,
-    0x23FA,
-    0x26AA,
-    0x26AB,
-    0x2B1B,
-    0x2B1C,
-    0x2B24,
-    0x2B55,
-  ].where(face.hasCodepoint).toList();
-}
-
-List<int> _inclusiveRange(int start, int end) => [
-  for (var cp = start; cp <= end; cp++) cp,
-];
-
-List<int> _legacyComputingCodepoints() => [
-  ..._inclusiveRange(0x1FB00, 0x1FBAF),
-  ..._inclusiveRange(0x1FBBD, 0x1FBBF),
-  ..._inclusiveRange(0x1FBCE, 0x1FBEF),
-];
-
-List<int> _legacySupplementCodepoints() => [
-  ..._inclusiveRange(0x1CC1B, 0x1CC1E),
-  ..._inclusiveRange(0x1CC21, 0x1CC2F),
-  ..._inclusiveRange(0x1CC30, 0x1CC3F),
-  ..._inclusiveRange(0x1CD00, 0x1CDE5),
-  ..._inclusiveRange(0x1CE00, 0x1CE01),
-  ..._inclusiveRange(0x1CE0B, 0x1CE0C),
-  ..._inclusiveRange(0x1CE16, 0x1CE19),
-  ..._inclusiveRange(0x1CE51, 0x1CE8F),
-  ..._inclusiveRange(0x1CE90, 0x1CEAF),
-];
-
-Future<void> _pumpCodepointGrid(
-  WidgetTester tester, {
-  required TerminalTheme theme,
-  required CellMetrics metrics,
-  required List<int> codepoints,
-  required int cols,
-  int cellsPerSlot = 1,
-}) async {
-  final rows = (codepoints.length + cols - 1) ~/ cols;
-  final terminalCols = cols * cellsPerSlot;
-  final terminal = Terminal(cols: terminalCols, rows: rows);
-  addTearDown(terminal.dispose);
-  terminal.writeUtf8(_codepointGridText(codepoints, cols, cellsPerSlot));
-  tester.view.devicePixelRatio = 1.0;
-  await tester.pumpWidget(
-    _wrap(
-      terminal,
-      theme: theme,
-      metrics: metrics,
-      maxWidth: terminalCols * metrics.cellWidth,
-      maxHeight: rows * metrics.cellHeight,
-    ),
-  );
-}
-
-Widget _wrap(
-  Terminal terminal, {
-  required TerminalTheme theme,
-  required CellMetrics metrics,
-  double? maxWidth,
-  double? maxHeight,
-}) {
-  final width = maxWidth ?? _cols * metrics.cellWidth;
-  final height = maxHeight ?? _rows * metrics.cellHeight;
-  return Directionality(
-    textDirection: TextDirection.ltr,
-    child: Align(
-      alignment: Alignment.topLeft,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: width, maxHeight: height),
-        child: TerminalRenderer(
-          terminal: terminal,
-          theme: theme,
-          metrics: metrics,
-          offset: ViewportOffset.zero(),
-          renderCache: _renderCache(),
-          renderObserver: const _TestRenderObserver(),
-        ),
-      ),
-    ),
-  );
-}
-
-TerminalRenderCache _renderCache() {
-  final cache = TerminalRenderCache();
-  addTearDown(cache.dispose);
-  return cache;
-}
-
 class _TestRenderObserver implements TerminalRenderObserver {
   const _TestRenderObserver();
 
@@ -342,8 +343,4 @@ class _TestRenderObserver implements TerminalRenderObserver {
 
   @override
   void removeListener(VoidCallback listener) {}
-}
-
-extension on Terminal {
-  void writeUtf8(String text) => write(Uint8List.fromList(utf8.encode(text)));
 }

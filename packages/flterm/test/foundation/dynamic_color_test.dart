@@ -6,75 +6,79 @@ void main() {
   const cellFg = Color(0xFF112233);
   const cellBg = Color(0xFF445566);
 
-  group('DynamicColor.fixed', () {
-    test('resolve returns the fixed color regardless of cell colors', () {
-      const color = DynamicColor.fixed(Color(0xFFAA00FF));
-      expect(
-        color.resolve(cellForeground: cellFg, cellBackground: cellBg),
-        const Color(0xFFAA00FF),
-      );
+  group('DynamicColor', () {
+    group('fixed', () {
+      test('resolves to the fixed color', () {
+        const color = DynamicColor.fixed(Color(0xFFAA00FF));
+        expect(
+          color.resolve(cellForeground: cellFg, cellBackground: cellBg),
+          const Color(0xFFAA00FF),
+        );
+      });
+
+      test('exposes fixedColor', () {
+        expect(
+          const DynamicColor.fixed(Color(0xFF123456)).fixedColor,
+          const Color(0xFF123456),
+        );
+      });
+
+      test('compares by value', () {
+        const a = DynamicColor.fixed(Color(0xFF123456));
+        const b = DynamicColor.fixed(Color(0xFF123456));
+        const c = DynamicColor.fixed(Color(0xFF654321));
+        expect(a, equals(b));
+        expect(a.hashCode, b.hashCode);
+        expect(a, isNot(equals(c)));
+      });
     });
 
-    test('fixedColor exposes the RGB', () {
-      expect(
-        const DynamicColor.fixed(Color(0xFF123456)).fixedColor,
-        const Color(0xFF123456),
-      );
+    group('cellForeground', () {
+      test('resolves to cell foreground', () {
+        const color = DynamicColor.cellForeground();
+        expect(
+          color.resolve(cellForeground: cellFg, cellBackground: cellBg),
+          cellFg,
+        );
+      });
+
+      test('returns null fixedColor', () {
+        expect(const DynamicColor.cellForeground().fixedColor, isNull);
+      });
+
+      test('compares all instances equally', () {
+        expect(
+          const DynamicColor.cellForeground(),
+          equals(const DynamicColor.cellForeground()),
+        );
+      });
     });
 
-    test('equality and hashCode', () {
-      const a = DynamicColor.fixed(Color(0xFF123456));
-      const b = DynamicColor.fixed(Color(0xFF123456));
-      const c = DynamicColor.fixed(Color(0xFF654321));
-      expect(a, equals(b));
-      expect(a.hashCode, b.hashCode);
-      expect(a, isNot(equals(c)));
-    });
-  });
+    group('cellBackground', () {
+      test('resolves to cell background', () {
+        const color = DynamicColor.cellBackground();
+        expect(
+          color.resolve(cellForeground: cellFg, cellBackground: cellBg),
+          cellBg,
+        );
+      });
 
-  group('DynamicColor.cellForeground', () {
-    test('resolve returns the cell foreground', () {
-      const color = DynamicColor.cellForeground();
-      expect(
-        color.resolve(cellForeground: cellFg, cellBackground: cellBg),
-        cellFg,
-      );
+      test('returns null fixedColor', () {
+        expect(const DynamicColor.cellBackground().fixedColor, isNull);
+      });
     });
 
-    test('fixedColor returns null', () {
-      expect(const DynamicColor.cellForeground().fixedColor, isNull);
+    group('equality', () {
+      test('distinguishes variants', () {
+        expect(
+          const DynamicColor.fixed(Color(0xFF112233)),
+          isNot(equals(const DynamicColor.cellForeground())),
+        );
+        expect(
+          const DynamicColor.cellForeground(),
+          isNot(equals(const DynamicColor.cellBackground())),
+        );
+      });
     });
-
-    test('all instances are equal', () {
-      expect(
-        const DynamicColor.cellForeground(),
-        equals(const DynamicColor.cellForeground()),
-      );
-    });
-  });
-
-  group('DynamicColor.cellBackground', () {
-    test('resolve returns the cell background', () {
-      const color = DynamicColor.cellBackground();
-      expect(
-        color.resolve(cellForeground: cellFg, cellBackground: cellBg),
-        cellBg,
-      );
-    });
-
-    test('fixedColor returns null', () {
-      expect(const DynamicColor.cellBackground().fixedColor, isNull);
-    });
-  });
-
-  test('different variants are not equal', () {
-    expect(
-      const DynamicColor.fixed(Color(0xFF112233)),
-      isNot(equals(const DynamicColor.cellForeground())),
-    );
-    expect(
-      const DynamicColor.cellForeground(),
-      isNot(equals(const DynamicColor.cellBackground())),
-    );
   });
 }

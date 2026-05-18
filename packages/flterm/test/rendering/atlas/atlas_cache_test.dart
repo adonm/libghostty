@@ -12,6 +12,17 @@ import 'package:libghostty/libghostty.dart';
 
 void main() {
   group('AtlasCache', () {
+    AtlasConfig createConfig() {
+      return AtlasConfig(
+        fontSize: 14,
+        fontWeight: FontWeight.normal,
+        fontFamily: 'monospace',
+        fontFamilyFallback: const [],
+        metrics: const CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12),
+        devicePixelRatio: 1.0,
+      );
+    }
+
     late TextLane textLane;
     late EmojiLane emojiLane;
     late SpriteLane spriteLane;
@@ -19,7 +30,7 @@ void main() {
     late AtlasCache cache;
 
     setUp(() {
-      final config = _config();
+      final config = createConfig();
       textLane = TextLane()..configure(config);
       emojiLane = EmojiLane()..configure(config);
       spriteLane = SpriteLane()..configure(config);
@@ -178,15 +189,4 @@ void main() {
       expect(cache.size, preseedSize + 2);
     });
   });
-}
-
-AtlasConfig _config() {
-  return AtlasConfig(
-    fontSize: 14,
-    fontWeight: FontWeight.normal,
-    fontFamily: 'monospace',
-    fontFamilyFallback: const [],
-    metrics: const CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12),
-    devicePixelRatio: 1.0,
-  );
 }

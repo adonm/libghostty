@@ -5,30 +5,32 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('CellMetrics', () {
-    test('equality and hashCode compare all fields', () {
-      const a = CellMetrics(cellWidth: 8.0, cellHeight: 16.0, baseline: 13.0);
-      const b = CellMetrics(cellWidth: 8.0, cellHeight: 16.0, baseline: 13.0);
-      expect(a, equals(b));
-      expect(a.hashCode, b.hashCode);
+    group('equality', () {
+      test('compares metrics by value', () {
+        const a = CellMetrics(cellWidth: 8.0, cellHeight: 16.0, baseline: 13.0);
+        const b = CellMetrics(cellWidth: 8.0, cellHeight: 16.0, baseline: 13.0);
+        expect(a, equals(b));
+        expect(a.hashCode, b.hashCode);
 
-      const diffWidth = CellMetrics(
-        cellWidth: 9.0,
-        cellHeight: 16.0,
-        baseline: 13.0,
-      );
-      const diffHeight = CellMetrics(
-        cellWidth: 8.0,
-        cellHeight: 17.0,
-        baseline: 13.0,
-      );
-      const diffBaseline = CellMetrics(
-        cellWidth: 8.0,
-        cellHeight: 16.0,
-        baseline: 14.0,
-      );
-      expect(a, isNot(equals(diffWidth)));
-      expect(a, isNot(equals(diffHeight)));
-      expect(a, isNot(equals(diffBaseline)));
+        const diffWidth = CellMetrics(
+          cellWidth: 9.0,
+          cellHeight: 16.0,
+          baseline: 13.0,
+        );
+        const diffHeight = CellMetrics(
+          cellWidth: 8.0,
+          cellHeight: 17.0,
+          baseline: 13.0,
+        );
+        const diffBaseline = CellMetrics(
+          cellWidth: 8.0,
+          cellHeight: 16.0,
+          baseline: 14.0,
+        );
+        expect(a, isNot(equals(diffWidth)));
+        expect(a, isNot(equals(diffHeight)));
+        expect(a, isNot(equals(diffBaseline)));
+      });
     });
 
     group('cellAt', () {

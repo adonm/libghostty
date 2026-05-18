@@ -12,14 +12,106 @@ import 'package:libghostty/libghostty.dart' hide KeyEvent;
 
 void main() {
   group('TerminalView', () {
+    Future<void> sendSelectAllShortcut(WidgetTester tester) async {
+      switch (defaultTargetPlatform) {
+        case TargetPlatform.macOS || TargetPlatform.iOS:
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
+          await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
+        case TargetPlatform.linux || TargetPlatform.fuchsia:
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+          await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+        case TargetPlatform.windows || TargetPlatform.android:
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+          await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+      }
+      await tester.pump();
+    }
+
+    void writeUtf8(TerminalController controller, String text) {
+      controller.write(Uint8List.fromList(utf8.encode(text)));
+    }
+
+    Widget wrapInApp({
+      required TerminalController controller,
+      TerminalTheme? theme,
+      bool autofocus = false,
+      bool showKeyboard = true,
+      MouseAutoHide mouseAutoHide = .onInput,
+      TerminalGestureSettings gestureSettings = const TerminalGestureSettings(),
+      EdgeInsets padding = EdgeInsets.zero,
+      double width = 800,
+      double height = 480,
+    }) {
+      return MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: width,
+            height: height,
+            child: TerminalView(
+              controller: controller,
+              theme: theme,
+              autofocus: autofocus,
+              showKeyboard: showKeyboard,
+              mouseAutoHide: mouseAutoHide,
+              gestureSettings: gestureSettings,
+              padding: padding,
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget wrapSplitTerminals({
+      required TerminalController controller,
+      required TerminalController controller2,
+      bool scoped = false,
+    }) {
+      final terminals = Column(
+        children: [
+          Expanded(
+            child: TerminalView(
+              controller: controller,
+              padding: EdgeInsets.zero,
+            ),
+          ),
+          Expanded(
+            child: TerminalView(
+              controller: controller2,
+              padding: EdgeInsets.zero,
+            ),
+          ),
+        ],
+      );
+      return MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 800,
+            height: 480,
+            child: scoped ? TerminalScope(child: terminals) : terminals,
+          ),
+        ),
+      );
+    }
+
     late TerminalController controller;
 
     setUp(() => controller = TerminalController());
 
     tearDown(() => controller.dispose());
 
+    void writeNumberedLines(int count) {
+      for (var i = 0; i < count; i++) {
+        writeUtf8(controller, 'line $i\r\n');
+      }
+    }
+
     testWidgets('renders with controller', (tester) async {
-      await tester.pumpWidget(_wrapInApp(controller: controller));
+      await tester.pumpWidget(wrapInApp(controller: controller));
       expect(find.byType(TerminalView), findsOneWidget);
     });
 
@@ -30,7 +122,7 @@ void main() {
       addTearDown(controller2.dispose);
 
       await tester.pumpWidget(
-        _wrapSplitTerminals(controller: controller, controller2: controller2),
+        wrapSplitTerminals(controller: controller, controller2: controller2),
       );
       await tester.pumpAndSettle();
 
@@ -45,7 +137,7 @@ void main() {
       addTearDown(controller2.dispose);
 
       await tester.pumpWidget(
-        _wrapSplitTerminals(
+        wrapSplitTerminals(
           controller: controller,
           controller2: controller2,
           scoped: true,
@@ -65,7 +157,7 @@ void main() {
         rows.add(reportedRows);
       };
 
-      await tester.pumpWidget(_wrapInApp(controller: controller));
+      await tester.pumpWidget(wrapInApp(controller: controller));
       await tester.pumpAndSettle();
 
       expect(cols, isNotEmpty);
@@ -74,7 +166,7 @@ void main() {
     });
 
     testWidgets('tap to focus', (tester) async {
-      await tester.pumpWidget(_wrapInApp(controller: controller));
+      await tester.pumpWidget(wrapInApp(controller: controller));
 
       expect(controller.hasFocus, isFalse);
 
@@ -86,7 +178,7 @@ void main() {
 
     testWidgets('autofocus focuses on mount', (tester) async {
       await tester.pumpWidget(
-        _wrapInApp(controller: controller, autofocus: true),
+        wrapInApp(controller: controller, autofocus: true),
       );
       await tester.pump();
 
@@ -98,7 +190,7 @@ void main() {
       controller.onOutput = output.add;
 
       await tester.pumpWidget(
-        _wrapInApp(controller: controller, autofocus: true),
+        wrapInApp(controller: controller, autofocus: true),
       );
       await tester.pump();
 
@@ -108,8 +200,8 @@ void main() {
       expect(output, isNotEmpty);
     });
 
-    testWidgets('dispose cleans up without error', (tester) async {
-      await tester.pumpWidget(_wrapInApp(controller: controller));
+    testWidgets('unmount clears focus state', (tester) async {
+      await tester.pumpWidget(wrapInApp(controller: controller));
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox()));
       await tester.pumpAndSettle();
@@ -118,7 +210,7 @@ void main() {
     });
 
     testWidgets('changing theme updates metrics', (tester) async {
-      await tester.pumpWidget(_wrapInApp(controller: controller));
+      await tester.pumpWidget(wrapInApp(controller: controller));
 
       final largeTheme = TerminalTheme(
         palette: ColorPalette(
@@ -130,7 +222,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        _wrapInApp(controller: controller, theme: largeTheme),
+        wrapInApp(controller: controller, theme: largeTheme),
       );
       await tester.pumpAndSettle();
 
@@ -141,7 +233,7 @@ void main() {
       final output = <Uint8List>[];
       controller.onOutput = output.add;
 
-      await tester.pumpWidget(_wrapInApp(controller: controller));
+      await tester.pumpWidget(wrapInApp(controller: controller));
       await tester.pump();
 
       controller.sendText('hello');
@@ -154,21 +246,24 @@ void main() {
       tester,
     ) async {
       final controller2 = TerminalController();
+      addTearDown(controller2.dispose);
 
-      await tester.pumpWidget(_wrapInApp(controller: controller));
+      await tester.pumpWidget(wrapInApp(controller: controller));
 
-      await tester.pumpWidget(_wrapInApp(controller: controller2));
+      await tester.pumpWidget(wrapInApp(controller: controller2));
       await tester.pumpAndSettle();
 
       expect(controller.hasFocus, isFalse);
       expect(find.byType(TerminalView), findsOneWidget);
-
-      controller2.dispose();
     });
 
-    testWidgets('changing scrollController does not throw', (tester) async {
+    testWidgets('changing scrollController keeps the view mounted', (
+      tester,
+    ) async {
       final sc1 = TerminalScrollController();
       final sc2 = TerminalScrollController();
+      addTearDown(sc1.dispose);
+      addTearDown(sc2.dispose);
 
       await tester.pumpWidget(
         MaterialApp(
@@ -205,16 +300,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(TerminalView), findsOneWidget);
-
-      sc1.dispose();
-      sc2.dispose();
     });
 
     testWidgets('showKeyboard false skips keyboard show on focus', (
       tester,
     ) async {
       await tester.pumpWidget(
-        _wrapInApp(controller: controller, showKeyboard: false),
+        wrapInApp(controller: controller, showKeyboard: false),
       );
 
       await tester.tap(find.byType(TerminalView));
@@ -224,9 +316,9 @@ void main() {
     });
 
     testWidgets('touch drag does not create selection', (tester) async {
-      controller.writeUtf8('hello world');
+      writeUtf8(controller, 'hello world');
       await tester.pumpWidget(
-        _wrapInApp(controller: controller, autofocus: true),
+        wrapInApp(controller: controller, autofocus: true),
       );
       await tester.pumpAndSettle();
 
@@ -256,9 +348,9 @@ void main() {
     testWidgets('long press starts normal selection by default', (
       tester,
     ) async {
-      controller.writeUtf8('hello world');
+      writeUtf8(controller, 'hello world');
       await tester.pumpWidget(
-        _wrapInApp(controller: controller, autofocus: true),
+        wrapInApp(controller: controller, autofocus: true),
       );
       await tester.pumpAndSettle();
 
@@ -276,12 +368,10 @@ void main() {
     });
 
     testWidgets('scroll event changes scroll offset', (tester) async {
-      for (var i = 0; i < 50; i++) {
-        controller.writeUtf8('line $i\r\n');
-      }
+      writeNumberedLines(50);
 
       await tester.pumpWidget(
-        _wrapInApp(controller: controller, autofocus: true),
+        wrapInApp(controller: controller, autofocus: true),
       );
       await tester.pumpAndSettle();
 
@@ -298,9 +388,9 @@ void main() {
     });
 
     testWidgets('selectAll via controller updates view', (tester) async {
-      controller.writeUtf8('hello world');
+      writeUtf8(controller, 'hello world');
       await tester.pumpWidget(
-        _wrapInApp(controller: controller, autofocus: true),
+        wrapInApp(controller: controller, autofocus: true),
       );
       await tester.pumpAndSettle();
 
@@ -310,14 +400,16 @@ void main() {
       expect(controller.selection, isNotNull);
     });
 
-    testWidgets('selectAll shortcut works by default', (tester) async {
-      controller.writeUtf8('hello world');
+    testWidgets('selectAll shortcut selects content by default', (
+      tester,
+    ) async {
+      writeUtf8(controller, 'hello world');
       await tester.pumpWidget(
-        _wrapInApp(controller: controller, autofocus: true),
+        wrapInApp(controller: controller, autofocus: true),
       );
       await tester.pumpAndSettle();
 
-      await _sendSelectAllShortcut(tester);
+      await sendSelectAllShortcut(tester);
 
       expect(controller.selection, isNotNull);
     });
@@ -325,9 +417,9 @@ void main() {
     testWidgets(
       'selectAll shortcut blocked when selectAll not in enabled set',
       (tester) async {
-        controller.writeUtf8('hello world');
+        writeUtf8(controller, 'hello world');
         await tester.pumpWidget(
-          _wrapInApp(
+          wrapInApp(
             controller: controller,
             autofocus: true,
             gestureSettings: const TerminalGestureSettings(
@@ -337,7 +429,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await _sendSelectAllShortcut(tester);
+        await sendSelectAllShortcut(tester);
 
         expect(controller.selection, isNull);
       },
@@ -346,9 +438,9 @@ void main() {
     testWidgets('typing clears selection when selectionClearOnTyping is true', (
       tester,
     ) async {
-      controller.writeUtf8('hello world');
+      writeUtf8(controller, 'hello world');
       await tester.pumpWidget(
-        _wrapInApp(controller: controller, autofocus: true),
+        wrapInApp(controller: controller, autofocus: true),
       );
       await tester.pumpAndSettle();
 
@@ -367,9 +459,9 @@ void main() {
     });
 
     testWidgets('shift+arrow extends existing selection', (tester) async {
-      controller.writeUtf8('hello world');
+      writeUtf8(controller, 'hello world');
       await tester.pumpWidget(
-        _wrapInApp(controller: controller, autofocus: true),
+        wrapInApp(controller: controller, autofocus: true),
       );
       await tester.pumpAndSettle();
 
@@ -391,7 +483,7 @@ void main() {
     group('virtual mods', () {
       testWidgets('focus loss clears virtual mods', (tester) async {
         await tester.pumpWidget(
-          _wrapInApp(controller: controller, autofocus: true),
+          wrapInApp(controller: controller, autofocus: true),
         );
         await tester.pump();
 
@@ -417,17 +509,17 @@ void main() {
       }
 
       testWidgets('defaults to text cursor', (tester) async {
-        await tester.pumpWidget(_wrapInApp(controller: controller));
+        await tester.pumpWidget(wrapInApp(controller: controller));
         expect(findMouseCursor(tester), SystemMouseCursors.text);
       });
 
       testWidgets('switches to basic when mouse tracking is active', (
         tester,
       ) async {
-        await tester.pumpWidget(_wrapInApp(controller: controller));
+        await tester.pumpWidget(wrapInApp(controller: controller));
         expect(findMouseCursor(tester), SystemMouseCursors.text);
 
-        controller.writeUtf8('\x1b[?1000h');
+        writeUtf8(controller, '\x1b[?1000h');
         await tester.pumpAndSettle();
 
         expect(findMouseCursor(tester), SystemMouseCursors.basic);
@@ -437,7 +529,7 @@ void main() {
         tester,
       ) async {
         await tester.pumpWidget(
-          _wrapInApp(controller: controller, autofocus: true),
+          wrapInApp(controller: controller, autofocus: true),
         );
         await tester.pump();
         expect(findMouseCursor(tester), SystemMouseCursors.text);
@@ -450,7 +542,7 @@ void main() {
 
       testWidgets('shows cursor on mouse hover after hiding', (tester) async {
         await tester.pumpWidget(
-          _wrapInApp(controller: controller, autofocus: true),
+          wrapInApp(controller: controller, autofocus: true),
         );
         await tester.pump();
 
@@ -472,7 +564,7 @@ void main() {
         tester,
       ) async {
         await tester.pumpWidget(
-          _wrapInApp(
+          wrapInApp(
             controller: controller,
             autofocus: true,
             mouseAutoHide: .never,
@@ -533,7 +625,7 @@ void main() {
         controller.onOutput = output.add;
 
         await tester.pumpWidget(
-          _wrapInApp(controller: controller, autofocus: true),
+          wrapInApp(controller: controller, autofocus: true),
         );
         await tester.pump();
 
@@ -547,13 +639,13 @@ void main() {
       testWidgets('paste wraps with bracketed paste when mode is active', (
         tester,
       ) async {
-        controller.writeUtf8('\x1b[?2004h');
+        writeUtf8(controller, '\x1b[?2004h');
         await mockClipboard(tester, 'hello');
         final output = <Uint8List>[];
         controller.onOutput = output.add;
 
         await tester.pumpWidget(
-          _wrapInApp(controller: controller, autofocus: true),
+          wrapInApp(controller: controller, autofocus: true),
         );
         await tester.pump();
 
@@ -576,7 +668,7 @@ void main() {
         controller.onOutput = output.add;
 
         await tester.pumpWidget(
-          _wrapInApp(controller: controller, autofocus: true),
+          wrapInApp(controller: controller, autofocus: true),
         );
         await tester.pump();
 
@@ -595,20 +687,28 @@ void main() {
         return tester.startGesture(pos, kind: PointerDeviceKind.mouse);
       }
 
+      Future<void> tapMouse(
+        WidgetTester tester,
+        Offset position, {
+        int count = 1,
+      }) async {
+        for (var i = 0; i < count; i++) {
+          final gesture = await mouseDown(tester, position);
+          await gesture.up();
+        }
+      }
+
       testWidgets('double click selects word', (tester) async {
-        controller.writeUtf8('hello world');
+        writeUtf8(controller, 'hello world');
         await tester.pumpWidget(
-          _wrapInApp(controller: controller, autofocus: true),
+          wrapInApp(controller: controller, autofocus: true),
         );
         await tester.pumpAndSettle();
 
         final topLeft = tester.getTopLeft(find.byType(TerminalView));
         final clickPos = topLeft + const Offset(20, 8);
 
-        var gesture = await mouseDown(tester, clickPos);
-        await gesture.up();
-        gesture = await mouseDown(tester, clickPos);
-        await gesture.up();
+        await tapMouse(tester, clickPos, count: 2);
         await tester.pump();
 
         expect(controller.selection, isNotNull);
@@ -616,19 +716,16 @@ void main() {
       });
 
       testWidgets('triple click selects entire line', (tester) async {
-        controller.writeUtf8('hello world');
+        writeUtf8(controller, 'hello world');
         await tester.pumpWidget(
-          _wrapInApp(controller: controller, autofocus: true),
+          wrapInApp(controller: controller, autofocus: true),
         );
         await tester.pumpAndSettle();
 
         final topLeft = tester.getTopLeft(find.byType(TerminalView));
         final clickPos = topLeft + const Offset(20, 8);
 
-        for (var i = 0; i < 3; i++) {
-          final gesture = await mouseDown(tester, clickPos);
-          await gesture.up();
-        }
+        await tapMouse(tester, clickPos, count: 3);
         await tester.pump();
 
         final sel = controller.selection;
@@ -638,9 +735,9 @@ void main() {
       });
 
       testWidgets('mouse drag creates selection', (tester) async {
-        controller.writeUtf8('hello world');
+        writeUtf8(controller, 'hello world');
         await tester.pumpWidget(
-          _wrapInApp(controller: controller, autofocus: true),
+          wrapInApp(controller: controller, autofocus: true),
         );
         await tester.pumpAndSettle();
 
@@ -667,7 +764,7 @@ void main() {
           rows.add(r);
         };
 
-        await tester.pumpWidget(_wrapInApp(controller: controller));
+        await tester.pumpWidget(wrapInApp(controller: controller));
         await tester.pumpAndSettle();
         final noPaddingCols = cols.last;
         final noPaddingRows = rows.last;
@@ -675,7 +772,7 @@ void main() {
         cols.clear();
         rows.clear();
         await tester.pumpWidget(
-          _wrapInApp(controller: controller, padding: const EdgeInsets.all(20)),
+          wrapInApp(controller: controller, padding: const EdgeInsets.all(20)),
         );
         await tester.pumpAndSettle();
 
@@ -690,7 +787,7 @@ void main() {
       ) async {
         final theme = TerminalTheme.dark();
         await tester.pumpWidget(
-          _wrapInApp(controller: controller, theme: theme),
+          wrapInApp(controller: controller, theme: theme),
         );
         await tester.pumpAndSettle();
 
@@ -708,7 +805,7 @@ void main() {
       ) async {
         final theme = TerminalTheme.dark().copyWith(backgroundOpacity: 0.5);
         await tester.pumpWidget(
-          _wrapInApp(controller: controller, theme: theme),
+          wrapInApp(controller: controller, theme: theme),
         );
         await tester.pumpAndSettle();
 
@@ -725,84 +822,4 @@ void main() {
       });
     });
   });
-}
-
-Future<void> _sendSelectAllShortcut(WidgetTester tester) async {
-  switch (defaultTargetPlatform) {
-    case TargetPlatform.macOS || TargetPlatform.iOS:
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
-    case TargetPlatform.linux || TargetPlatform.fuchsia:
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
-    case TargetPlatform.windows || TargetPlatform.android:
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
-  }
-  await tester.pump();
-}
-
-Widget _wrapInApp({
-  required TerminalController controller,
-  TerminalTheme? theme,
-  bool autofocus = false,
-  bool showKeyboard = true,
-  MouseAutoHide mouseAutoHide = .onInput,
-  TerminalGestureSettings gestureSettings = const TerminalGestureSettings(),
-  EdgeInsets padding = EdgeInsets.zero,
-  double width = 800,
-  double height = 480,
-}) {
-  return MaterialApp(
-    home: Scaffold(
-      body: SizedBox(
-        width: width,
-        height: height,
-        child: TerminalView(
-          controller: controller,
-          theme: theme,
-          autofocus: autofocus,
-          showKeyboard: showKeyboard,
-          mouseAutoHide: mouseAutoHide,
-          gestureSettings: gestureSettings,
-          padding: padding,
-        ),
-      ),
-    ),
-  );
-}
-
-Widget _wrapSplitTerminals({
-  required TerminalController controller,
-  required TerminalController controller2,
-  bool scoped = false,
-}) {
-  final terminals = Column(
-    children: [
-      Expanded(
-        child: TerminalView(controller: controller, padding: EdgeInsets.zero),
-      ),
-      Expanded(
-        child: TerminalView(controller: controller2, padding: EdgeInsets.zero),
-      ),
-    ],
-  );
-  return MaterialApp(
-    home: Scaffold(
-      body: SizedBox(
-        width: 800,
-        height: 480,
-        child: scoped ? TerminalScope(child: terminals) : terminals,
-      ),
-    ),
-  );
-}
-
-extension on TerminalController {
-  void writeUtf8(String text) => write(Uint8List.fromList(utf8.encode(text)));
 }

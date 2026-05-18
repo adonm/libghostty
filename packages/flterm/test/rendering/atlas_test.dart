@@ -7,10 +7,38 @@ import 'package:libghostty/libghostty.dart';
 
 void main() {
   group('Atlas', () {
+    const defaultMetrics = CellMetrics(
+      cellWidth: 8,
+      cellHeight: 16,
+      baseline: 12,
+    );
+
+    AtlasConfig config({double dpr = 1, CellMetrics metrics = defaultMetrics}) {
+      return AtlasConfig(
+        fontSize: 14,
+        fontWeight: FontWeight.normal,
+        fontFamily: 'monospace',
+        fontFamilyFallback: const [],
+        metrics: metrics,
+        devicePixelRatio: dpr,
+      );
+    }
+
+    const spriteSamples = [
+      0x2500,
+      0x25E2,
+      0xF5D6,
+      0x1CC21,
+      0x1CC30,
+      0x1CE0B,
+      0x1FB95,
+      0x1FBBD,
+    ];
+
     late Atlas atlas;
 
     setUp(() {
-      atlas = Atlas(_config());
+      atlas = Atlas(config());
     });
 
     tearDown(() => atlas.dispose());
@@ -18,7 +46,7 @@ void main() {
     group('construction', () {
       test('applies config, pre-seeds glyphs, and creates atlas image', () {
         atlas.dispose();
-        atlas = Atlas(_config(dpr: 2.0));
+        atlas = Atlas(config(dpr: 2.0));
 
         expect(atlas.devicePixelRatio, 2.0);
         expect(atlas.cacheSize, greaterThan(0));
@@ -46,7 +74,7 @@ void main() {
       test('defers preseed when cell dimensions are not available', () {
         atlas.dispose();
         atlas = Atlas(
-          _config(
+          config(
             metrics: const CellMetrics(
               cellWidth: 0,
               cellHeight: 0,
@@ -76,7 +104,7 @@ void main() {
       });
 
       test('sprite codepoints reuse geometry across styles', () {
-        for (final codepoint in _spriteSamples) {
+        for (final codepoint in spriteSamples) {
           final plain = atlas.addCodepoint(
             codepoint,
             bold: false,
@@ -226,14 +254,14 @@ void main() {
       });
 
       test('composites pending sprite glyphs into sprite image', () {
-        for (final codepoint in _spriteSamples) {
+        for (final codepoint in spriteSamples) {
           atlas.addCodepoint(codepoint, bold: false, italic: false);
         }
         atlas.ensureImage();
         expect(atlas.spriteImage, isNotNull);
       });
 
-      test('is no-op when no pending glyphs', () {
+      test('keeps existing image without pending glyphs', () {
         final imageBefore = atlas.textImage;
 
         atlas.ensureImage();
@@ -254,30 +282,3 @@ void main() {
     });
   });
 }
-
-const _metrics = CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12);
-
-AtlasConfig _config({double dpr = 1, CellMetrics metrics = _metrics}) {
-  return AtlasConfig(
-    fontSize: 14,
-    fontWeight: FontWeight.normal,
-    fontFamily: 'monospace',
-    fontFamilyFallback: const [],
-    metrics: metrics,
-    devicePixelRatio: dpr,
-  );
-}
-
-// One representative codepoint from each sprite family in the registry.
-// dart format off
-const _spriteSamples = [
-  0x2500, // ─ box drawing
-  0x25E2, // ◢ geometric shapes
-  0xF5D6, //   branch drawing
-  0x1CC21, //   legacy supplement (box dash combo)
-  0x1CC30, //   legacy supplement (circle piece)
-  0x1CE0B, //   legacy supplement (block stub)
-  0x1FB95, //   legacy computing (checkerboard)
-  0x1FBBD, //   legacy computing (filled polygon)
-];
-// dart format on

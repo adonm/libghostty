@@ -8,10 +8,21 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('EmojiLane', () {
+    AtlasConfig config() {
+      return AtlasConfig(
+        fontSize: 14,
+        fontWeight: FontWeight.normal,
+        fontFamily: 'monospace',
+        fontFamilyFallback: const [],
+        metrics: const CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12),
+        devicePixelRatio: 1.0,
+      );
+    }
+
     late EmojiLane lane;
 
     setUp(() {
-      lane = EmojiLane(initialSize: 32, maxSize: 128)..configure(_config());
+      lane = EmojiLane(initialSize: 32, maxSize: 128)..configure(config());
     });
 
     tearDown(() {
@@ -40,15 +51,4 @@ void main() {
       expect(lane.hasPending, isFalse);
     });
   });
-}
-
-AtlasConfig _config() {
-  return AtlasConfig(
-    fontSize: 14,
-    fontWeight: FontWeight.normal,
-    fontFamily: 'monospace',
-    fontFamilyFallback: const [],
-    metrics: const CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12),
-    devicePixelRatio: 1.0,
-  );
 }

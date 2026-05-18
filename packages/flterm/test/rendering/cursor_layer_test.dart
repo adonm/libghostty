@@ -12,10 +12,81 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart';
 
-import '../helpers/font_loader.dart';
+import 'helpers/font_loader.dart';
 
 void main() {
   group('Cursor goldens', () {
+    const cjkFallback = ['Noto Sans JP', 'JetBrains Mono'];
+    const cols = 15;
+    const emojiFallback = ['Noto Emoji', 'JetBrains Mono'];
+    const rows = 3;
+
+    TerminalRenderCache renderCache() {
+      final cache = TerminalRenderCache();
+      addTearDown(cache.dispose);
+      return cache;
+    }
+
+    TerminalTheme cursorTheme(
+      CursorShape shape, {
+      Color? color,
+      List<String>? fallback,
+    }) {
+      return TerminalTheme.dark().copyWith(
+        fontSize: 24.0,
+        fontFamilyFallback: fallback ?? bundledFontFamilyFallback,
+        cursor: CursorTheme(
+          shape: shape,
+          color: color == null ? null : DynamicColor.fixed(color),
+          blinkInterval: const Duration(hours: 1),
+        ),
+      );
+    }
+
+    void writeRawBytes(Terminal terminal, List<int> bytes) {
+      terminal.write(Uint8List.fromList(bytes));
+    }
+
+    void writeUtf8(Terminal terminal, String text) {
+      writeRawBytes(terminal, utf8.encode(text));
+    }
+
+    Future<void> pumpRenderer(
+      WidgetTester tester,
+      Terminal terminal,
+      CellMetrics metrics,
+      TerminalTheme theme,
+    ) async {
+      final width = cols * metrics.cellWidth;
+      final height = rows * metrics.cellHeight;
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = Size(width, height);
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: width, maxHeight: height),
+              child: TerminalRenderer(
+                theme: theme,
+                metrics: metrics,
+                terminal: terminal,
+                offset: ViewportOffset.zero(),
+                renderCache: renderCache(),
+                renderObserver: _TestRenderObserver(),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     setUpAll(loadBundledFonts);
 
     group('cursor shapes', () {
@@ -23,8 +94,8 @@ void main() {
       late CellMetrics metrics;
 
       setUp(() {
-        terminal = Terminal(cols: _cols, rows: _rows);
-        terminal.writeUtf8('Hello World!\r\n\x1b[1;4H');
+        terminal = Terminal(cols: cols, rows: rows);
+        writeUtf8(terminal, 'Hello World!\r\n\x1b[1;4H');
         final theme = TerminalTheme.dark().copyWith(
           fontSize: 24.0,
           fontFamilyFallback: bundledFontFamilyFallback,
@@ -39,11 +110,11 @@ void main() {
       tearDown(() => terminal.dispose());
 
       testWidgets('block cursor', (tester) async {
-        await _pumpRenderer(
+        await pumpRenderer(
           tester,
           terminal,
           metrics,
-          _cursorTheme(CursorShape.block),
+          cursorTheme(CursorShape.block),
         );
         await expectLater(
           find.byType(TerminalRenderer),
@@ -52,11 +123,11 @@ void main() {
       });
 
       testWidgets('block hollow cursor', (tester) async {
-        await _pumpRenderer(
+        await pumpRenderer(
           tester,
           terminal,
           metrics,
-          _cursorTheme(CursorShape.blockHollow),
+          cursorTheme(CursorShape.blockHollow),
         );
         await expectLater(
           find.byType(TerminalRenderer),
@@ -65,11 +136,11 @@ void main() {
       });
 
       testWidgets('underline cursor', (tester) async {
-        await _pumpRenderer(
+        await pumpRenderer(
           tester,
           terminal,
           metrics,
-          _cursorTheme(CursorShape.underline),
+          cursorTheme(CursorShape.underline),
         );
         await expectLater(
           find.byType(TerminalRenderer),
@@ -78,11 +149,11 @@ void main() {
       });
 
       testWidgets('bar cursor', (tester) async {
-        await _pumpRenderer(
+        await pumpRenderer(
           tester,
           terminal,
           metrics,
-          _cursorTheme(CursorShape.bar),
+          cursorTheme(CursorShape.bar),
         );
         await expectLater(
           find.byType(TerminalRenderer),
@@ -91,11 +162,11 @@ void main() {
       });
 
       testWidgets('cursor with explicit color', (tester) async {
-        await _pumpRenderer(
+        await pumpRenderer(
           tester,
           terminal,
           metrics,
-          _cursorTheme(CursorShape.block, color: const Color(0xFF00FF88)),
+          cursorTheme(CursorShape.block, color: const Color(0xFF00FF88)),
         );
         await expectLater(
           find.byType(TerminalRenderer),
@@ -104,12 +175,12 @@ void main() {
       });
 
       testWidgets('hidden cursor via DECTCEM', (tester) async {
-        terminal.writeUtf8('\x1b[?25l');
-        await _pumpRenderer(
+        writeUtf8(terminal, '\x1b[?25l');
+        await pumpRenderer(
           tester,
           terminal,
           metrics,
-          _cursorTheme(CursorShape.block),
+          cursorTheme(CursorShape.block),
         );
         await expectLater(
           find.byType(TerminalRenderer),
@@ -133,17 +204,16 @@ void main() {
         );
       });
 
-      // SGR 7 = inverse video attribute
       testWidgets('block cursor on inverse text', (tester) async {
-        final terminal = Terminal(cols: _cols, rows: _rows);
+        final terminal = Terminal(cols: cols, rows: rows);
         addTearDown(terminal.dispose);
-        terminal.writeUtf8('\x1b[7mHello\x1b[m World!\r\n\x1b[1;4H');
+        writeUtf8(terminal, '\x1b[7mHello\x1b[m World!\r\n\x1b[1;4H');
 
-        await _pumpRenderer(
+        await pumpRenderer(
           tester,
           terminal,
           metrics,
-          _cursorTheme(CursorShape.block),
+          cursorTheme(CursorShape.block),
         );
         await expectLater(
           find.byType(TerminalRenderer),
@@ -151,17 +221,16 @@ void main() {
         );
       });
 
-      // SGR 31 = red foreground, SGR 7 = inverse
       testWidgets('block cursor on colored inverse text', (tester) async {
-        final terminal = Terminal(cols: _cols, rows: _rows);
+        final terminal = Terminal(cols: cols, rows: rows);
         addTearDown(terminal.dispose);
-        terminal.writeUtf8('\x1b[31;7mHello\x1b[m World!\r\n\x1b[1;2H');
+        writeUtf8(terminal, '\x1b[31;7mHello\x1b[m World!\r\n\x1b[1;2H');
 
-        await _pumpRenderer(
+        await pumpRenderer(
           tester,
           terminal,
           metrics,
-          _cursorTheme(CursorShape.block),
+          cursorTheme(CursorShape.block),
         );
         await expectLater(
           find.byType(TerminalRenderer),
@@ -186,24 +255,26 @@ void main() {
       });
 
       void writeEmojiCursorContent(Terminal terminal) {
-        terminal.writeRawBytes([
+        // dart format off
+        writeRawBytes(terminal, [
           ...utf8.encode('AB'),
-          0xE2, 0x9C, 0x85, // ✅
+          0xE2, 0x9C, 0x85,
           ...utf8.encode('CD'),
           ...utf8.encode('\x1b[1;3H'),
         ]);
+        // dart format on
       }
 
       testWidgets('block cursor on emoji', (tester) async {
-        final terminal = Terminal(cols: _cols, rows: _rows);
+        final terminal = Terminal(cols: cols, rows: rows);
         addTearDown(terminal.dispose);
         writeEmojiCursorContent(terminal);
 
-        await _pumpRenderer(
+        await pumpRenderer(
           tester,
           terminal,
           metrics,
-          _cursorTheme(CursorShape.block, fallback: _emojiFallback),
+          cursorTheme(CursorShape.block, fallback: emojiFallback),
         );
         await expectLater(
           find.byType(TerminalRenderer),
@@ -212,15 +283,15 @@ void main() {
       });
 
       testWidgets('hollow cursor on emoji', (tester) async {
-        final terminal = Terminal(cols: _cols, rows: _rows);
+        final terminal = Terminal(cols: cols, rows: rows);
         addTearDown(terminal.dispose);
         writeEmojiCursorContent(terminal);
 
-        await _pumpRenderer(
+        await pumpRenderer(
           tester,
           terminal,
           metrics,
-          _cursorTheme(CursorShape.blockHollow, fallback: _emojiFallback),
+          cursorTheme(CursorShape.blockHollow, fallback: emojiFallback),
         );
         await expectLater(
           find.byType(TerminalRenderer),
@@ -229,20 +300,22 @@ void main() {
       });
 
       testWidgets('block cursor on CJK character', (tester) async {
-        final terminal = Terminal(cols: _cols, rows: _rows);
+        final terminal = Terminal(cols: cols, rows: rows);
         addTearDown(terminal.dispose);
-        terminal.writeRawBytes([
+        // dart format off
+        writeRawBytes(terminal, [
           ...utf8.encode('AB'),
-          0xE6, 0x97, 0xA5, // 日
+          0xE6, 0x97, 0xA5,
           ...utf8.encode('CD'),
           ...utf8.encode('\x1b[1;3H'),
         ]);
+        // dart format on
 
-        await _pumpRenderer(
+        await pumpRenderer(
           tester,
           terminal,
           metrics,
-          _cursorTheme(CursorShape.block, fallback: _cjkFallback),
+          cursorTheme(CursorShape.block, fallback: cjkFallback),
         );
         await expectLater(
           find.byType(TerminalRenderer),
@@ -251,15 +324,15 @@ void main() {
       });
 
       testWidgets('underline cursor on wide char', (tester) async {
-        final terminal = Terminal(cols: _cols, rows: _rows);
+        final terminal = Terminal(cols: cols, rows: rows);
         addTearDown(terminal.dispose);
         writeEmojiCursorContent(terminal);
 
-        await _pumpRenderer(
+        await pumpRenderer(
           tester,
           terminal,
           metrics,
-          _cursorTheme(CursorShape.underline, fallback: _emojiFallback),
+          cursorTheme(CursorShape.underline, fallback: emojiFallback),
         );
         await expectLater(
           find.byType(TerminalRenderer),
@@ -268,69 +341,6 @@ void main() {
       });
     });
   });
-}
-
-const _cjkFallback = ['Noto Sans JP', 'JetBrains Mono'];
-const _cols = 15;
-const _emojiFallback = ['Noto Emoji', 'JetBrains Mono'];
-const _rows = 3;
-
-TerminalTheme _cursorTheme(
-  CursorShape shape, {
-  Color? color,
-  List<String>? fallback,
-}) {
-  return TerminalTheme.dark().copyWith(
-    fontSize: 24.0,
-    fontFamilyFallback: fallback ?? bundledFontFamilyFallback,
-    cursor: CursorTheme(
-      shape: shape,
-      color: color == null ? null : DynamicColor.fixed(color),
-      blinkInterval: const Duration(hours: 1),
-    ),
-  );
-}
-
-Future<void> _pumpRenderer(
-  WidgetTester tester,
-  Terminal terminal,
-  CellMetrics metrics,
-  TerminalTheme theme,
-) async {
-  final width = _cols * metrics.cellWidth;
-  final height = _rows * metrics.cellHeight;
-  tester.view.devicePixelRatio = 1.0;
-  tester.view.physicalSize = Size(width, height);
-  addTearDown(() {
-    tester.view.resetPhysicalSize();
-    tester.view.resetDevicePixelRatio();
-  });
-
-  await tester.pumpWidget(
-    Directionality(
-      textDirection: TextDirection.ltr,
-      child: Align(
-        alignment: Alignment.topLeft,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: width, maxHeight: height),
-          child: TerminalRenderer(
-            theme: theme,
-            metrics: metrics,
-            terminal: terminal,
-            offset: ViewportOffset.zero(),
-            renderCache: _renderCache(),
-            renderObserver: _TestRenderObserver(),
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-TerminalRenderCache _renderCache() {
-  final cache = TerminalRenderCache();
-  addTearDown(cache.dispose);
-  return cache;
 }
 
 class _TestRenderObserver implements TerminalRenderObserver {
@@ -345,10 +355,4 @@ class _TestRenderObserver implements TerminalRenderObserver {
 
   @override
   void removeListener(VoidCallback listener) {}
-}
-
-extension on Terminal {
-  void writeRawBytes(List<int> bytes) => write(Uint8List.fromList(bytes));
-
-  void writeUtf8(String text) => write(Uint8List.fromList(utf8.encode(text)));
 }

@@ -3,36 +3,39 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('TerminalSelection', () {
-    test('equality and hashCode', () {
-      const a = TerminalSelection(
-        startRow: 1,
-        startCol: 2,
-        endRow: 3,
-        endCol: 4,
-      );
-      const b = TerminalSelection(
-        startRow: 1,
-        startCol: 2,
-        endRow: 3,
-        endCol: 4,
-      );
-      const c = TerminalSelection(
-        startRow: 1,
-        startCol: 2,
-        endRow: 3,
-        endCol: 5,
-      );
-      const d = TerminalSelection(
-        startRow: 1,
-        startCol: 2,
-        endRow: 3,
-        endCol: 4,
-        mode: TerminalSelectionMode.block,
-      );
-      expect(a, equals(b));
-      expect(a.hashCode, b.hashCode);
-      expect(a, isNot(equals(c)));
-      expect(a, isNot(equals(d)));
+    group('equality', () {
+      test('compares selections by value', () {
+        const a = TerminalSelection(
+          startRow: 1,
+          startCol: 2,
+          endRow: 3,
+          endCol: 4,
+        );
+        const b = TerminalSelection(
+          startRow: 1,
+          startCol: 2,
+          endRow: 3,
+          endCol: 4,
+        );
+        const c = TerminalSelection(
+          startRow: 1,
+          startCol: 2,
+          endRow: 3,
+          endCol: 5,
+        );
+        const d = TerminalSelection(
+          startRow: 1,
+          startCol: 2,
+          endRow: 3,
+          endCol: 4,
+          mode: TerminalSelectionMode.block,
+        );
+
+        expect(a, equals(b));
+        expect(a.hashCode, b.hashCode);
+        expect(a, isNot(equals(c)));
+        expect(a, isNot(equals(d)));
+      });
     });
 
     group('normalized getters', () {
@@ -90,115 +93,116 @@ void main() {
       });
     });
 
-    group('contains: normal mode', () {
-      test('single-row: inclusive start, exclusive end', () {
-        const sel = TerminalSelection(
-          startRow: 2,
-          startCol: 4,
-          endRow: 2,
-          endCol: 9,
-        );
-        expect(sel.contains(2, 3), isFalse);
-        expect(sel.contains(2, 4), isTrue);
-        expect(sel.contains(2, 8), isTrue);
-        expect(sel.contains(2, 9), isFalse);
-        expect(sel.contains(1, 5), isFalse);
-        expect(sel.contains(3, 5), isFalse);
+    group('contains', () {
+      group('normal mode', () {
+        test('treats single-row end column as exclusive', () {
+          const sel = TerminalSelection(
+            startRow: 2,
+            startCol: 4,
+            endRow: 2,
+            endCol: 9,
+          );
+          expect(sel.contains(2, 3), isFalse);
+          expect(sel.contains(2, 4), isTrue);
+          expect(sel.contains(2, 8), isTrue);
+          expect(sel.contains(2, 9), isFalse);
+          expect(sel.contains(1, 5), isFalse);
+          expect(sel.contains(3, 5), isFalse);
+        });
+
+        test('spans multi-row selections from start to end columns', () {
+          const sel = TerminalSelection(
+            startRow: 1,
+            startCol: 5,
+            endRow: 3,
+            endCol: 4,
+          );
+          expect(sel.contains(1, 4), isFalse);
+          expect(sel.contains(1, 5), isTrue);
+          expect(sel.contains(1, 79), isTrue);
+          expect(sel.contains(2, 0), isTrue);
+          expect(sel.contains(2, 79), isTrue);
+          expect(sel.contains(3, 3), isTrue);
+          expect(sel.contains(3, 4), isFalse);
+          expect(sel.contains(0, 5), isFalse);
+          expect(sel.contains(4, 0), isFalse);
+        });
+
+        test('reversed rows normalizes correctly', () {
+          const sel = TerminalSelection(
+            startRow: 3,
+            startCol: 4,
+            endRow: 1,
+            endCol: 5,
+          );
+          expect(sel.contains(1, 4), isFalse);
+          expect(sel.contains(1, 5), isTrue);
+          expect(sel.contains(2, 0), isTrue);
+          expect(sel.contains(3, 3), isTrue);
+          expect(sel.contains(3, 4), isFalse);
+        });
+
+        test('normalizes single-row reversed columns', () {
+          const sel = TerminalSelection(
+            startRow: 2,
+            startCol: 9,
+            endRow: 2,
+            endCol: 4,
+          );
+          expect(sel.contains(2, 3), isFalse);
+          expect(sel.contains(2, 4), isTrue);
+          expect(sel.contains(2, 8), isTrue);
+          expect(sel.contains(2, 9), isFalse);
+        });
       });
 
-      test('multi-row: first row from startCol, middle rows full, '
-          'last row to endCol', () {
-        const sel = TerminalSelection(
-          startRow: 1,
-          startCol: 5,
-          endRow: 3,
-          endCol: 4,
-        );
-        expect(sel.contains(1, 4), isFalse);
-        expect(sel.contains(1, 5), isTrue);
-        expect(sel.contains(1, 79), isTrue);
-        expect(sel.contains(2, 0), isTrue);
-        expect(sel.contains(2, 79), isTrue);
-        expect(sel.contains(3, 3), isTrue);
-        expect(sel.contains(3, 4), isFalse);
-        expect(sel.contains(0, 5), isFalse);
-        expect(sel.contains(4, 0), isFalse);
-      });
+      group('block mode', () {
+        test('treats the end column as exclusive', () {
+          const sel = TerminalSelection(
+            startRow: 1,
+            startCol: 3,
+            endRow: 3,
+            endCol: 7,
+            mode: TerminalSelectionMode.block,
+          );
+          expect(sel.contains(1, 3), isTrue);
+          expect(sel.contains(2, 5), isTrue);
+          expect(sel.contains(3, 6), isTrue);
+          expect(sel.contains(2, 7), isFalse);
+          expect(sel.contains(2, 2), isFalse);
+          expect(sel.contains(0, 5), isFalse);
+          expect(sel.contains(4, 5), isFalse);
+        });
 
-      test('reversed rows normalizes correctly', () {
-        const sel = TerminalSelection(
-          startRow: 3,
-          startCol: 4,
-          endRow: 1,
-          endCol: 5,
-        );
-        expect(sel.contains(1, 4), isFalse);
-        expect(sel.contains(1, 5), isTrue);
-        expect(sel.contains(2, 0), isTrue);
-        expect(sel.contains(3, 3), isTrue);
-        expect(sel.contains(3, 4), isFalse);
-      });
+        test('fully reversed normalizes correctly', () {
+          const sel = TerminalSelection(
+            startRow: 3,
+            startCol: 7,
+            endRow: 1,
+            endCol: 3,
+            mode: TerminalSelectionMode.block,
+          );
+          expect(sel.contains(1, 3), isTrue);
+          expect(sel.contains(2, 5), isTrue);
+          expect(sel.contains(3, 6), isTrue);
+          expect(sel.contains(2, 2), isFalse);
+          expect(sel.contains(2, 7), isFalse);
+        });
 
-      test('single-row reversed columns normalizes correctly', () {
-        const sel = TerminalSelection(
-          startRow: 2,
-          startCol: 9,
-          endRow: 2,
-          endCol: 4,
-        );
-        expect(sel.contains(2, 3), isFalse);
-        expect(sel.contains(2, 4), isTrue);
-        expect(sel.contains(2, 8), isTrue);
-        expect(sel.contains(2, 9), isFalse);
-      });
-    });
-
-    group('contains: block mode', () {
-      test('rectangular region with exclusive end column', () {
-        const sel = TerminalSelection(
-          startRow: 1,
-          startCol: 3,
-          endRow: 3,
-          endCol: 7,
-          mode: TerminalSelectionMode.block,
-        );
-        expect(sel.contains(1, 3), isTrue);
-        expect(sel.contains(2, 5), isTrue);
-        expect(sel.contains(3, 6), isTrue);
-        expect(sel.contains(2, 7), isFalse);
-        expect(sel.contains(2, 2), isFalse);
-        expect(sel.contains(0, 5), isFalse);
-        expect(sel.contains(4, 5), isFalse);
-      });
-
-      test('fully reversed normalizes correctly', () {
-        const sel = TerminalSelection(
-          startRow: 3,
-          startCol: 7,
-          endRow: 1,
-          endCol: 3,
-          mode: TerminalSelectionMode.block,
-        );
-        expect(sel.contains(1, 3), isTrue);
-        expect(sel.contains(2, 5), isTrue);
-        expect(sel.contains(3, 6), isTrue);
-        expect(sel.contains(2, 2), isFalse);
-        expect(sel.contains(2, 7), isFalse);
-      });
-
-      test('rows forward, columns backward (drag down-left)', () {
-        const sel = TerminalSelection(
-          startRow: 0,
-          startCol: 7,
-          endRow: 2,
-          endCol: 3,
-          mode: TerminalSelectionMode.block,
-        );
-        expect(sel.contains(0, 3), isTrue);
-        expect(sel.contains(1, 5), isTrue);
-        expect(sel.contains(2, 6), isTrue);
-        expect(sel.contains(1, 2), isFalse);
-        expect(sel.contains(1, 7), isFalse);
+        test('normalizes rows forward and columns backward', () {
+          const sel = TerminalSelection(
+            startRow: 0,
+            startCol: 7,
+            endRow: 2,
+            endCol: 3,
+            mode: TerminalSelectionMode.block,
+          );
+          expect(sel.contains(0, 3), isTrue);
+          expect(sel.contains(1, 5), isTrue);
+          expect(sel.contains(2, 6), isTrue);
+          expect(sel.contains(1, 2), isFalse);
+          expect(sel.contains(1, 7), isFalse);
+        });
       });
     });
 
