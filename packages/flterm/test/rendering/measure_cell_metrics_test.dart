@@ -29,6 +29,17 @@ void main() {
       expect(large.cellHeight, greaterThan(small.cellHeight));
     });
 
+    testWidgets('cell width snaps up to device pixels', (tester) async {
+      final metrics = measureCellMetrics(
+        fontFamily: 'JetBrains Mono',
+        fontSize: 9.0,
+        fontData: jetBrainsMonoBytes,
+        devicePixelRatio: 3.0,
+      );
+
+      expect(metrics.cellWidth, closeTo(17 / 3, 0.0001));
+    });
+
     testWidgets('accepts fontFamilyFallback', (tester) async {
       final metrics = measureCellMetrics(
         fontFamily: 'monospace',

@@ -10,11 +10,12 @@ import 'font_table_metrics.dart';
 /// the given font configuration.
 ///
 /// Returns a [CellMetrics] with:
-/// - Cell width: advance width of 'M' (widest common character), rounded.
+/// - Cell width: advance width of 'M' (widest common character), snapped up
+///   to the device pixel grid.
 /// - Cell height: full typographic line height (ascent + |descent|),
-///   rounded to the nearest pixel.
+///   snapped up to the device pixel grid.
 /// - Baseline: distance from the top of the cell, centered within the
-///   rounded cell height.
+///   snapped cell height.
 /// - Underline and strikethrough positions and thicknesses read from the
 ///   font's `post` and `OS/2` tables when [fontData] (raw TTF/OTF bytes)
 ///   is provided. Heuristic fallbacks are used otherwise.
@@ -33,7 +34,10 @@ CellMetrics measureCellMetrics({
   FontWeight fontWeight = .normal,
   List<String>? fontFamilyFallback,
   Uint8List? fontData,
+  double devicePixelRatio = 1.0,
 }) {
+  assert(devicePixelRatio > 0, 'devicePixelRatio must be positive');
+
   final style = TextStyle(
     fontSize: fontSize,
     fontFamily: fontFamily,
@@ -58,12 +62,13 @@ CellMetrics measureCellMetrics({
   final faceHeight = vertPainter.height;
   vertPainter.dispose();
 
-  // Round (not ceil) to limit error to ≤0.5px.
-  final cellWidth = faceWidth.roundToDouble();
-  final cellHeight = faceHeight.roundToDouble();
+  final cellWidth = _ceilToDevicePixel(faceWidth, devicePixelRatio);
+  final cellHeight = _ceilToDevicePixel(faceHeight, devicePixelRatio);
 
-  // Center the face within the rounded cell height.
-  final baseline = (ascent + (cellHeight - faceHeight) / 2).roundToDouble();
+  final baseline = _roundToDevicePixel(
+    ascent + (cellHeight - faceHeight) / 2,
+    devicePixelRatio,
+  );
 
   final fontMetrics = fontData != null ? parseFontTableMetrics(fontData) : null;
 
@@ -118,4 +123,12 @@ CellMetrics measureCellMetrics({
     strikethroughPosition: strikethroughPosition,
     strikethroughThickness: strikethroughThickness,
   );
+}
+
+double _ceilToDevicePixel(double value, double devicePixelRatio) {
+  return (value * devicePixelRatio).ceilToDouble() / devicePixelRatio;
+}
+
+double _roundToDevicePixel(double value, double devicePixelRatio) {
+  return (value * devicePixelRatio).roundToDouble() / devicePixelRatio;
 }

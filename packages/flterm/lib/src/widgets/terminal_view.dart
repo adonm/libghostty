@@ -160,7 +160,11 @@ class _TerminalViewState extends State<TerminalView> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+    final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+    if (_devicePixelRatio == devicePixelRatio) return;
+
+    _devicePixelRatio = devicePixelRatio;
+    _metrics = _measureMetrics();
   }
 
   @override
@@ -204,13 +208,7 @@ class _TerminalViewState extends State<TerminalView> {
           _theme.fontWeight != oldTheme.fontWeight ||
           _theme.fontFamily != oldTheme.fontFamily ||
           _theme.fontFamilyFallback != oldTheme.fontFamilyFallback) {
-        _metrics = measureCellMetrics(
-          fontSize: _theme.fontSize,
-          fontWeight: _theme.fontWeight,
-          fontFamily: _theme.fontFamily,
-          fontFamilyFallback: _theme.fontFamilyFallback,
-          fontData: widget.fontData ?? _resolvedFontData,
-        );
+        _metrics = _measureMetrics();
       }
 
       _binding.brightness = _themeBrightness;
@@ -245,13 +243,9 @@ class _TerminalViewState extends State<TerminalView> {
     _ownsFocusNode = widget.focusNode == null;
 
     _theme = widget.theme ?? TerminalTheme.dark();
-    _metrics = measureCellMetrics(
-      fontSize: _theme.fontSize,
-      fontWeight: _theme.fontWeight,
-      fontFamily: _theme.fontFamily,
-      fontFamilyFallback: _theme.fontFamilyFallback,
-      fontData: widget.fontData,
-    );
+    _devicePixelRatio =
+        WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
+    _metrics = _measureMetrics();
 
     if (widget.fontData == null) {
       unawaited(_resolveFontData(_theme.fontFamily));
@@ -368,6 +362,17 @@ class _TerminalViewState extends State<TerminalView> {
     );
   }
 
+  CellMetrics _measureMetrics({Uint8List? fontData}) {
+    return measureCellMetrics(
+      fontSize: _theme.fontSize,
+      fontWeight: _theme.fontWeight,
+      fontFamily: _theme.fontFamily,
+      fontFamilyFallback: _theme.fontFamilyFallback,
+      fontData: fontData ?? widget.fontData ?? _resolvedFontData,
+      devicePixelRatio: _devicePixelRatio,
+    );
+  }
+
   void _onControllerChanged() {
     _scrollController.activeScreen = _controller.activeScreen;
     setState(_syncBlink);
@@ -395,13 +400,7 @@ class _TerminalViewState extends State<TerminalView> {
     _resolvedFontData = data;
 
     setState(() {
-      _metrics = measureCellMetrics(
-        fontSize: _theme.fontSize,
-        fontWeight: _theme.fontWeight,
-        fontFamily: _theme.fontFamily,
-        fontFamilyFallback: _theme.fontFamilyFallback,
-        fontData: data,
-      );
+      _metrics = _measureMetrics(fontData: data);
     });
   }
 

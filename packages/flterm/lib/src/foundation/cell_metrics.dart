@@ -26,9 +26,9 @@ final class CellMetrics {
 
   /// Height of one character cell in logical pixels.
   ///
-  /// Equal to the full typographic line height: ascent + |descent| + line
-  /// gap, rounded to the nearest pixel. All backgrounds, cursors, selections,
-  /// and decorations use this height.
+  /// Equal to the full typographic line height snapped to the device pixel
+  /// grid. All backgrounds, cursors, selections, and decorations use this
+  /// height.
   final double cellHeight;
 
   /// Distance from the top of the cell to the alphabetic baseline.
