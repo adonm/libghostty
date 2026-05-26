@@ -574,7 +574,13 @@ final class _ForegroundEmitter {
         );
       case .text:
         final sprites = wideText ? _sprites.wide : _sprites.regular;
-        sprites.add(x, row.rowY, entry, _frame.inverseDpr, color);
+        sprites.add(
+          x + entry.bearingX * _frame.inverseDpr,
+          row.rowY + entry.bearingY * _frame.inverseDpr,
+          entry,
+          _frame.inverseDpr,
+          color,
+        );
       case .decoration:
         throw StateError('Decoration atlas entries cannot paint cell content.');
     }

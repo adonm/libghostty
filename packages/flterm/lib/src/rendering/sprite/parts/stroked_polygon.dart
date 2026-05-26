@@ -25,7 +25,17 @@ final class StrokedPolygon extends SpriteGlyph {
         path.lineTo(px, py);
       }
     }
-    if (closed) path.close();
+    if (closed) {
+      path.close();
+      ctx.stroke
+        ..strokeWidth = thickness * 2
+        ..strokeCap = StrokeCap.butt;
+      canvas.save();
+      canvas.clipPath(path);
+      canvas.drawPath(path, ctx.stroke);
+      canvas.restore();
+      return;
+    }
 
     ctx.stroke
       ..strokeWidth = thickness

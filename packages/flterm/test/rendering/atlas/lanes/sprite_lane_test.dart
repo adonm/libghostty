@@ -210,6 +210,17 @@ void main() {
       expect(firstBlockAlpha, 255);
     });
 
+    test('closed stroked polygons stay inside the cell', () async {
+      configureLargeCells();
+
+      final (entry, rgba, width) = await rasterizeGlyph(0x25F8);
+      final cellLeft = _cellLeft(entry);
+      final cellTop = _cellTop(entry);
+
+      expect(_alphaAt(rgba, width, cellLeft - 1, cellTop + 4), 0);
+      expect(_alphaAt(rgba, width, cellLeft + 4, cellTop - 1), 0);
+    });
+
     test('diagonal sprites join with tapered boundary pixels', () async {
       final (rgba, width) = await renderSpriteChain(0x2572, const [
         (0, 0),

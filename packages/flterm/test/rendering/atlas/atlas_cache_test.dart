@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flterm/src/foundation/cell_metrics.dart';
 import 'package:flterm/src/rendering/atlas/atlas_cache.dart';
 import 'package:flterm/src/rendering/atlas/atlas_config.dart';
+import 'package:flterm/src/rendering/atlas/atlas_entry.dart';
 import 'package:flterm/src/rendering/atlas/lanes/decoration_lane.dart';
 import 'package:flterm/src/rendering/atlas/lanes/emoji_lane.dart';
 import 'package:flterm/src/rendering/atlas/lanes/sprite_lane.dart';
@@ -109,6 +110,26 @@ void main() {
 
       expect(sprite, isNot(same(text)));
       expect(cache.size, 2);
+    });
+
+    test('single-cell non-ASCII text entries include source padding', () {
+      final entry = cache.addCodepoint(0x25C6, bold: false, italic: false);
+
+      expect(entry.lane, AtlasEntryLane.text);
+      expect(entry.srcRight - entry.srcLeft, 12);
+      expect(entry.srcBottom - entry.srcTop, 20);
+      expect(entry.bearingX, -2);
+      expect(entry.bearingY, -2);
+    });
+
+    test('shares non-ASCII text entries with codepoint entries', () {
+      const key = (text: '\u25C6', bold: false, italic: false);
+
+      final text = cache.add(key);
+      final codepoint = cache.addCodepoint(0x25C6, bold: false, italic: false);
+
+      expect(codepoint, same(text));
+      expect(cache.size, 1);
     });
 
     test('sprite span participates in the cache key', () {

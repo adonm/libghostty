@@ -11,7 +11,13 @@ import 'lanes/text_lane.dart';
 /// and italic state share the same atlas entry.
 typedef TextAtlasKey = ({String text, bool bold, bool italic});
 typedef _CodepointKey = ({int codepoint, bool bold, bool italic, int span});
-typedef _TextKey = ({String text, bool bold, bool italic, int span});
+typedef _TextKey = ({
+  String text,
+  bool bold,
+  bool italic,
+  int span,
+  double sourcePadding,
+});
 typedef _SpriteKey = ({int codepoint, int span});
 
 /// Caches atlas entries and delegates rasterization on cache miss.
@@ -24,6 +30,7 @@ class AtlasCache {
 
   // Built-in sprites start at U+2500; lower glyphs skip registry lookup.
   static const _builtinSpriteStart = 0x2500;
+  static const _singleCellTextSourcePadding = 2.0;
 
   final SpriteFace _spriteFace;
   final TextLane _textLane;
@@ -135,6 +142,7 @@ class AtlasCache {
       bold: key.bold,
       italic: key.italic,
       span: span,
+      sourcePadding: 0.0,
     );
     return _emoji[cacheKey] ??= _emojiLane.rasterizeEmoji(
       key.text,
@@ -153,18 +161,32 @@ class AtlasCache {
   }
 
   AtlasEntry _addText(TextAtlasKey key, {int span = 1}) {
+    final sourcePadding = _textSourcePadding(key.text, span: span);
     final cacheKey = (
       text: key.text,
       bold: key.bold,
       italic: key.italic,
       span: span,
+      sourcePadding: sourcePadding,
     );
     return _text[cacheKey] ??= _textLane.rasterizeText(
       key.text,
       bold: key.bold,
       italic: key.italic,
       span: span,
+      sourcePadding: sourcePadding,
     );
+  }
+
+  double _textSourcePadding(String text, {required int span}) {
+    if (span != 1) return 0.0;
+
+    final runes = text.runes.iterator;
+    if (!runes.moveNext()) return 0.0;
+    final codepoint = runes.current;
+    if (runes.moveNext()) return 0.0;
+
+    return codepoint >= 0x80 ? _singleCellTextSourcePadding : 0.0;
   }
 
   void _preseedAscii() {

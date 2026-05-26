@@ -20,16 +20,14 @@ final class AtlasEntry {
 
   /// Vertical offset associated with the glyph's source pixels.
   ///
-  /// For text glyphs, computed as `baseline - alphabeticBaseline`.
-  /// Sprite glyphs use this as a draw offset when their source rect includes
-  /// pixels outside the cell.
+  /// Text and sprite glyphs use this as a draw offset when their source rect
+  /// includes pixels outside the cell.
   final double bearingY;
 
   /// Horizontal offset associated with the glyph's source pixels.
   ///
-  /// Text glyphs use this while rasterizing into the atlas. Sprite glyphs use
-  /// this as a draw offset when their source rect includes pixels outside the
-  /// cell.
+  /// Text and sprite glyphs use this as a draw offset when their source rect
+  /// includes pixels outside the cell.
   final double bearingX;
 
   /// Atlas lane that owns this entry's source pixels.

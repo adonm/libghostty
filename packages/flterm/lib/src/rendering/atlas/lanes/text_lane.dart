@@ -13,10 +13,11 @@ class TextLane extends ParagraphLane {
     Paragraph paragraph,
     AtlasEntry entry,
     double widthScale,
+    Offset paintOffset,
   ) {
     final offset = Offset(
-      entry.srcLeft + entry.bearingX,
-      entry.srcTop + entry.bearingY,
+      entry.srcLeft + paintOffset.dx,
+      entry.srcTop + paintOffset.dy,
     );
     if (widthScale == 1.0) {
       canvas.drawParagraph(paragraph, offset);
@@ -38,6 +39,7 @@ class TextLane extends ParagraphLane {
     required bool bold,
     required bool italic,
     int span = 1,
+    double sourcePadding = 0.0,
   }) {
     final pxCellWidth = (this.pxCellWidth * span).ceil().toDouble();
     final pxHeight = pxCellHeight.ceil().toDouble();
@@ -63,20 +65,29 @@ class TextLane extends ParagraphLane {
         ? (pxCellWidth - textWidth) / 2
         : 0.0;
     final bearingY = pxBaseline - paragraph.alphabeticBaseline;
+    final paintOffset = Offset(
+      sourcePadding + bearingX,
+      sourcePadding + bearingY,
+    );
     late final AtlasEntry entry;
     try {
       entry = allocate(
-        width: pxWidth,
-        height: pxHeight,
-        bearingX: bearingX,
-        bearingY: bearingY,
+        width: pxWidth + sourcePadding * 2,
+        height: pxHeight + sourcePadding * 2,
+        bearingX: -sourcePadding,
+        bearingY: -sourcePadding,
       );
     } catch (_) {
       paragraph.dispose();
       rethrow;
     }
 
-    addPendingParagraph(paragraph, entry, widthScale: widthScale);
+    addPendingParagraph(
+      paragraph,
+      entry,
+      widthScale: widthScale,
+      paintOffset: paintOffset,
+    );
     return entry;
   }
 }

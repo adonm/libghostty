@@ -11,6 +11,7 @@ typedef _PendingParagraph = ({
   Paragraph paragraph,
   AtlasEntry entry,
   double widthScale,
+  Offset paintOffset,
 });
 
 /// Shared paragraph setup for font-backed atlas lanes.
@@ -45,8 +46,14 @@ abstract class ParagraphLane extends AtlasLane {
     Paragraph paragraph,
     AtlasEntry entry, {
     double widthScale = 1.0,
+    Offset paintOffset = Offset.zero,
   }) {
-    _pending.add((paragraph: paragraph, entry: entry, widthScale: widthScale));
+    _pending.add((
+      paragraph: paragraph,
+      entry: entry,
+      widthScale: widthScale,
+      paintOffset: paintOffset,
+    ));
   }
 
   Paragraph buildParagraph(
@@ -129,6 +136,7 @@ abstract class ParagraphLane extends AtlasLane {
         pending.paragraph,
         entry,
         pending.widthScale,
+        pending.paintOffset,
       );
       canvas.restore();
       pending.paragraph.dispose();
@@ -142,5 +150,6 @@ abstract class ParagraphLane extends AtlasLane {
     Paragraph paragraph,
     AtlasEntry entry,
     double widthScale,
+    Offset paintOffset,
   );
 }
