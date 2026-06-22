@@ -2,10 +2,9 @@ part of 'terminal.dart';
 
 /// A resolved reference to a specific cell position in the terminal grid.
 ///
-/// Created via [GridRef.at]. Read cell data immediately and call [dispose]
-/// when done. A grid reference is only valid until the next operation on
-/// the terminal instance (including seemingly unrelated operations), so
-/// cache any needed information right after creation.
+/// Created via [GridRef.at]. A grid reference is only valid until the next
+/// operation on the terminal instance, including seemingly unrelated
+/// operations, so cache any needed information right after creation.
 ///
 /// Not intended for render loops. Use [RenderState] with [RowIterator] and
 /// [CellIterator] for performance-critical rendering.
@@ -14,13 +13,10 @@ part of 'terminal.dart';
 /// final ref = GridRef.at(terminal, col: 0, row: 0);
 /// print(ref.content);
 /// print(ref.style);
-/// ref.dispose();
 /// ```
 @immutable
 final class GridRef {
-  static final _finalizer = Finalizer<int>(bindings.gridRefFree);
-
-  final int _handle;
+  final RawGridRef _value;
   final Terminal _terminal;
 
   /// Resolves the grid cell at ([col], [row]) in the coordinate space
@@ -44,17 +40,15 @@ final class GridRef {
     required int col,
     required int row,
     PointTag pointTag = .active,
-  }) : this._fromHandle(
+  }) : this._fromValue(
          terminal,
          check(bindings.terminalGridRef(terminal._handle, pointTag, col, row)),
        );
 
-  GridRef._fromHandle(this._terminal, this._handle) {
-    _finalizer.attach(this, _handle, detach: this);
-  }
+  const GridRef._fromValue(this._terminal, this._value);
 
   /// The raw cell handle at this position.
-  int get cell => check(bindings.gridRefCell(_handle));
+  int get cell => check(bindings.gridRefCell(_value));
 
   /// The cell's full grapheme cluster as a string, or empty if the cell
   /// has no text.
@@ -66,12 +60,15 @@ final class GridRef {
   /// The cell's grapheme cluster as a list of Unicode codepoints. The
   /// primary codepoint is first, followed by any combining codepoints.
   /// Empty if the cell has no text.
-  List<int> get graphemes => check(bindings.gridRefGraphemes(_handle));
+  List<int> get graphemes => check(bindings.gridRefGraphemes(_value));
+
+  @override
+  int get hashCode => Object.hash(GridRef, _terminal, _value);
 
   /// The hyperlink URI at this position, or null if the cell has no
   /// hyperlink.
   String? get hyperlinkUri {
-    final (code, uri) = bindings.gridRefHyperlinkUri(_handle);
+    final (code, uri) = bindings.gridRefHyperlinkUri(_value);
     if (code == Result.noValue) return null;
     checkCode(code);
     return uri.isEmpty ? null : uri;
@@ -81,26 +78,23 @@ final class GridRef {
   bool get isWide => wide == CellWidth.wide;
 
   /// The raw row handle at this position.
-  int get row => check(bindings.gridRefRow(_handle));
+  int get row => check(bindings.gridRefRow(_value));
 
   /// Whether this row is soft-wrapped to the next row.
   bool get rowWrap => check(bindings.rowGetWrap(row));
 
   /// The [Style] of the cell at this position.
-  Style get style => check(bindings.gridRefStyle(_handle));
+  Style get style => check(bindings.gridRefStyle(_value));
 
   /// The cell's width: [CellWidth.narrow], [CellWidth.wide], or
   /// [CellWidth.spacerTail].
   CellWidth get wide => check(bindings.cellGetWide(cell));
 
-  /// Releases the native grid reference handle.
-  ///
-  /// Must be called to free resources; the reference must not be used
-  /// afterward.
-  void dispose() {
-    _finalizer.detach(this);
-    bindings.gridRefFree(_handle);
-  }
+  @override
+  bool operator ==(Object other) =>
+      other is GridRef &&
+      identical(other._terminal, _terminal) &&
+      other._value == _value;
 
   /// Converts this grid reference to coordinates in the given coordinate
   /// space. Returns null if the reference falls outside the requested
@@ -109,11 +103,14 @@ final class GridRef {
   ({int col, int row})? pointIn(PointTag pointTag) {
     final (code, point) = bindings.terminalPointFromGridRef(
       _terminal._handle,
-      _handle,
+      _value,
       pointTag,
     );
     if (code == Result.noValue) return null;
     checkCode(code);
     return point;
   }
+
+  @override
+  String toString() => 'GridRef(${_value.x},${_value.y})';
 }

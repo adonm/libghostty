@@ -2364,7 +2364,12 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
-  CResult<int> terminalGridRef(int terminal, PointTag pointTag, int x, int y) {
+  CResult<RawGridRef> terminalGridRef(
+    int terminal,
+    PointTag pointTag,
+    int x,
+    int y,
+  ) {
     final pointPtr = _exports.ghostty_wasm_alloc_u8_array(_layout.pointSize);
     final gridRefPtr = _exports.ghostty_wasm_alloc_u8_array(
       _layout.gridRefSize,
@@ -2376,8 +2381,10 @@ class WasmBindings implements GhosttyBindings {
       pointPtr,
       gridRefPtr,
     );
+    final value = _readGridRef(gridRefPtr);
     _exports.ghostty_wasm_free_u8_array(pointPtr, _layout.pointSize);
-    return (.fromValue(result), gridRefPtr);
+    _freeGridRef(gridRefPtr);
+    return (.fromValue(result), value);
   }
 
   @override
@@ -2402,48 +2409,50 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
-  void gridRefFree(int ref) {
-    _exports.ghostty_wasm_free_u8_array(ref, _layout.gridRefSize);
-  }
-
-  @override
-  CResult<int> gridRefCell(int ref) {
+  CResult<int> gridRefCell(RawGridRef ref) {
     const u64Size = 8;
+    final refPtr = _allocGridRef(ref);
     final outPtr = _exports.ghostty_wasm_alloc_u8_array(u64Size);
-    final result = _exports.ghostty_grid_ref_cell(ref, outPtr);
+    final result = _exports.ghostty_grid_ref_cell(refPtr, outPtr);
     final value = _mem.readU64(outPtr);
+    _freeGridRef(refPtr);
     _exports.ghostty_wasm_free_u8_array(outPtr, u64Size);
     return (.fromValue(result), value);
   }
 
   @override
-  CResult<int> gridRefRow(int ref) {
+  CResult<int> gridRefRow(RawGridRef ref) {
     const u64Size = 8;
+    final refPtr = _allocGridRef(ref);
     final outPtr = _exports.ghostty_wasm_alloc_u8_array(u64Size);
-    final result = _exports.ghostty_grid_ref_row(ref, outPtr);
+    final result = _exports.ghostty_grid_ref_row(refPtr, outPtr);
     final value = _mem.readU64(outPtr);
+    _freeGridRef(refPtr);
     _exports.ghostty_wasm_free_u8_array(outPtr, u64Size);
     return (.fromValue(result), value);
   }
 
   @override
-  CResult<Style> gridRefStyle(int ref) {
+  CResult<Style> gridRefStyle(RawGridRef ref) {
+    final refPtr = _allocGridRef(ref);
     final stylePtr = _exports.ghostty_wasm_alloc_u8_array(_layout.styleSize);
     _mem.writeU32(stylePtr, _layout.styleSize);
-    final result = _exports.ghostty_grid_ref_style(ref, stylePtr);
+    final result = _exports.ghostty_grid_ref_style(refPtr, stylePtr);
     final value = _readStyle(stylePtr);
+    _freeGridRef(refPtr);
     _exports.ghostty_wasm_free_u8_array(stylePtr, _layout.styleSize);
     return (.fromValue(result), value);
   }
 
   @override
-  CResult<List<int>> gridRefGraphemes(int ref) {
+  CResult<List<int>> gridRefGraphemes(RawGridRef ref) {
     const bufCount = 32;
     const bufSize = bufCount * 4;
+    final refPtr = _allocGridRef(ref);
     final outLen = _exports.ghostty_wasm_alloc_usize();
     var buf = _exports.ghostty_wasm_alloc_u8_array(bufSize);
     var result = Result.fromValue(
-      _exports.ghostty_grid_ref_graphemes(ref, buf, bufCount, outLen),
+      _exports.ghostty_grid_ref_graphemes(refPtr, buf, bufCount, outLen),
     );
     var len = _mem.readU32(outLen);
 
@@ -2452,10 +2461,11 @@ class WasmBindings implements GhosttyBindings {
       final bigSize = len * 4;
       buf = _exports.ghostty_wasm_alloc_u8_array(bigSize);
       result = Result.fromValue(
-        _exports.ghostty_grid_ref_graphemes(ref, buf, len, outLen),
+        _exports.ghostty_grid_ref_graphemes(refPtr, buf, len, outLen),
       );
       len = _mem.readU32(outLen);
       final value = [for (var i = 0; i < len; i++) _mem.readU32(buf + i * 4)];
+      _freeGridRef(refPtr);
       _exports.ghostty_wasm_free_usize(outLen);
       _exports.ghostty_wasm_free_u8_array(buf, bigSize);
       return (result, value);
@@ -2465,18 +2475,20 @@ class WasmBindings implements GhosttyBindings {
       true => const <int>[],
       false => [for (var i = 0; i < len; i++) _mem.readU32(buf + i * 4)],
     };
+    _freeGridRef(refPtr);
     _exports.ghostty_wasm_free_usize(outLen);
     _exports.ghostty_wasm_free_u8_array(buf, bufSize);
     return (result, value);
   }
 
   @override
-  CResult<String> gridRefHyperlinkUri(int ref) {
+  CResult<String> gridRefHyperlinkUri(RawGridRef ref) {
     const initSize = 256;
+    final refPtr = _allocGridRef(ref);
     final outLen = _exports.ghostty_wasm_alloc_usize();
     var buf = _exports.ghostty_wasm_alloc_u8_array(initSize);
     var result = Result.fromValue(
-      _exports.ghostty_grid_ref_hyperlink_uri(ref, buf, initSize, outLen),
+      _exports.ghostty_grid_ref_hyperlink_uri(refPtr, buf, initSize, outLen),
     );
     var len = _mem.readU32(outLen);
 
@@ -2484,16 +2496,18 @@ class WasmBindings implements GhosttyBindings {
       _exports.ghostty_wasm_free_u8_array(buf, initSize);
       buf = _exports.ghostty_wasm_alloc_u8_array(len);
       result = Result.fromValue(
-        _exports.ghostty_grid_ref_hyperlink_uri(ref, buf, len, outLen),
+        _exports.ghostty_grid_ref_hyperlink_uri(refPtr, buf, len, outLen),
       );
       len = _mem.readU32(outLen);
       final value = len == 0 ? '' : utf8.decode(_mem.readBytes(buf, len));
+      _freeGridRef(refPtr);
       _exports.ghostty_wasm_free_usize(outLen);
       _exports.ghostty_wasm_free_u8_array(buf, len);
       return (result, value);
     }
 
     final value = len == 0 ? '' : utf8.decode(_mem.readBytes(buf, len));
+    _freeGridRef(refPtr);
     _exports.ghostty_wasm_free_usize(outLen);
     _exports.ghostty_wasm_free_u8_array(buf, initSize);
     return (result, value);
@@ -2545,7 +2559,7 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
-  CResult<int> trackedGridRefSnapshot(int ref) {
+  CResult<RawGridRef> trackedGridRefSnapshot(int ref) {
     final gridRefPtr = _exports.ghostty_wasm_alloc_u8_array(
       _layout.gridRefSize,
     );
@@ -2553,31 +2567,31 @@ class WasmBindings implements GhosttyBindings {
     final result = Result.fromValue(
       _exports.ghostty_tracked_grid_ref_snapshot(ref, gridRefPtr),
     );
-    if (result != .success) {
-      _exports.ghostty_wasm_free_u8_array(gridRefPtr, _layout.gridRefSize);
-      return (result, 0);
-    }
-    return (result, gridRefPtr);
+    final value = _readGridRef(gridRefPtr);
+    _freeGridRef(gridRefPtr);
+    return (result, value);
   }
 
   @override
   CResult<({int col, int row})> terminalPointFromGridRef(
     int terminal,
-    int ref,
+    RawGridRef ref,
     PointTag pointTag,
   ) {
     final size = _layout.pointCoordinateSize;
+    final refPtr = _allocGridRef(ref);
     final outPtr = _exports.ghostty_wasm_alloc_u8_array(size);
     final result = Result.fromValue(
       _exports.ghostty_terminal_point_from_grid_ref(
         terminal,
-        ref,
+        refPtr,
         pointTag.value,
         outPtr,
       ),
     );
     final col = _mem.readU16(outPtr + _layout.pointCoordinateX);
     final row = _mem.readU32(outPtr + _layout.pointCoordinateY);
+    _freeGridRef(refPtr);
     _exports.ghostty_wasm_free_u8_array(outPtr, size);
     return (result, (col: col, row: row));
   }
@@ -2660,12 +2674,8 @@ class WasmBindings implements GhosttyBindings {
     if (selection != null) {
       selPtr = _exports.ghostty_wasm_alloc_u8_array(_layout.selectionSize);
       _mem.writeU32(selPtr, _layout.selectionSize);
-      final startSrc = selection.start;
-      final endSrc = selection.end;
-      final startDst = selPtr + _layout.selectionStart;
-      final endDst = selPtr + _layout.selectionEnd;
-      _mem.writeBytes(startDst, _mem.readBytes(startSrc, _layout.gridRefSize));
-      _mem.writeBytes(endDst, _mem.readBytes(endSrc, _layout.gridRefSize));
+      _writeGridRef(selPtr + _layout.selectionStart, selection.start);
+      _writeGridRef(selPtr + _layout.selectionEnd, selection.end);
       _mem.writeU8(
         selPtr + _layout.selectionRectangle,
         selection.rectangle ? 1 : 0,
@@ -3052,6 +3062,31 @@ class WasmBindings implements GhosttyBindings {
     _mem.writeU32(pointPtr, pointTag.value);
     _mem.writeU16(pointPtr + _layout.pointX, x);
     _mem.writeU32(pointPtr + _layout.pointY, y);
+  }
+
+  int _allocGridRef(RawGridRef ref) {
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(_layout.gridRefSize);
+    _writeGridRef(ptr, ref);
+    return ptr;
+  }
+
+  void _freeGridRef(int ptr) {
+    _exports.ghostty_wasm_free_u8_array(ptr, _layout.gridRefSize);
+  }
+
+  RawGridRef _readGridRef(int ptr) {
+    return (
+      node: _mem.readPtr(ptr + _layout.gridRefNode),
+      x: _mem.readU16(ptr + _layout.gridRefX),
+      y: _mem.readU16(ptr + _layout.gridRefY),
+    );
+  }
+
+  void _writeGridRef(int ptr, RawGridRef ref) {
+    _mem.writeU32(ptr, _layout.gridRefSize);
+    _mem.writeU32(ptr + _layout.gridRefNode, ref.node);
+    _mem.writeU16(ptr + _layout.gridRefX, ref.x);
+    _mem.writeU16(ptr + _layout.gridRefY, ref.y);
   }
 
   SgrAttribute _readSgrAttribute(int attrPtr) {

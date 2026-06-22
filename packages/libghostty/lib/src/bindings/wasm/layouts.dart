@@ -58,6 +58,9 @@ class Layouts {
 
   // GhosttyGridRef
   late final int gridRefSize;
+  late final int gridRefNode;
+  late final int gridRefX;
+  late final int gridRefY;
 
   // GhosttyKittyGraphicsPlacementRenderInfo
   late final int kittyRenderInfoSize;
@@ -212,6 +215,9 @@ class Layouts {
 
     struct = _Struct(types, 'GhosttyGridRef');
     gridRefSize = struct.size;
+    gridRefNode = struct['node'];
+    gridRefX = struct['x'];
+    gridRefY = struct['y'];
 
     // TODO(elias8): migrate to `_Struct(types, ...)` once upstream ghostty
     // registers `GhosttyKittyGraphicsPlacementRenderInfo` in `types.zig`.

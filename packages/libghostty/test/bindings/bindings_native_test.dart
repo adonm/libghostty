@@ -478,7 +478,6 @@ void main() {
     group('handles', () {
       test('return selected cell and row', () {
         final (_, ref) = bindings.terminalGridRef(terminal, .active, 0, 0);
-        addTearDown(() => bindings.gridRefFree(ref));
 
         final (_, cell) = bindings.gridRefCell(ref);
         expect(bindings.cellGetCodepoint(cell).$2, 'H'.codeUnitAt(0));
@@ -497,7 +496,6 @@ void main() {
           Uint8List.fromList('\x1b[1mBold'.codeUnits),
         );
         final (_, ref) = bindings.terminalGridRef(t, .active, 0, 0);
-        addTearDown(() => bindings.gridRefFree(ref));
         final (_, style) = bindings.gridRefStyle(ref);
         expect(style.bold, isTrue);
       });
@@ -506,7 +504,6 @@ void main() {
     group('gridRefGraphemes', () {
       test('returns codepoints', () {
         final (_, ref) = bindings.terminalGridRef(terminal, .active, 0, 0);
-        addTearDown(() => bindings.gridRefFree(ref));
         final (_, graphemes) = bindings.gridRefGraphemes(ref);
         expect(graphemes, contains('H'.codeUnitAt(0)));
       });
@@ -523,7 +520,6 @@ void main() {
         addTearDown(() => bindings.trackedGridRefFree(tracked));
 
         final (_, ref) = bindings.trackedGridRefSnapshot(tracked);
-        addTearDown(() => bindings.gridRefFree(ref));
         final (_, graphemes) = bindings.gridRefGraphemes(ref);
 
         expect(graphemes, contains('e'.codeUnitAt(0)));
@@ -706,7 +702,6 @@ void main() {
     group('gridRefHyperlinkUri', () {
       test('returns empty string for cell without hyperlink', () {
         final (_, ref) = bindings.terminalGridRef(terminal, .active, 0, 0);
-        addTearDown(() => bindings.gridRefFree(ref));
         final (code, uri) = bindings.gridRefHyperlinkUri(ref);
         expect(code, Result.success);
         expect(uri, isEmpty);
@@ -728,7 +723,6 @@ void main() {
     group('terminalPointFromGridRef', () {
       test('roundtrips active coordinates', () {
         final (_, ref) = bindings.terminalGridRef(terminal, .active, 3, 0);
-        addTearDown(() => bindings.gridRefFree(ref));
         final (code, point) = bindings.terminalPointFromGridRef(
           terminal,
           ref,
@@ -818,8 +812,6 @@ void main() {
         );
         final (_, startRef) = bindings.terminalGridRef(t, .active, 0, 0);
         final (_, endRef) = bindings.terminalGridRef(t, .active, 2, 0);
-        addTearDown(() => bindings.gridRefFree(endRef));
-        addTearDown(() => bindings.gridRefFree(startRef));
         final (_, formatter) = bindings.formatterTerminalNew(
           t,
           .plain,

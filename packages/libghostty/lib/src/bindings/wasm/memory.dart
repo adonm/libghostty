@@ -63,5 +63,10 @@ class Mem {
 
   void writeU32(int addr, int val) => view.setUint32(addr, val, .little);
 
+  void writeU64(int addr, int val) {
+    view.setUint32(addr, val & 0xffffffff, .little);
+    view.setUint32(addr + 4, val ~/ 0x100000000, .little);
+  }
+
   void writeU8(int addr, int val) => view.setUint8(addr, val);
 }

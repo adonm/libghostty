@@ -1707,6 +1707,18 @@ class NativeBindings implements GhosttyBindings {
     point.value.coordinate.y = y;
   }
 
+  static RawGridRef _readGridRef(GridRef ref) {
+    return (node: ref.node.address, x: ref.x, y: ref.y);
+  }
+
+  static void _writeGridRef(GridRef target, RawGridRef ref) {
+    target
+      ..size = sizeOf<GridRef>()
+      ..node = Pointer<Void>.fromAddress(ref.node)
+      ..x = ref.x
+      ..y = ref.y;
+  }
+
   static RawColor _cellColorToRaw(CellColor color) => switch (color) {
     DefaultColor() => defaultRawColor,
     PaletteColor(:final index) => (
@@ -1890,18 +1902,23 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
-  CResult<int> terminalGridRef(int terminal, PointTag pointTag, int x, int y) {
+  CResult<RawGridRef> terminalGridRef(
+    int terminal,
+    PointTag pointTag,
+    int x,
+    int y,
+  ) {
     return using((arena) {
       final point = arena<Point>();
       _writePoint(point.ref, pointTag, x, y);
-      final gridRef = calloc<GridRef>();
+      final gridRef = arena<GridRef>();
       gridRef.ref.size = sizeOf<GridRef>();
       final result = ghostty_terminal_grid_ref(
         Pointer.fromAddress(terminal),
         point.ref,
         gridRef,
       );
-      return (result, gridRef.address);
+      return (result, _readGridRef(gridRef.ref));
     });
   }
 
@@ -1926,41 +1943,44 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
-  void gridRefFree(int ref) {
-    calloc.free(Pointer<Void>.fromAddress(ref));
-  }
-
-  @override
-  CResult<int> gridRefCell(int ref) {
-    final result = ghostty_grid_ref_cell(
-      Pointer.fromAddress(ref),
-      _outU64.cast(),
-    );
-    return (result, _outU64.value);
-  }
-
-  @override
-  CResult<int> gridRefRow(int ref) {
-    final result = ghostty_grid_ref_row(
-      Pointer.fromAddress(ref),
-      _outU64.cast(),
-    );
-    return (result, _outU64.value);
-  }
-
-  @override
-  CResult<Style> gridRefStyle(int ref) {
-    _outStyle.ref.size = sizeOf<native.Style>();
-    final result = ghostty_grid_ref_style(Pointer.fromAddress(ref), _outStyle);
-    return (result, _readNativeStyle(_outStyle.ref));
-  }
-
-  @override
-  CResult<List<int>> gridRefGraphemes(int ref) {
+  CResult<int> gridRefCell(RawGridRef ref) {
     return using((arena) {
+      final gridRef = arena<GridRef>();
+      _writeGridRef(gridRef.ref, ref);
+      final result = ghostty_grid_ref_cell(gridRef, _outU64.cast());
+      return (result, _outU64.value);
+    });
+  }
+
+  @override
+  CResult<int> gridRefRow(RawGridRef ref) {
+    return using((arena) {
+      final gridRef = arena<GridRef>();
+      _writeGridRef(gridRef.ref, ref);
+      final result = ghostty_grid_ref_row(gridRef, _outU64.cast());
+      return (result, _outU64.value);
+    });
+  }
+
+  @override
+  CResult<Style> gridRefStyle(RawGridRef ref) {
+    return using((arena) {
+      final gridRef = arena<GridRef>();
+      _writeGridRef(gridRef.ref, ref);
+      _outStyle.ref.size = sizeOf<native.Style>();
+      final result = ghostty_grid_ref_style(gridRef, _outStyle);
+      return (result, _readNativeStyle(_outStyle.ref));
+    });
+  }
+
+  @override
+  CResult<List<int>> gridRefGraphemes(RawGridRef ref) {
+    return using((arena) {
+      final gridRef = arena<GridRef>();
       final outLen = arena<Size>();
+      _writeGridRef(gridRef.ref, ref);
       var result = ghostty_grid_ref_graphemes(
-        Pointer.fromAddress(ref),
+        gridRef,
         _graphemeBuf,
         32,
         outLen,
@@ -1969,12 +1989,7 @@ class NativeBindings implements GhosttyBindings {
 
       if (result == Result.outOfSpace) {
         final bigBuf = arena<Uint32>(len);
-        result = ghostty_grid_ref_graphemes(
-          Pointer.fromAddress(ref),
-          bigBuf,
-          len,
-          outLen,
-        );
+        result = ghostty_grid_ref_graphemes(gridRef, bigBuf, len, outLen);
         len = outLen.value;
         return (result, [for (var i = 0; i < len; i++) bigBuf[i]]);
       }
@@ -1984,11 +1999,12 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
-  CResult<String> gridRefHyperlinkUri(int ref) {
+  CResult<String> gridRefHyperlinkUri(RawGridRef ref) {
     return using((arena) {
-      final gridRef = Pointer<GridRef>.fromAddress(ref);
+      final gridRef = arena<GridRef>();
       final outLen = arena<Size>();
       var buf = arena<Uint8>(256);
+      _writeGridRef(gridRef.ref, ref);
       var result = ghostty_grid_ref_hyperlink_uri(gridRef, buf, 256, outLen);
       var len = outLen.value;
 
@@ -2049,31 +2065,31 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
-  CResult<int> trackedGridRefSnapshot(int ref) {
-    final gridRef = calloc<GridRef>();
-    gridRef.ref.size = sizeOf<GridRef>();
-    final result = ghostty_tracked_grid_ref_snapshot(
-      Pointer.fromAddress(ref),
-      gridRef,
-    );
-    if (result != Result.success) {
-      calloc.free(gridRef);
-      return (result, 0);
-    }
-    return (result, gridRef.address);
+  CResult<RawGridRef> trackedGridRefSnapshot(int ref) {
+    return using((arena) {
+      final gridRef = arena<GridRef>();
+      gridRef.ref.size = sizeOf<GridRef>();
+      final result = ghostty_tracked_grid_ref_snapshot(
+        Pointer.fromAddress(ref),
+        gridRef,
+      );
+      return (result, _readGridRef(gridRef.ref));
+    });
   }
 
   @override
   CResult<({int col, int row})> terminalPointFromGridRef(
     int terminal,
-    int ref,
+    RawGridRef ref,
     PointTag pointTag,
   ) {
     return using((arena) {
+      final gridRef = arena<GridRef>();
       final out = arena<PointCoordinate>();
+      _writeGridRef(gridRef.ref, ref);
       final result = ghostty_terminal_point_from_grid_ref(
         Pointer.fromAddress(terminal),
-        Pointer<GridRef>.fromAddress(ref),
+        gridRef,
         pointTag,
         out,
       );
@@ -2120,8 +2136,8 @@ class NativeBindings implements GhosttyBindings {
       if (selection != null) {
         final sel = arena<Selection>();
         sel.ref.size = sizeOf<Selection>();
-        sel.ref.start = Pointer<GridRef>.fromAddress(selection.start).ref;
-        sel.ref.end = Pointer<GridRef>.fromAddress(selection.end).ref;
+        _writeGridRef(sel.ref.start, selection.start);
+        _writeGridRef(sel.ref.end, selection.end);
         sel.ref.rectangle = selection.rectangle;
         opts.ref.selection = sel;
       } else {

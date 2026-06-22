@@ -17,7 +17,6 @@ part of 'terminal.dart';
 /// final tracked = TrackedGridRef.at(terminal, col: 0, row: 0);
 /// final ref = tracked.snapshot();
 /// print(ref?.content);
-/// ref?.dispose();
 /// tracked.dispose();
 /// ```
 final class TrackedGridRef {
@@ -92,13 +91,12 @@ final class TrackedGridRef {
 
   /// Creates a short-lived [GridRef] snapshot for reading cell data.
   ///
-  /// The returned [GridRef] follows normal grid-reference lifetime rules and
-  /// must be disposed by the caller. Returns null if this tracked reference no
-  /// longer has a meaningful value.
+  /// The returned [GridRef] follows normal grid-reference lifetime rules.
+  /// Returns null if this tracked reference no longer has a meaningful value.
   GridRef? snapshot() {
-    final (code, handle) = bindings.trackedGridRefSnapshot(_handle);
+    final (code, ref) = bindings.trackedGridRefSnapshot(_handle);
     if (code == .noValue) return null;
     checkCode(code);
-    return GridRef._fromHandle(_terminal, handle);
+    return GridRef._fromValue(_terminal, ref);
   }
 }

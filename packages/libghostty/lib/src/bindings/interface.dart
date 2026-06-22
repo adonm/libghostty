@@ -316,7 +316,12 @@ abstract interface class GhosttyBindings {
   Style styleDefault();
   bool styleIsDefault(Style style);
 
-  CResult<int> terminalGridRef(int terminal, PointTag pointTag, int x, int y);
+  CResult<RawGridRef> terminalGridRef(
+    int terminal,
+    PointTag pointTag,
+    int x,
+    int y,
+  );
   CResult<int> terminalGridRefTrack(
     int terminal,
     PointTag pointTag,
@@ -325,15 +330,14 @@ abstract interface class GhosttyBindings {
   );
   CResult<({int col, int row})> terminalPointFromGridRef(
     int terminal,
-    int ref,
+    RawGridRef ref,
     PointTag pointTag,
   );
-  void gridRefFree(int ref);
-  CResult<int> gridRefCell(int ref);
-  CResult<int> gridRefRow(int ref);
-  CResult<Style> gridRefStyle(int ref);
-  CResult<List<int>> gridRefGraphemes(int ref);
-  CResult<String> gridRefHyperlinkUri(int ref);
+  CResult<int> gridRefCell(RawGridRef ref);
+  CResult<int> gridRefRow(RawGridRef ref);
+  CResult<Style> gridRefStyle(RawGridRef ref);
+  CResult<List<int>> gridRefGraphemes(RawGridRef ref);
+  CResult<String> gridRefHyperlinkUri(RawGridRef ref);
   void trackedGridRefFree(int ref);
   bool trackedGridRefHasValue(int ref);
   CResult<({int col, int row})> trackedGridRefPoint(int ref, PointTag pointTag);
@@ -344,7 +348,7 @@ abstract interface class GhosttyBindings {
     int x,
     int y,
   );
-  CResult<int> trackedGridRefSnapshot(int ref);
+  CResult<RawGridRef> trackedGridRefSnapshot(int ref);
 
   CResult<int> formatterTerminalNew(
     int terminal,

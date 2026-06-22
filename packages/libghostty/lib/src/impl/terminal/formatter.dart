@@ -78,36 +78,32 @@ final class Formatter {
       );
     }
 
-    final start = GridRef._(
+    final start = GridRef.at(
       terminal,
       col: selection.startCol,
       row: selection.startRow,
       pointTag: selection.pointTag,
     );
-    final end = GridRef._(
+    final end = GridRef.at(
       terminal,
       col: selection.endCol,
       row: selection.endRow,
       pointTag: selection.pointTag,
     );
-    try {
-      return check(
-        bindings.formatterTerminalNew(
-          terminal._handle,
-          format,
-          unwrap: unwrap,
-          trim: trim,
-          extra: extra,
-          selection: (
-            start: start._handle,
-            end: end._handle,
-            rectangle: selection.rectangle,
-          ),
+
+    return check(
+      bindings.formatterTerminalNew(
+        terminal._handle,
+        format,
+        unwrap: unwrap,
+        trim: trim,
+        extra: extra,
+        selection: (
+          start: start._value,
+          end: end._value,
+          rectangle: selection.rectangle,
         ),
-      );
-    } finally {
-      start.dispose();
-      end.dispose();
-    }
+      ),
+    );
   }
 }

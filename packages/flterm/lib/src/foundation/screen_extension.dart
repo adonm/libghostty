@@ -35,7 +35,6 @@ extension TerminalScreenExtension on Terminal {
       while (start > 0) {
         final ref = GridRef.at(this, col: 0, row: start - 1);
         final wrap = ref.rowWrap;
-        ref.dispose();
         if (!wrap) break;
         start--;
       }
@@ -43,7 +42,6 @@ extension TerminalScreenExtension on Terminal {
       while (end < rs.rows - 1) {
         final ref = GridRef.at(this, col: 0, row: end);
         final wrap = ref.rowWrap;
-        ref.dispose();
         if (!wrap) break;
         end++;
       }
@@ -52,7 +50,6 @@ extension TerminalScreenExtension on Terminal {
         final ref = GridRef.at(this, col: endCol - 1, row: end);
         final hasContent = ref.graphemes.isNotEmpty;
         final isSpacer = ref.wide == CellWidth.spacerTail;
-        ref.dispose();
         if (hasContent || isSpacer) break;
         endCol--;
       }
@@ -77,7 +74,6 @@ extension TerminalScreenExtension on Terminal {
       final ref = GridRef.at(this, col: col, row: row);
       final w = ref.wide;
       final isW = ref.isWide;
-      ref.dispose();
       if (isW) return inclusive ? col : col + 2;
       if (w == CellWidth.spacerTail) return inclusive ? col - 1 : col + 1;
       return col;

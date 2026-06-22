@@ -400,7 +400,6 @@ final class _CursorFrameBuilder {
       row: effectiveCursor.row,
     );
     final cell = _CursorCellSnapshot(ref.content, ref.style, wide: ref.isWide);
-    ref.dispose();
 
     _cursor = effectiveCursor;
     _lastCell = cell;

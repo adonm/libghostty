@@ -51,7 +51,6 @@ void main() {
   // Read a single cell via grid reference (for ad-hoc lookups).
   final ref = GridRef.at(terminal, col: 0, row: 0);
   print(ref.content); // the character at (0, 0)
-  ref.dispose();
 
   // Read screen via render state and reusable iterators.
   final renderState = RenderState();

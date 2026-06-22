@@ -32,9 +32,18 @@ typedef ValueGetter<T> = T Function();
 typedef ValueSetter<T> = void Function(T value);
 typedef VoidCallback = void Function();
 
-/// A selection range addressed by `GridRef` handles. `rectangle` indicates
-/// a rectangular (block) selection rather than a linear one.
-typedef RawSelection = ({int start, int end, bool rectangle});
+/// An untracked grid reference value.
+///
+/// The value follows libghostty's untracked grid-reference lifetime rules and
+/// is valid only until the next mutating operation on the terminal that
+/// produced it.
+typedef RawGridRef = ({int node, int x, int y});
+
+/// A selection range addressed by untracked grid-reference values.
+///
+/// `rectangle` indicates a rectangular block selection rather than a linear
+/// text range.
+typedef RawSelection = ({RawGridRef start, RawGridRef end, bool rectangle});
 
 /// Callback invoked for each internal libghostty log message, after the
 /// scope and message byte slices have been decoded to Dart strings.

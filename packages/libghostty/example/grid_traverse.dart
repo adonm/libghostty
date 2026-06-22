@@ -9,7 +9,6 @@ void main() {
   for (var col = 0; col < 13; col++) {
     final ref = GridRef.at(terminal, col: col, row: 0);
     print('($col, 0): "${ref.content}"');
-    ref.dispose();
   }
 
   terminal.dispose();

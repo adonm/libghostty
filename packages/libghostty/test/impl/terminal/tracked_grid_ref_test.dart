@@ -99,7 +99,6 @@ void main() {
         addTearDown(tracked.dispose);
 
         final result = tracked.snapshot();
-        addTearDown(result!.dispose);
 
         expect(result, isA<GridRef>());
       });
@@ -109,9 +108,8 @@ void main() {
         addTearDown(tracked.dispose);
 
         final result = tracked.snapshot();
-        addTearDown(result!.dispose);
 
-        expect(result.content, 'e');
+        expect(result!.content, 'e');
       });
 
       test('returns null after reset', () {
@@ -135,9 +133,8 @@ void main() {
 
         scrolled.write(Uint8List.fromList('\r\ndelta'.codeUnits));
         final result = tracked.snapshot();
-        addTearDown(result!.dispose);
 
-        expect(result.content, 'a');
+        expect(result!.content, 'a');
       });
     });
   });
