@@ -122,6 +122,71 @@ void main() {
       });
     });
 
+    group('scrollToBottom policy', () {
+      TerminalControllerImpl outputFollowController() {
+        final target = TerminalControllerImpl(
+          config: const TerminalConfig(
+            cols: 20,
+            rows: 3,
+            scrollToBottom: .onOutput,
+          ),
+        );
+        addTearDown(target.dispose);
+        return target;
+      }
+
+      void writeNumberedLines(TerminalControllerImpl target) {
+        for (var i = 0; i < 10; i++) {
+          writeControllerUtf8(target, 'line $i\r\n');
+        }
+      }
+
+      int scrollBack(TerminalControllerImpl target) {
+        writeNumberedLines(target);
+        target.terminal.scrollViewport(-5);
+        return target.terminal.scrollbar.offset;
+      }
+
+      test('scrolls to bottom on output when output follow is enabled', () {
+        final custom = outputFollowController();
+        final offset = scrollBack(custom);
+        expect(offset, lessThan(custom.scrollbackRows));
+
+        writeControllerUtf8(custom, 'tail\r\n');
+
+        expect(custom.terminal.scrollbar.offset, custom.scrollbackRows);
+      });
+
+      test(
+        'preserves viewport on selectRange when output follow is enabled',
+        () {
+          final custom = outputFollowController();
+          final offset = scrollBack(custom);
+          expect(offset, lessThan(custom.scrollbackRows));
+
+          custom.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 4);
+
+          expect(custom.terminal.scrollbar.offset, offset);
+        },
+      );
+
+      test(
+        'preserves viewport on clearSelection when output follow is enabled',
+        () {
+          final custom = outputFollowController();
+          writeNumberedLines(custom);
+          custom.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 4);
+          custom.terminal.scrollViewport(-5);
+          final offset = custom.terminal.scrollbar.offset;
+          expect(offset, lessThan(custom.scrollbackRows));
+
+          custom.clearSelection();
+
+          expect(custom.terminal.scrollbar.offset, offset);
+        },
+      );
+    });
+
     group('selectAll', () {
       test('selects visible content', () {
         writeControllerUtf8(controller, 'hello\r\nworld');

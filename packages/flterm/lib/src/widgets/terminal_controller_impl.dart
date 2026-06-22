@@ -53,6 +53,7 @@ class TerminalControllerImpl extends TerminalController
   Brightness _brightness = .dark;
   var _cursorBlinking = true;
   var _wasFocused = false;
+  var _selectionMutationDepth = 0;
 
   CellMetrics _lastMetrics = const .new(
     cellWidth: 0,
@@ -207,9 +208,8 @@ class TerminalControllerImpl extends TerminalController
   @override
   void clearSelection() {
     if (terminal.selection == null) return;
-    terminal.selection = null;
     _selectionGesture.reset();
-    notifyListeners();
+    _setSelection(null, clearIfNull: true);
   }
 
   @override
@@ -811,6 +811,15 @@ class TerminalControllerImpl extends TerminalController
     _onTextInput();
   }
 
+  void _mutateSelection(void Function() mutate) {
+    _selectionMutationDepth++;
+    try {
+      mutate();
+    } finally {
+      _selectionMutationDepth--;
+    }
+  }
+
   void _onFocusChanged() {
     final focused = _focusNode?.hasFocus ?? false;
     if (focused == _wasFocused) return;
@@ -863,7 +872,9 @@ class TerminalControllerImpl extends TerminalController
       changed = true;
     }
 
-    _scrollToBottomOnOutput();
+    // terminal.selection uses the same synchronous listener path as output.
+    // Controller-owned selection changes must preserve the scrollback viewport.
+    if (_selectionMutationDepth == 0) _scrollToBottomOnOutput();
     if (changed) notifyListeners();
   }
 
@@ -902,14 +913,14 @@ class TerminalControllerImpl extends TerminalController
   void _setSelection(Selection? value, {bool clearIfNull = false}) {
     if (value == null) {
       if (!clearIfNull || terminal.selection == null) return;
-      terminal.selection = null;
+      _mutateSelection(() => terminal.selection = null);
       notifyListeners();
       return;
     }
 
     final current = terminal.selection;
     if (current != null && current.equal(value)) return;
-    terminal.selection = value;
+    _mutateSelection(() => terminal.selection = value);
     notifyListeners();
   }
 
