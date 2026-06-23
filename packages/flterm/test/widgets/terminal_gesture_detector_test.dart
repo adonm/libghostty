@@ -9,7 +9,34 @@ import 'package:flterm/src/widgets.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:libghostty/libghostty.dart' show Mods, MouseTracking, Terminal;
+import 'package:libghostty/libghostty.dart'
+    show Mods, MouseTracking, Selection, SelectionGestureBehaviors, Terminal;
+
+extension _SelectionEdges on Selection {
+  ({int row, int col}) get _startPoint => start.pointIn(.viewport)!;
+
+  ({int row, int col}) get _endPoint => end.pointIn(.viewport)!;
+
+  bool get _forward {
+    final start = _startPoint;
+    final end = _endPoint;
+    return start.row != end.row ? start.row < end.row : start.col <= end.col;
+  }
+
+  int get startRow => _startPoint.row;
+
+  int get startCol => _forward ? _startPoint.col : _startPoint.col + 1;
+
+  int get endRow => _endPoint.row;
+
+  int get endCol => _forward ? _endPoint.col + 1 : _endPoint.col;
+
+  TerminalSelectionShape get mode {
+    return rectangle
+        ? TerminalSelectionShape.rectangle
+        : TerminalSelectionShape.normal;
+  }
+}
 
 void main() {
   group('TerminalGestureDetector', () {
@@ -106,7 +133,7 @@ void main() {
 
       await tapMouse(tester, const Offset(40, 16));
 
-      expect(controller.selection, isNull);
+      expect(terminalFor(controller).selection, isNull);
     });
 
     testWidgets('drag creates selection with correct cells', (tester) async {
@@ -116,12 +143,12 @@ void main() {
       await gesture.moveTo(const Offset(40, 16));
       await gesture.up();
 
-      final selection = controller.selection!;
+      final selection = terminalFor(controller).selection!;
       expect(selection.startRow, 0);
       expect(selection.startCol, 1);
       expect(selection.endRow, 1);
       expect(selection.endCol, 5);
-      expect(selection.mode, TerminalSelectionMode.normal);
+      expect(selection.mode, TerminalSelectionShape.normal);
     });
 
     testWidgets('mouse up ends selection drag', (tester) async {
@@ -131,7 +158,7 @@ void main() {
       await gesture.moveTo(const Offset(80, 32));
       await gesture.up();
 
-      final selection = controller.selection!;
+      final selection = terminalFor(controller).selection!;
       expect(selection.startRow, 0);
       expect(selection.endRow, 2);
     });
@@ -141,10 +168,10 @@ void main() {
 
       final gesture = await mouseDown(tester, const Offset(8, 0));
       await gesture.moveTo(const Offset(40, 16));
-      final selAfterFirst = controller.selection;
+      final selAfterFirst = terminalFor(controller).selection;
 
       await gesture.moveTo(const Offset(41, 17));
-      final selAfterSecond = controller.selection;
+      final selAfterSecond = terminalFor(controller).selection;
 
       expect(selAfterFirst, selAfterSecond);
 
@@ -158,7 +185,7 @@ void main() {
 
       await tapMouse(tester, const Offset(8, 0), count: 2);
 
-      final selection = controller.selection!;
+      final selection = terminalFor(controller).selection!;
       expect(selection.startRow, 0);
       expect(selection.startCol, 0);
       expect(selection.endCol, 5);
@@ -171,7 +198,26 @@ void main() {
 
       await tapMouse(tester, const Offset(56, 0), count: 2);
 
-      final selection = controller.selection!;
+      final selection = terminalFor(controller).selection!;
+      expect(selection.startCol, 6);
+      expect(selection.endCol, 11);
+    });
+
+    testWidgets('double click uses configured word boundaries', (tester) async {
+      final boundaryController = TerminalController();
+      addTearDown(boundaryController.dispose);
+      writeToTerminal(boundaryController, 'hello_world');
+
+      await tester.pumpWidget(
+        buildHandler(
+          controller: boundaryController,
+          gestureSettings: const TerminalGestureSettings(wordBoundaries: '_'),
+        ),
+      );
+
+      await tapMouse(tester, const Offset(64, 0), count: 2);
+
+      final selection = terminalFor(boundaryController).selection!;
       expect(selection.startCol, 6);
       expect(selection.endCol, 11);
     });
@@ -183,7 +229,7 @@ void main() {
 
       await tapMouse(tester, const Offset(40, 0), count: 3);
 
-      final selection = controller.selection!;
+      final selection = terminalFor(controller).selection!;
       expect(selection.startCol, 0);
       expect(selection.endCol, 5);
     });
@@ -202,7 +248,7 @@ void main() {
 
       await tapMouse(tester, const Offset(8, 16), count: 3);
 
-      final selection = narrowController.selection!;
+      final selection = terminalFor(narrowController).selection!;
       expect(selection.startRow, 0);
       expect(selection.startCol, 0);
       expect(selection.endRow, 1);
@@ -228,7 +274,7 @@ void main() {
 
       await tapMouse(tester, const Offset(8, 0), count: 3);
 
-      final selection = wideController.selection!;
+      final selection = terminalFor(wideController).selection!;
       expect(selection.endCol, 20);
     });
 
@@ -238,7 +284,7 @@ void main() {
       await tapMouse(tester, const Offset(40, 16));
       await tapMouse(tester, const Offset(200, 200));
 
-      expect(controller.selection, isNull);
+      expect(terminalFor(controller).selection, isNull);
     });
 
     testWidgets('touch long press starts normal selection by default', (
@@ -250,11 +296,11 @@ void main() {
 
       await tester.pump(const Duration(milliseconds: 550));
 
-      expect(controller.selection, isNull);
+      expect(terminalFor(controller).selection, isNull);
 
       await gesture.moveTo(const Offset(80, 32));
-      final sel = controller.selection!;
-      expect(sel.mode, TerminalSelectionMode.normal);
+      final sel = terminalFor(controller).selection!;
+      expect(sel.mode, TerminalSelectionShape.normal);
 
       await gesture.up();
     });
@@ -270,7 +316,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 550));
 
       await gesture.moveTo(const Offset(120, 16));
-      expect(controller.selection, isNull);
+      expect(terminalFor(controller).selection, isNull);
 
       await gesture.up();
     });
@@ -282,12 +328,12 @@ void main() {
       await gesture.moveTo(const Offset(80, 32));
       await gesture.up();
 
-      expect(controller.selection, isNotNull);
+      expect(terminalFor(controller).selection, isNotNull);
 
       final gesture2 = await mouseDown(tester, const Offset(40, 16));
       await gesture2.up();
 
-      expect(controller.selection, isNull);
+      expect(terminalFor(controller).selection, isNull);
     });
 
     testWidgets('click without existing selection keeps selection null', (
@@ -298,18 +344,18 @@ void main() {
       final gesture = await mouseDown(tester, const Offset(40, 16));
       await gesture.up();
 
-      expect(controller.selection, isNull);
+      expect(terminalFor(controller).selection, isNull);
     });
 
     group('gesture settings', () {
-      testWidgets('empty enabledSelections prevents drag selection', (
+      testWidgets('dragSelection false prevents drag selection', (
         tester,
       ) async {
         await tester.pumpWidget(
           buildHandler(
             controller: controller,
             gestureSettings: const TerminalGestureSettings(
-              enabledSelections: {},
+              dragSelection: false,
             ),
           ),
         );
@@ -318,17 +364,24 @@ void main() {
         await gesture.moveTo(const Offset(80, 32));
         await gesture.up();
 
-        expect(controller.selection, isNull);
+        expect(terminalFor(controller).selection, isNull);
       });
 
-      testWidgets('empty enabledSelections prevents long press selection', (
+      testWidgets('longPressSelection false cancels press selection', (
         tester,
       ) async {
+        writeToTerminal(controller, 'hello world');
+
         await tester.pumpWidget(
           buildHandler(
             controller: controller,
             gestureSettings: const TerminalGestureSettings(
-              enabledSelections: {},
+              longPressSelection: false,
+              selectionBehaviors: SelectionGestureBehaviors(
+                singleClick: .line,
+                doubleClick: .word,
+                tripleClick: .line,
+              ),
             ),
           ),
         );
@@ -338,10 +391,79 @@ void main() {
         await gesture.moveTo(const Offset(80, 32));
         await gesture.up();
 
-        expect(controller.selection, isNull);
+        expect(terminalFor(controller).selection, isNull);
       });
 
-      testWidgets('drag disabled independently of other gestures', (
+      testWidgets('single click uses configured line behavior', (tester) async {
+        writeToTerminal(controller, 'hello world');
+
+        await tester.pumpWidget(
+          buildHandler(
+            controller: controller,
+            gestureSettings: const TerminalGestureSettings(
+              selectionBehaviors: SelectionGestureBehaviors(
+                singleClick: .line,
+                doubleClick: .word,
+                tripleClick: .line,
+              ),
+            ),
+          ),
+        );
+
+        await tapMouse(tester, const Offset(8, 0));
+
+        final selection = terminalFor(controller).selection!;
+        expect(selection.startCol, 0);
+        expect(selection.endCol, 11);
+      });
+
+      testWidgets('double click uses configured line behavior', (tester) async {
+        writeToTerminal(controller, 'hello world');
+
+        await tester.pumpWidget(
+          buildHandler(
+            controller: controller,
+            gestureSettings: const TerminalGestureSettings(
+              selectionBehaviors: SelectionGestureBehaviors(
+                singleClick: .cell,
+                doubleClick: .line,
+                tripleClick: .line,
+              ),
+            ),
+          ),
+        );
+
+        await tapMouse(tester, const Offset(8, 0), count: 2);
+
+        final selection = terminalFor(controller).selection!;
+        expect(selection.startCol, 0);
+        expect(selection.endCol, 11);
+      });
+
+      testWidgets('triple click uses configured word behavior', (tester) async {
+        writeToTerminal(controller, 'hello world');
+
+        await tester.pumpWidget(
+          buildHandler(
+            controller: controller,
+            gestureSettings: const TerminalGestureSettings(
+              selectionBehaviors: SelectionGestureBehaviors(
+                singleClick: .cell,
+                doubleClick: .line,
+                tripleClick: .word,
+              ),
+            ),
+          ),
+        );
+
+        await tapMouse(tester, const Offset(56, 0), count: 3);
+
+        final selection = terminalFor(controller).selection!;
+        expect(selection.startCol, 6);
+        expect(selection.endCol, 11);
+      });
+
+      testWidgets('dragSelection false keeps press selection enabled', (
         tester,
       ) async {
         writeToTerminal(controller, 'hello world');
@@ -350,7 +472,7 @@ void main() {
           buildHandler(
             controller: controller,
             gestureSettings: const TerminalGestureSettings(
-              enabledSelections: {.word},
+              dragSelection: false,
             ),
           ),
         );
@@ -358,14 +480,16 @@ void main() {
         final gesture = await mouseDown(tester, const Offset(8, 0));
         await gesture.moveTo(const Offset(80, 32));
         await gesture.up();
-        expect(controller.selection, isNull);
+        expect(terminalFor(controller).selection, isNull);
 
         await tapMouse(tester, const Offset(8, 0), count: 2);
 
-        expect(controller.selection, isNotNull);
+        final selection = terminalFor(controller).selection!;
+        expect(selection.startCol, 0);
+        expect(selection.endCol, 5);
       });
 
-      testWidgets('word disabled prevents double-tap word select', (
+      testWidgets('double click cell behavior leaves selection empty', (
         tester,
       ) async {
         writeToTerminal(controller, 'hello world');
@@ -374,34 +498,21 @@ void main() {
           buildHandler(
             controller: controller,
             gestureSettings: const TerminalGestureSettings(
-              enabledSelections: {.drag, .line, .longPress},
+              selectionBehaviors: SelectionGestureBehaviors(
+                singleClick: .cell,
+                doubleClick: .cell,
+                tripleClick: .line,
+              ),
             ),
           ),
         );
 
         await tapMouse(tester, const Offset(8, 0), count: 2);
 
-        expect(controller.selection, isNull);
+        expect(terminalFor(controller).selection, isNull);
       });
 
-      testWidgets('line disabled prevents triple-tap line select', (
-        tester,
-      ) async {
-        await tester.pumpWidget(
-          buildHandler(
-            controller: controller,
-            gestureSettings: const TerminalGestureSettings(
-              enabledSelections: {.drag},
-            ),
-          ),
-        );
-
-        await tapMouse(tester, const Offset(40, 16), count: 3);
-
-        expect(controller.selection, isNull);
-      });
-
-      testWidgets('tap count resets at triple even when line disabled', (
+      testWidgets('triple click cell behavior leaves selection empty', (
         tester,
       ) async {
         writeToTerminal(controller, 'hello world');
@@ -410,29 +521,28 @@ void main() {
           buildHandler(
             controller: controller,
             gestureSettings: const TerminalGestureSettings(
-              enabledSelections: {.word},
+              selectionBehaviors: SelectionGestureBehaviors(
+                singleClick: .cell,
+                doubleClick: .word,
+                tripleClick: .cell,
+              ),
             ),
           ),
         );
 
-        var selectionCount = 0;
-        controller.addListener(() {
-          if (controller.selection != null) selectionCount++;
-        });
+        await tapMouse(tester, const Offset(8, 0), count: 3);
 
-        await tapMouse(tester, const Offset(8, 0), count: 5);
-
-        expect(selectionCount, 2);
+        expect(terminalFor(controller).selection, isNull);
       });
 
-      testWidgets('longPressSelectionMode block uses block mode', (
+      testWidgets('longPressSelectionShape block uses block mode', (
         tester,
       ) async {
         await tester.pumpWidget(
           buildHandler(
             controller: controller,
             gestureSettings: const TerminalGestureSettings(
-              longPressSelectionMode: .block,
+              longPressSelectionShape: .rectangle,
             ),
           ),
         );
@@ -442,28 +552,12 @@ void main() {
         await gesture.moveTo(const Offset(80, 32));
         await gesture.up();
 
-        final selection = controller.selection!;
-        expect(selection.mode, TerminalSelectionMode.block);
-      });
-
-      testWidgets('empty enabledSelections still allows tap', (tester) async {
-        await tester.pumpWidget(
-          buildHandler(
-            controller: controller,
-            gestureSettings: const TerminalGestureSettings(
-              enabledSelections: {},
-            ),
-          ),
-        );
-
-        final gesture = await mouseDown(tester, const Offset(40, 16));
-        await gesture.up();
-
-        expect(controller.selection, isNull);
+        final selection = terminalFor(controller).selection!;
+        expect(selection.mode, TerminalSelectionShape.rectangle);
       });
 
       testWidgets(
-        'empty enabledSelections still allows mouse tracking output',
+        'disabled selection affordances still allow mouse tracking output',
         (tester) async {
           enableMouseTracking(controller);
 
@@ -471,7 +565,9 @@ void main() {
             buildHandler(
               controller: controller,
               gestureSettings: const TerminalGestureSettings(
-                enabledSelections: {},
+                dragSelection: false,
+                longPressSelection: false,
+                selectAllShortcut: false,
               ),
             ),
           );
@@ -499,8 +595,8 @@ void main() {
         await gesture.moveTo(const Offset(80, 32));
         await gesture.up();
 
-        final selection = controller.selection!;
-        expect(selection.mode, TerminalSelectionMode.block);
+        final selection = terminalFor(controller).selection!;
+        expect(selection.mode, TerminalSelectionShape.rectangle);
       });
 
       testWidgets('virtual alt triggers block selection on long press', (
@@ -515,8 +611,8 @@ void main() {
         await gesture.moveTo(const Offset(80, 32));
         await gesture.up();
 
-        final selection = controller.selection!;
-        expect(selection.mode, TerminalSelectionMode.block);
+        final selection = terminalFor(controller).selection!;
+        expect(selection.mode, TerminalSelectionShape.rectangle);
       });
 
       testWidgets('toggling alt mid-drag switches selection mode', (
@@ -526,15 +622,24 @@ void main() {
 
         final gesture = await mouseDown(tester, const Offset(8, 0));
         await gesture.moveTo(const Offset(80, 32));
-        expect(controller.selection!.mode, TerminalSelectionMode.normal);
+        expect(
+          terminalFor(controller).selection!.mode,
+          TerminalSelectionShape.normal,
+        );
 
         controller.toggleMod(const Mods.alt());
         await gesture.moveTo(const Offset(80, 48));
-        expect(controller.selection!.mode, TerminalSelectionMode.block);
+        expect(
+          terminalFor(controller).selection!.mode,
+          TerminalSelectionShape.rectangle,
+        );
 
         controller.toggleMod(const Mods.alt());
         await gesture.moveTo(const Offset(80, 64));
-        expect(controller.selection!.mode, TerminalSelectionMode.normal);
+        expect(
+          terminalFor(controller).selection!.mode,
+          TerminalSelectionShape.normal,
+        );
 
         await gesture.up();
       });
@@ -567,9 +672,7 @@ void main() {
         await gesture.moveTo(const Offset(40, 0));
         await gesture.up();
 
-        final selection = controller.selection!;
-        expect(selection.startCol, 2);
-        expect(selection.endCol, 5);
+        expect(controller.selectedText(), '日C');
       });
 
       testWidgets('drag ending on wide char snaps end exclusive', (
@@ -579,10 +682,10 @@ void main() {
 
         final gesture = await mouseDown(tester, Offset.zero);
         await gesture.moveTo(const Offset(24, 0));
-        expect(controller.selection!.endCol, 4);
+        expect(controller.selectedText(), 'AB日');
 
         await gesture.moveTo(const Offset(16, 0));
-        expect(controller.selection!.endCol, 4);
+        expect(controller.selectedText(), 'AB');
 
         await gesture.up();
       });
@@ -596,9 +699,7 @@ void main() {
         await gesture.moveTo(Offset.zero);
         await gesture.up();
 
-        final selection = controller.selection!;
-        expect(selection.startCol, 4);
-        expect(selection.endCol, 0);
+        expect(controller.selectedText(), 'AB日');
       });
 
       testWidgets('narrow cells pass through unaffected', (tester) async {
@@ -608,19 +709,19 @@ void main() {
         await gesture.moveTo(const Offset(8, 0));
         await gesture.up();
 
-        final selection = controller.selection!;
+        final selection = terminalFor(controller).selection!;
         expect(selection.startCol, 0);
         expect(selection.endCol, 1);
       });
 
-      testWidgets('double click on spacer selects wide char', (tester) async {
+      testWidgets('double click on spacer leaves selection empty', (
+        tester,
+      ) async {
         await tester.pumpWidget(buildHandler(controller: controller));
 
         await tapMouse(tester, const Offset(24, 0), count: 2);
 
-        final selection = controller.selection!;
-        expect(selection.startCol, 2);
-        expect(selection.endCol, 4);
+        expect(terminalFor(controller).selection, isNull);
       });
     });
 

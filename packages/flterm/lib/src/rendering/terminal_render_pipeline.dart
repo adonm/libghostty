@@ -2,7 +2,6 @@ import 'dart:ui';
 
 import 'package:libghostty/libghostty.dart';
 
-import '../foundation/terminal_selection.dart';
 import 'atlas/atlas.dart';
 import 'atlas/sprite_buffer.dart';
 import 'paint_state.dart';
@@ -58,16 +57,6 @@ final class TerminalRenderPipeline {
   }
 
   void markAllRowsDirty() => _frameBuilder.markAllRowsDirty();
-
-  void markSelectionRowsDirty(
-    TerminalSelection? selection, {
-    required int viewportOffset,
-  }) {
-    if (selection == null || _state.rows == 0) return;
-    final top = selection.topRow - viewportOffset;
-    final bottom = selection.bottomRow - viewportOffset;
-    _frameBuilder.markRowsDirty(top, bottom + 1);
-  }
 
   void paint(Canvas canvas) => _painters.paint(canvas);
 

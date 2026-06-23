@@ -5,7 +5,6 @@ import 'dart:ui';
 import 'package:libghostty/libghostty.dart';
 
 import '../foundation/dynamic_color.dart';
-import '../foundation/terminal_selection.dart';
 import '../foundation/terminal_theme.dart';
 import 'atlas/atlas.dart';
 import 'atlas/sprite_buffer.dart';
@@ -711,15 +710,6 @@ final class _FrameSnapshot {
   var cols = 0;
   var applyCellOpacity = false;
   var cellOpacityAlpha = 255;
-  var viewportOffset = 0;
-  TerminalSelection? selection;
-
-  bool isSelected(int row, int col) {
-    final active = selection;
-    if (active == null) return false;
-    return active.contains(row + viewportOffset, col);
-  }
-
   int resolveBgArgb(int argb, {required bool inverse}) {
     if (!applyCellOpacity || inverse) return argb;
     final currentAlpha = (argb >>> 24) & 0xFF;
@@ -753,8 +743,6 @@ final class _FrameSnapshot {
     applyCellOpacity =
         theme.backgroundOpacityCells && theme.backgroundOpacity < 1.0;
     cellOpacityAlpha = theme.backgroundOpacityAlpha;
-    viewportOffset = state.viewportOffset;
-    selection = state.selection;
   }
 }
 
@@ -1296,8 +1284,7 @@ final class _TerminalRowBuilder {
       return;
     }
 
-    final selected = _frame.isSelected(row.row, row.col);
-
+    final selected = cell.isSelected;
     final backgroundArgb = cell.hasText ? null : cell.backgroundArgb;
     if (cell.styleId != row.prevStyleId ||
         backgroundArgb != row.prevBackgroundArgb ||

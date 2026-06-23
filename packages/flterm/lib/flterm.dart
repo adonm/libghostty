@@ -1,4 +1,4 @@
-/// Flutter terminal renderer powered by libghostty.
+/// Flutter terminal renderer and widget APIs.
 ///
 /// ```dart
 /// import 'package:flterm/flterm.dart';
@@ -15,7 +15,10 @@ export 'package:libghostty/libghostty.dart'
         Key,
         Mods,
         MouseTracking,
+        PointTag,
         Scrollbar,
+        SelectionGestureBehavior,
+        SelectionGestureBehaviors,
         TerminalMode,
         TerminalScreen,
         UnderlineStyle,
@@ -31,10 +34,8 @@ export 'src/foundation/terminal_gesture_settings.dart'
     show
         GestureModifier,
         LineSelectMode,
-        SelectionGesture,
-        TerminalGestureSettings;
-export 'src/foundation/terminal_selection.dart'
-    show TerminalSelection, TerminalSelectionMode;
+        TerminalGestureSettings,
+        TerminalSelectionShape;
 export 'src/foundation/terminal_theme.dart'
     show
         CursorTheme,

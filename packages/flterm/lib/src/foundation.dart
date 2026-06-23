@@ -8,5 +8,4 @@ export 'foundation/screen_extension.dart';
 export 'foundation/terminal_config.dart';
 export 'foundation/terminal_gesture_settings.dart';
 export 'foundation/terminal_render_observer.dart';
-export 'foundation/terminal_selection.dart';
 export 'foundation/terminal_theme.dart';

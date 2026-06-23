@@ -6,7 +6,7 @@ import 'package:libghostty/libghostty.dart';
 import 'color_palette.dart';
 import 'dynamic_color.dart';
 
-/// Default dark ANSI palette (Tomorrow Night), matching Ghostty's defaults.
+/// Default dark ANSI palette using the Tomorrow Night color scheme.
 const _darkAnsiColors = [
   Color(0xFF1D1F21), // 0: black
   Color(0xFFCC6666), // 1: red
@@ -373,8 +373,7 @@ final class TerminalTheme {
        ),
        backgroundOpacityAlpha = (backgroundOpacity * 255).round();
 
-  /// A dark-background terminal theme using the Tomorrow Night color scheme,
-  /// matching Ghostty's defaults.
+  /// A dark-background terminal theme using the Tomorrow Night color scheme.
   factory TerminalTheme.dark() => TerminalTheme(
     palette: ColorPalette(
       ansiColors: _darkAnsiColors,

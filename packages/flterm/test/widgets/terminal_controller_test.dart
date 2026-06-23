@@ -41,7 +41,7 @@ void main() {
       });
 
       test('starts without selection, selected text, or focus', () {
-        expect(controller.selection, isNull);
+        expect(controller.hasSelection, isFalse);
         expect(controller.selectedText(), '');
         expect(controller.hasFocus, isFalse);
       });
@@ -85,34 +85,23 @@ void main() {
     });
 
     group('selection', () {
-      test('setter notifies listeners', () {
+      test('selectRange notifies listeners and installs selection', () {
         var notified = false;
         controller.addListener(() => notified = true);
 
-        controller.selection = const TerminalSelection(
-          startRow: 0,
-          startCol: 0,
-          endRow: 0,
-          endCol: 5,
-        );
+        controller.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 4);
 
         expect(notified, isTrue);
-        expect(controller.selection, isNotNull);
+        expect(controller.hasSelection, isTrue);
       });
 
-      test('setter skips notification when value is unchanged', () {
-        const sel = TerminalSelection(
-          startRow: 0,
-          startCol: 0,
-          endRow: 0,
-          endCol: 5,
-        );
-        controller.selection = sel;
+      test('selectRange skips notification when value is unchanged', () {
+        controller.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 4);
 
         var notified = false;
         controller.addListener(() => notified = true);
 
-        controller.selection = sel;
+        controller.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 4);
 
         expect(notified, isFalse);
       });
@@ -124,37 +113,94 @@ void main() {
         controller.clearSelection();
         expect(notifyCount, 0);
 
-        controller.selection = const TerminalSelection(
-          startRow: 0,
-          startCol: 0,
-          endRow: 0,
-          endCol: 5,
-        );
+        controller.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 4);
         notifyCount = 0;
 
         controller.clearSelection();
         expect(notifyCount, 1);
-        expect(controller.selection, isNull);
+        expect(controller.hasSelection, isFalse);
       });
     });
 
+    group('scrollToBottom policy', () {
+      TerminalControllerImpl outputFollowController() {
+        final target = TerminalControllerImpl(
+          config: const TerminalConfig(
+            cols: 20,
+            rows: 3,
+            scrollToBottom: .onOutput,
+          ),
+        );
+        addTearDown(target.dispose);
+        return target;
+      }
+
+      void writeNumberedLines(TerminalControllerImpl target) {
+        for (var i = 0; i < 10; i++) {
+          writeControllerUtf8(target, 'line $i\r\n');
+        }
+      }
+
+      int scrollBack(TerminalControllerImpl target) {
+        writeNumberedLines(target);
+        target.terminal.scrollViewport(-5);
+        return target.terminal.scrollbar.offset;
+      }
+
+      test('scrolls to bottom on output when output follow is enabled', () {
+        final custom = outputFollowController();
+        final offset = scrollBack(custom);
+        expect(offset, lessThan(custom.scrollbackRows));
+
+        writeControllerUtf8(custom, 'tail\r\n');
+
+        expect(custom.terminal.scrollbar.offset, custom.scrollbackRows);
+      });
+
+      test(
+        'preserves viewport on selectRange when output follow is enabled',
+        () {
+          final custom = outputFollowController();
+          final offset = scrollBack(custom);
+          expect(offset, lessThan(custom.scrollbackRows));
+
+          custom.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 4);
+
+          expect(custom.terminal.scrollbar.offset, offset);
+        },
+      );
+
+      test(
+        'preserves viewport on clearSelection when output follow is enabled',
+        () {
+          final custom = outputFollowController();
+          writeNumberedLines(custom);
+          custom.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 4);
+          custom.terminal.scrollViewport(-5);
+          final offset = custom.terminal.scrollbar.offset;
+          expect(offset, lessThan(custom.scrollbackRows));
+
+          custom.clearSelection();
+
+          expect(custom.terminal.scrollbar.offset, offset);
+        },
+      );
+    });
+
     group('selectAll', () {
-      test('selects through the last content column', () {
+      test('selects visible content', () {
         writeControllerUtf8(controller, 'hello\r\nworld');
 
         controller.selectAll();
 
-        final sel = controller.selection!;
-        expect(sel.startRow, 0);
-        expect(sel.startCol, 0);
-        expect(sel.endRow, 1);
-        expect(sel.endCol, 5);
+        expect(controller.hasSelection, isTrue);
+        expect(controller.selectedText(), 'hello\nworld');
       });
 
       test('leaves selection empty on an empty screen', () {
         controller.selectAll();
 
-        expect(controller.selection, isNull);
+        expect(controller.hasSelection, isFalse);
       });
 
       test('selects a single content row', () {
@@ -162,11 +208,8 @@ void main() {
 
         controller.selectAll();
 
-        final sel = controller.selection!;
-        expect(sel.startRow, 0);
-        expect(sel.startCol, 0);
-        expect(sel.endRow, 0);
-        expect(sel.endCol, 3);
+        expect(controller.hasSelection, isTrue);
+        expect(controller.selectedText(), 'abc');
       });
     });
 
@@ -175,12 +218,7 @@ void main() {
         replaceController(const TerminalConfig(cols: 20, rows: 5));
         writeControllerUtf8(controller, 'hello world');
 
-        controller.selection = const TerminalSelection(
-          startRow: 0,
-          startCol: 0,
-          endRow: 0,
-          endCol: 5,
-        );
+        controller.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 4);
 
         expect(controller.selectedText(), 'hello');
       });
@@ -189,12 +227,7 @@ void main() {
         replaceController(const TerminalConfig(cols: 20, rows: 5));
         writeControllerUtf8(controller, '\x1b[31mhi\x1b[0m');
 
-        controller.selection = const TerminalSelection(
-          startRow: 0,
-          startCol: 0,
-          endRow: 0,
-          endCol: 2,
-        );
+        controller.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 1);
 
         expect(controller.selectedText(), 'hi');
         expect(
@@ -211,20 +244,15 @@ void main() {
         replaceController(const TerminalConfig(cols: 20, rows: 5));
         controller.write(Uint8List.fromList(utf8.encode('日本語')));
 
-        controller.selection = const TerminalSelection(
-          startRow: 0,
-          startCol: 0,
-          endRow: 0,
-          endCol: 6,
-        );
+        controller.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 4);
         expect(controller.selectedText(), '日本語');
 
-        controller.selection = const TerminalSelection(
+        controller.selectRange(
           startRow: 0,
           startCol: 0,
           endRow: 0,
-          endCol: 6,
-          mode: TerminalSelectionMode.block,
+          endCol: 4,
+          rectangle: true,
         );
         expect(controller.selectedText(), '日本語');
       });
@@ -252,11 +280,8 @@ void main() {
 
         smallController.selectAll();
 
-        final sel = smallController.selection!;
-        expect(sel.startRow, 0);
-        expect(sel.startCol, 0);
-        expect(sel.endRow, scrollbackLen + 2);
-        expect(sel.endCol, 3);
+        expect(smallController.hasSelection, isTrue);
+        expect(smallController.selectedText(), 'aaa\nbbb\nccc\nddd\neee');
       });
 
       test('selectAll with only scrollback content', () {
@@ -266,21 +291,21 @@ void main() {
 
         smallController.selectAll();
 
-        final sel = smallController.selection!;
-        expect(sel.startRow, 0);
+        expect(smallController.hasSelection, isTrue);
+        expect(smallController.selectedText(), contains('aaa'));
       });
 
-      test('selectedText handles selection beyond screen bounds', () {
+      test('selectRange throws for selection beyond screen bounds', () {
         writeLines(['aaa', 'bbb', 'ccc']);
-        smallController.selection = const TerminalSelection(
-          startRow: 0,
-          startCol: 0,
-          endRow: 99,
-          endCol: 20,
+        expect(
+          () => smallController.selectRange(
+            startRow: 0,
+            startCol: 0,
+            endRow: 99,
+            endCol: 19,
+          ),
+          throwsA(isA<LibGhosttyException>()),
         );
-
-        expect(() => smallController.selectedText(), returnsNormally);
-        expect(smallController.selectedText(), contains('aaa'));
       });
 
       test('selectedText extracts from scrollback and screen', () {
@@ -325,12 +350,12 @@ void main() {
 
       test('selectedText in block mode inserts newlines between rows', () {
         writeLines(['aaaa', 'bbbb', 'cccc']);
-        smallController.selection = const TerminalSelection(
+        smallController.selectRange(
           startRow: 0,
           startCol: 1,
           endRow: 2,
-          endCol: 3,
-          mode: TerminalSelectionMode.block,
+          endCol: 2,
+          rectangle: true,
         );
 
         final text = smallController.selectedText();
@@ -345,11 +370,11 @@ void main() {
         writeLines(['aaa', 'bbb', 'ccc', 'ddd']);
         expect(smallController.scrollbackRows, 1);
 
-        smallController.selection = const TerminalSelection(
+        smallController.selectRange(
           startRow: 0,
           startCol: 0,
           endRow: 1,
-          endCol: 3,
+          endCol: 2,
         );
 
         final text = smallController.selectedText();
@@ -390,16 +415,11 @@ void main() {
       });
 
       test('clears selection', () {
-        controller.selection = const TerminalSelection(
-          startRow: 0,
-          startCol: 0,
-          endRow: 1,
-          endCol: 5,
-        );
+        controller.selectRange(startRow: 0, startCol: 0, endRow: 1, endCol: 4);
 
         controller.clear();
 
-        expect(controller.selection, isNull);
+        expect(controller.hasSelection, isFalse);
       });
     });
 
@@ -590,43 +610,6 @@ void main() {
         writeTerminalUtf8(controller.terminal, '\x1b]7;file:///tmp\x07');
 
         expect(pwd, 'file:///tmp');
-      });
-    });
-
-    group('selectWord', () {
-      test('selects word at position', () {
-        replaceController(const TerminalConfig(cols: 20, rows: 5));
-        writeTerminalUtf8(controller.terminal, 'hello world');
-
-        (controller as TerminalViewBinding).selectWord(0, 1);
-
-        final sel = controller.selection!;
-        expect(sel.startCol, 0);
-        expect(sel.endCol, 5);
-      });
-    });
-
-    group('selectLine', () {
-      test('selects line content at row', () {
-        replaceController(const TerminalConfig(cols: 20, rows: 5));
-        writeTerminalUtf8(controller.terminal, 'hello world');
-
-        (controller as TerminalViewBinding).selectLine(0, .content);
-
-        final sel = controller.selection!;
-        expect(sel.startCol, 0);
-        expect(sel.endCol, 11);
-      });
-
-      test('selects full row width in full mode', () {
-        replaceController(const TerminalConfig(cols: 20, rows: 5));
-        writeTerminalUtf8(controller.terminal, 'hello');
-
-        (controller as TerminalViewBinding).selectLine(0, .full);
-
-        final sel = controller.selection!;
-        expect(sel.startCol, 0);
-        expect(sel.endCol, 20);
       });
     });
 

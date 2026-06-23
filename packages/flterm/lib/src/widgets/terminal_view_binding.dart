@@ -20,11 +20,11 @@ abstract interface class TerminalViewBinding {
   /// and the cursor row is visible in the viewport.
   bool get cursorBlinks;
 
-  /// Current IME preedit text that has not been committed to the terminal.
-  String get preeditText;
-
   /// Current mouse tracking mode.
   MouseTracking get mouseTracking;
+
+  /// Current IME preedit text that has not been committed to the terminal.
+  String get preeditText;
 
   /// The terminal instance for the renderer.
   Terminal get terminal;
@@ -35,6 +35,9 @@ abstract interface class TerminalViewBinding {
   /// Subscribes to [focusNode] and [scrollController] for focus and
   /// scroll handling.
   void attach(FocusNode focusNode, ScrollController scrollController);
+
+  /// Cancels the active selection gesture.
+  void cancelSelectionGesture();
 
   /// Clears the current selection.
   void clearSelection();
@@ -53,8 +56,8 @@ abstract interface class TerminalViewBinding {
   void handleMouseEvent(TerminalMouseEvent event);
 
   /// Reports resize from layout. [metrics] are in logical pixels and
-  /// are scaled by [devicePixelRatio] for libghostty's physical-pixel
-  /// size reports and Kitty graphics.
+  /// are scaled by [devicePixelRatio] for physical-pixel size reports
+  /// and Kitty graphics.
   void handleResize({
     required int cols,
     required int rows,
@@ -66,8 +69,35 @@ abstract interface class TerminalViewBinding {
   /// Reports scroll by line count.
   void handleScroll(int lines);
 
+  /// Applies a press selection gesture.
+  void handleSelectionPress({
+    required int row,
+    required int col,
+    required Offset position,
+    required TerminalGestureSettings settings,
+  });
+
+  /// Applies a release selection gesture.
+  void handleSelectionRelease({required int row, required int col});
+
   /// Requests keyboard focus for the attached view.
   void requestFocus();
+
+  /// Applies one autoscroll tick for an active drag selection.
+  void updateSelectionAutoscroll({
+    required int row,
+    required int col,
+    required Offset position,
+    required bool rectangle,
+  });
+
+  /// Updates an active drag selection.
+  void updateSelectionDrag({
+    required int row,
+    required int col,
+    required Offset position,
+    required bool rectangle,
+  });
 
   /// Reports renderer geometry used to anchor platform IME UI.
   void updateTextInputGeometry({
@@ -76,22 +106,4 @@ abstract interface class TerminalViewBinding {
     required Rect caretRect,
     required Rect composingRect,
   });
-
-  /// Selects the line at [row], using terminal line-boundary detection.
-  /// The [lineSelectMode] controls whether trailing empty cells are included.
-  void selectLine(int row, LineSelectMode lineSelectMode);
-
-  /// Selects the word at ([row], [col]), using terminal word-boundary
-  /// detection with wide character snapping.
-  void selectWord(int row, int col);
-
-  /// Creates a selection from drag coordinates, snapping columns to
-  /// wide character boundaries and applying the viewport scroll offset.
-  void updateSelection(
-    int startRow,
-    int startCol,
-    int endRow,
-    int endCol,
-    TerminalSelectionMode mode,
-  );
 }

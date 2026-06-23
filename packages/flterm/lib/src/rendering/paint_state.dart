@@ -3,7 +3,7 @@ import 'dart:ui';
 
 import 'package:libghostty/libghostty.dart' show Cursor, TerminalColors;
 
-import '../foundation.dart' show CellMetrics, TerminalSelection, TerminalTheme;
+import '../foundation.dart' show CellMetrics, TerminalTheme;
 import 'atlas/atlas.dart';
 
 /// Mutable state shared between [TerminalRenderBox] and all painters.
@@ -13,8 +13,7 @@ import 'atlas/atlas.dart';
 /// and never mutates this object.
 ///
 /// Contains grid dimensions, device pixel ratio, resolved terminal
-/// colors, selection state, cursor state, IME preedit state, and faint text
-/// opacity.
+/// colors, cursor state, IME preedit state, and faint text opacity.
 class TerminalPaintState {
   TerminalTheme theme;
   CellMetrics metrics;
@@ -34,7 +33,6 @@ class TerminalPaintState {
   /// Alpha byte (0-255) applied to faint text foregrounds.
   int faintAlpha;
 
-  TerminalSelection? selection;
   var viewportOffset = 0;
 
   var cursor = const Cursor();

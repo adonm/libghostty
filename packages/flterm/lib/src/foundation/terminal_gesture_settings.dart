@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
-
-import 'terminal_selection.dart';
+import 'package:libghostty/libghostty.dart' show SelectionGestureBehaviors;
 
 /// A modifier key used to trigger gesture behaviors.
 ///
@@ -20,44 +19,8 @@ enum LineSelectMode {
   full,
 }
 
-/// A type of selection gesture recognized by the gesture detector.
-///
-/// Each gesture maps to a distinct user interaction pattern. Disable
-/// individual gestures via [TerminalGestureSettings.enabledSelections].
-///
-/// ```dart
-/// // Disable drag selection, keep word and line selection.
-/// TerminalGestureSettings(
-///   enabledSelections: {SelectionGesture.word, SelectionGesture.line},
-/// )
-/// ```
-enum SelectionGesture {
-  /// Click and drag on desktop.
-  drag,
-
-  /// Double-tap to select a word.
-  word,
-
-  /// Triple-tap to select a logical line (follows soft wraps).
-  line,
-
-  /// Long press on touch devices.
-  longPress,
-
-  /// Select all via keyboard shortcut (Cmd+A on macOS, Ctrl+A elsewhere).
-  selectAll;
-
-  /// All recognized selection gestures.
-  static const all = <SelectionGesture>{
-    .drag,
-    .word,
-    .line,
-    .longPress,
-    .selectAll,
-  };
-}
-
-/// Controls which selection gestures are enabled and how they behave.
+/// Controls which terminal selection affordances are enabled and how press
+/// gestures behave.
 ///
 /// Passed to [TerminalView.gestureSettings]. Only affects selection
 /// behavior: mouse tracking (for terminal programs) and focus gestures
@@ -67,19 +30,36 @@ enum SelectionGesture {
 /// TerminalView(
 ///   controller: controller,
 ///   gestureSettings: TerminalGestureSettings(
-///     enabledSelections: {SelectionGesture.word, SelectionGesture.line},
-///     blockSelectionModifier: GestureModifier.meta,
+///     selectionBehaviors: SelectionGestureBehaviors(
+///       singleClick: .cell,
+///       doubleClick: .line,
+///       tripleClick: .word,
+///     ),
+///     blockSelectionModifier: .meta,
+///     wordBoundaries: '/.',
+///     dragSelection: false,
 ///   ),
 /// )
 /// ```
 @immutable
 final class TerminalGestureSettings {
-  /// Which selection gestures are active.
+  /// Whether mouse drag can extend terminal selection.
   ///
-  /// Defaults to [SelectionGesture.all]. Pass an empty set to disable
-  /// text selection entirely while keeping mouse tracking and focus
-  /// functional.
-  final Set<SelectionGesture> enabledSelections;
+  /// Defaults to true. When false, drag gestures still request focus and mouse
+  /// tracking still works, but they do not apply text selection.
+  final bool dragSelection;
+
+  /// Whether touch long press can start terminal selection.
+  ///
+  /// Defaults to true. When false, long press gestures still request focus, but
+  /// they do not apply text selection.
+  final bool longPressSelection;
+
+  /// Whether the select-all keyboard shortcut can select terminal contents.
+  ///
+  /// Defaults to true. This only controls the shortcut; calling
+  /// [TerminalController.selectAll] still selects programmatically.
+  final bool selectAllShortcut;
 
   /// How triple-click line selection determines the end column.
   ///
@@ -97,34 +77,77 @@ final class TerminalGestureSettings {
   /// mouse tracking, and the two behaviors would conflict.
   final GestureModifier? blockSelectionModifier;
 
-  /// Selection mode used for long-press gestures on touch devices.
+  /// Selection shape used for long-press gestures on touch devices.
   ///
-  /// Defaults to [TerminalSelectionMode.normal] for linear text selection.
-  /// Set to [TerminalSelectionMode.block] to start a rectangular selection
-  /// on long press.
-  final TerminalSelectionMode longPressSelectionMode;
+  /// Defaults to [TerminalSelectionShape.normal] for linear text selection.
+  /// Set to [TerminalSelectionShape.rectangle] to start a rectangular
+  /// selection on long press.
+  final TerminalSelectionShape longPressSelectionShape;
+
+  /// Selection behavior table for press gestures.
+  ///
+  /// Defaults to standard terminal behavior: single-click cell selection,
+  /// double-click word selection, and triple-click line selection.
+  final SelectionGestureBehaviors selectionBehaviors;
+
+  /// Characters that split words during word selection.
+  ///
+  /// Used when resolving double-click word selection and word-granular drags.
+  /// Each Unicode scalar value in the string is treated as one word-boundary
+  /// codepoint. When null, the terminal's default word boundaries are used.
+  /// Passing an empty string explicitly makes every non-empty run selectable
+  /// as one word.
+  final String? wordBoundaries;
 
   const TerminalGestureSettings({
+    this.dragSelection = true,
+    this.selectAllShortcut = true,
+    this.longPressSelection = true,
     this.lineSelectMode = .content,
     this.blockSelectionModifier = .alt,
-    this.longPressSelectionMode = .normal,
-    this.enabledSelections = SelectionGesture.all,
+    this.selectionBehaviors = .standard,
+    this.longPressSelectionShape = .normal,
+    this.wordBoundaries,
   });
 
   @override
   int get hashCode => Object.hash(
-    Object.hashAllUnordered(enabledSelections),
+    selectionBehaviors.singleClick,
+    selectionBehaviors.doubleClick,
+    selectionBehaviors.tripleClick,
     blockSelectionModifier,
-    longPressSelectionMode,
+    longPressSelectionShape,
     lineSelectMode,
+    dragSelection,
+    longPressSelection,
+    selectAllShortcut,
+    wordBoundaries,
   );
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is TerminalGestureSettings &&
-          setEquals(enabledSelections, other.enabledSelections) &&
+          selectionBehaviors.singleClick ==
+              other.selectionBehaviors.singleClick &&
+          selectionBehaviors.doubleClick ==
+              other.selectionBehaviors.doubleClick &&
+          selectionBehaviors.tripleClick ==
+              other.selectionBehaviors.tripleClick &&
           blockSelectionModifier == other.blockSelectionModifier &&
-          longPressSelectionMode == other.longPressSelectionMode &&
-          lineSelectMode == other.lineSelectMode;
+          longPressSelectionShape == other.longPressSelectionShape &&
+          lineSelectMode == other.lineSelectMode &&
+          dragSelection == other.dragSelection &&
+          longPressSelection == other.longPressSelection &&
+          selectAllShortcut == other.selectAllShortcut &&
+          wordBoundaries == other.wordBoundaries;
+}
+
+/// Selection shape used for gestures that start without a keyboard modifier.
+enum TerminalSelectionShape {
+  /// Selects contiguous terminal text.
+  normal,
+
+  /// Selects a rectangular cell block.
+  rectangle,
 }

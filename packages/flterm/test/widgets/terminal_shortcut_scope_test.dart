@@ -3,7 +3,6 @@ library;
 
 import 'dart:convert';
 
-import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -60,12 +59,7 @@ void main() {
     group('copy', () {
       testWidgets('copies selected text to clipboard', (tester) async {
         writeUtf8(controller.terminal, 'hello world');
-        controller.selection = const TerminalSelection(
-          startRow: 0,
-          startCol: 0,
-          endRow: 0,
-          endCol: 5,
-        );
+        controller.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 4);
 
         String? clipboardText;
         tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -146,7 +140,7 @@ void main() {
 
         await sendCmd(tester, .keyA);
 
-        expect(controller.selection, isNotNull);
+        expect(controller.hasSelection, isTrue);
         expect(controller.selectedText(), 'hello');
       });
 
@@ -160,7 +154,7 @@ void main() {
 
         await sendCmd(tester, .keyA);
 
-        expect(controller.selection, isNull);
+        expect(controller.hasSelection, isFalse);
       });
     });
 

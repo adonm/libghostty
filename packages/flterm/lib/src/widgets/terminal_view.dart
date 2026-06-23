@@ -280,8 +280,7 @@ class _TerminalViewState extends State<TerminalView> {
               onPaste: _handlePaste,
               controller: _controller,
               shortcuts: widget.shortcuts,
-              enableSelectAll: widget.gestureSettings.enabledSelections
-                  .contains(SelectionGesture.selectAll),
+              enableSelectAll: widget.gestureSettings.selectAllShortcut,
               child: MouseRegion(
                 onHover: _handleMouseHover,
                 cursor: _effectiveMouseCursor(),

@@ -14,6 +14,28 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart' hide KeyEvent;
 
+extension _SelectionEdges on Selection {
+  ({int row, int col}) get _startPoint => start.pointIn(.viewport)!;
+
+  ({int row, int col}) get _endPoint => end.pointIn(.viewport)!;
+
+  bool get _forward {
+    final start = _startPoint;
+    final end = _endPoint;
+    return start.row != end.row ? start.row < end.row : start.col <= end.col;
+  }
+
+  int get startCol => _forward ? _startPoint.col : _startPoint.col + 1;
+
+  int get endCol => _forward ? _endPoint.col + 1 : _endPoint.col;
+
+  TerminalSelectionShape get mode {
+    return rectangle
+        ? TerminalSelectionShape.rectangle
+        : TerminalSelectionShape.normal;
+  }
+}
+
 void main() {
   group('TerminalView', () {
     Future<void> sendSelectAllShortcut(WidgetTester tester) async {
@@ -38,6 +60,10 @@ void main() {
 
     void writeUtf8(TerminalController controller, String text) {
       controller.write(Uint8List.fromList(utf8.encode(text)));
+    }
+
+    Selection? activeSelection(TerminalController controller) {
+      return (controller as TerminalViewBinding).terminal.selection;
     }
 
     String decodeOutput(List<Uint8List> output) {
@@ -563,12 +589,7 @@ void main() {
         wrapInApp(controller: controller, autofocus: true),
       );
       await tester.pump();
-      controller.selection = const TerminalSelection(
-        startRow: 0,
-        startCol: 0,
-        endRow: 0,
-        endCol: 5,
-      );
+      controller.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 4);
 
       tester.testTextInput.updateEditingValue(
         const TextEditingValue(
@@ -579,7 +600,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(controller.selection, isNull);
+      expect(controller.hasSelection, isFalse);
     });
 
     testWidgets('composition scrolls to bottom when it starts', (tester) async {
@@ -1023,7 +1044,7 @@ void main() {
       await tester.sendEventToBinding(upEvent);
       await tester.pumpAndSettle();
 
-      expect(controller.selection, isNull);
+      expect(controller.hasSelection, isFalse);
     });
 
     testWidgets('long press starts normal selection by default', (
@@ -1043,9 +1064,9 @@ void main() {
       await gesture.up();
       await tester.pump();
 
-      final sel = controller.selection;
+      final sel = activeSelection(controller);
       expect(sel, isNotNull);
-      expect(sel!.mode, TerminalSelectionMode.normal);
+      expect(sel!.mode, TerminalSelectionShape.normal);
     });
 
     testWidgets('scroll event changes scroll offset', (tester) async {
@@ -1078,7 +1099,7 @@ void main() {
       controller.selectAll();
       await tester.pump();
 
-      expect(controller.selection, isNotNull);
+      expect(controller.hasSelection, isTrue);
     });
 
     testWidgets('selectAll shortcut selects content by default', (
@@ -1092,29 +1113,28 @@ void main() {
 
       await sendSelectAllShortcut(tester);
 
-      expect(controller.selection, isNotNull);
+      expect(controller.hasSelection, isTrue);
     });
 
-    testWidgets(
-      'selectAll shortcut blocked when selectAll not in enabled set',
-      (tester) async {
-        writeUtf8(controller, 'hello world');
-        await tester.pumpWidget(
-          wrapInApp(
-            controller: controller,
-            autofocus: true,
-            gestureSettings: const TerminalGestureSettings(
-              enabledSelections: {.drag},
-            ),
+    testWidgets('selectAll shortcut blocked when selectAllShortcut is false', (
+      tester,
+    ) async {
+      writeUtf8(controller, 'hello world');
+      await tester.pumpWidget(
+        wrapInApp(
+          controller: controller,
+          autofocus: true,
+          gestureSettings: const TerminalGestureSettings(
+            selectAllShortcut: false,
           ),
-        );
-        await tester.pumpAndSettle();
+        ),
+      );
+      await tester.pumpAndSettle();
 
-        await sendSelectAllShortcut(tester);
+      await sendSelectAllShortcut(tester);
 
-        expect(controller.selection, isNull);
-      },
-    );
+      expect(controller.hasSelection, isFalse);
+    });
 
     testWidgets('typing clears selection when selectionClearOnTyping is true', (
       tester,
@@ -1125,18 +1145,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      controller.selection = const TerminalSelection(
-        startRow: 0,
-        startCol: 0,
-        endRow: 0,
-        endCol: 5,
-      );
-      expect(controller.selection, isNotNull);
+      controller.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 4);
+      expect(controller.hasSelection, isTrue);
 
       await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
       await tester.pump();
 
-      expect(controller.selection, isNull);
+      expect(controller.hasSelection, isFalse);
     });
 
     testWidgets('shift+arrow extends existing selection', (tester) async {
@@ -1146,19 +1161,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      controller.selection = const TerminalSelection(
-        startRow: 0,
-        startCol: 0,
-        endRow: 0,
-        endCol: 5,
-      );
+      controller.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 4);
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
       await tester.pump();
 
-      expect(controller.selection!.endCol, 6);
+      expect(activeSelection(controller)!.endCol, 6);
     });
 
     group('virtual mods', () {
@@ -1392,7 +1402,7 @@ void main() {
         await tapMouse(tester, clickPos, count: 2);
         await tester.pump();
 
-        expect(controller.selection, isNotNull);
+        expect(controller.hasSelection, isTrue);
         expect(controller.selectedText(), contains('hello'));
       });
 
@@ -1409,7 +1419,7 @@ void main() {
         await tapMouse(tester, clickPos, count: 3);
         await tester.pump();
 
-        final sel = controller.selection;
+        final sel = activeSelection(controller);
         expect(sel, isNotNull);
         expect(sel!.startCol, 0);
         expect(controller.selectedText().length, greaterThan('hello'.length));
@@ -1431,7 +1441,7 @@ void main() {
         await gesture.up();
         await tester.pump();
 
-        expect(controller.selection, isNotNull);
+        expect(controller.hasSelection, isTrue);
         expect(controller.selectedText(), isNotEmpty);
       });
     });

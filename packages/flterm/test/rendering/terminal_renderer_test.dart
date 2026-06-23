@@ -14,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart';
 
 import 'helpers/font_loader.dart';
+import 'helpers/test_selection.dart';
 
 void main() {
   setUpAll(loadBundledFonts);
@@ -37,7 +38,7 @@ void main() {
     Terminal terminal, {
     TerminalTheme? theme,
     CellMetrics metrics = defaultMetrics,
-    TerminalSelection? selection,
+    TestSelection? selection,
     double? maxWidth,
     double? maxHeight,
     bool focused = true,
@@ -45,6 +46,7 @@ void main() {
     OnResize? onResize,
     TerminalRenderCache? renderCache,
   }) {
+    selection?.applyTo(terminal);
     renderCache ??= createRenderCache();
     final width = maxWidth ?? defaultCols * metrics.cellWidth;
     final height = maxHeight ?? defaultRows * metrics.cellHeight;
@@ -60,10 +62,7 @@ void main() {
             metrics: metrics,
             offset: ViewportOffset.zero(),
             renderCache: renderCache,
-            renderObserver: _TestRenderObserver(
-              selection: selection,
-              hasFocus: focused,
-            ),
+            renderObserver: _TestRenderObserver(hasFocus: focused),
             blinkVisible: blinkVisible,
             onResize: onResize,
           ),
@@ -177,11 +176,11 @@ void main() {
       await tester.pumpWidget(
         wrap(
           terminal,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
             startCol: 0,
             endRow: 0,
-            endCol: 5,
+            endCol: 4,
           ),
         ),
       );
@@ -233,12 +232,9 @@ class _TrackingRenderCache extends TerminalRenderCache {
 
 class _TestRenderObserver implements TerminalRenderObserver {
   @override
-  final TerminalSelection? selection;
-
-  @override
   final bool hasFocus;
 
-  const _TestRenderObserver({this.selection, this.hasFocus = true});
+  const _TestRenderObserver({this.hasFocus = true});
 
   @override
   void addListener(VoidCallback listener) {}

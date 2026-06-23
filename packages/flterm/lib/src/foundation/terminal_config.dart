@@ -100,8 +100,8 @@ class TerminalConfig {
 
   /// Whether Glyph Protocol APC handling is enabled.
   ///
-  /// Defaults to false. Enable when the embedder wants libghostty to parse
-  /// Glyph Protocol image payloads in addition to Kitty graphics.
+  /// Defaults to false. Enable to parse Glyph Protocol image payloads in
+  /// addition to Kitty graphics.
   final bool glyphProtocol;
 
   /// Initial cursor shape. Terminal programs can override via DECSCUSR.
@@ -131,18 +131,6 @@ class TerminalConfig {
   /// active selection. Modifier-only keypresses do not clear.
   final bool selectionClearOnTyping;
 
-  /// Pattern that matches word characters for double-click selection.
-  ///
-  /// The gesture detector expands the selection to the longest contiguous
-  /// run of characters matching this pattern. When null, defaults to `\w`
-  /// (alphanumeric plus underscore).
-  ///
-  /// ```dart
-  /// // Select file paths as words (include slashes and dots).
-  /// const config = TerminalConfig(wordPattern: RegExp(r'[\w./]'));
-  /// ```
-  final Pattern? wordPattern;
-
   /// Response string sent when the terminal receives an ENQ character (0x05).
   ///
   /// Most terminals respond with an empty string. Set to a non-empty value
@@ -158,7 +146,6 @@ class TerminalConfig {
   const TerminalConfig({
     this.cols = 80,
     this.rows = 24,
-    this.wordPattern,
     this.cursorBlink,
     this.glyphProtocol = false,
     this.apcBufferLimit = defaultApcBufferLimit,
@@ -192,7 +179,6 @@ class TerminalConfig {
     .hashAllUnordered(modes.entries.map((e) => .hash(e.key, e.value))),
     scrollToBottom,
     selectionClearOnTyping,
-    wordPattern,
     enquiryResponse,
     deviceAttributes,
   );
@@ -212,7 +198,6 @@ class TerminalConfig {
           _modesEqual(modes, other.modes) &&
           scrollToBottom == other.scrollToBottom &&
           selectionClearOnTyping == other.selectionClearOnTyping &&
-          wordPattern == other.wordPattern &&
           enquiryResponse == other.enquiryResponse &&
           identical(deviceAttributes, other.deviceAttributes);
 
@@ -229,7 +214,6 @@ class TerminalConfig {
     Map<TerminalMode, bool>? modes,
     ScrollToBottom? scrollToBottom,
     bool? selectionClearOnTyping,
-    Pattern? wordPattern,
     String? enquiryResponse,
     DeviceAttributesResponse? deviceAttributes,
   }) {
@@ -247,7 +231,6 @@ class TerminalConfig {
       scrollToBottom: scrollToBottom ?? this.scrollToBottom,
       selectionClearOnTyping:
           selectionClearOnTyping ?? this.selectionClearOnTyping,
-      wordPattern: wordPattern ?? this.wordPattern,
       enquiryResponse: enquiryResponse ?? this.enquiryResponse,
       deviceAttributes: deviceAttributes ?? this.deviceAttributes,
     );

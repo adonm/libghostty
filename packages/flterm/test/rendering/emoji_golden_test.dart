@@ -15,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart';
 
 import 'helpers/font_loader.dart';
+import 'helpers/test_selection.dart';
 
 void main() {
   setUpAll(loadBundledFonts);
@@ -92,9 +93,10 @@ void main() {
       int cols = defaultCols,
       int rows = defaultRows,
       TerminalTheme? theme,
-      TerminalSelection? selection,
+      TestSelection? selection,
       bool focused = true,
     }) async {
+      selection?.applyTo(terminal);
       final resolvedTheme = theme ?? emojiTheme;
       final width = cols * metrics.cellWidth;
       final height = rows * metrics.cellHeight;
@@ -118,10 +120,7 @@ void main() {
                 metrics: metrics,
                 offset: ViewportOffset.zero(),
                 renderCache: renderCache(),
-                renderObserver: _TestRenderObserver(
-                  selection: selection,
-                  hasFocus: focused,
-                ),
+                renderObserver: _TestRenderObserver(hasFocus: focused),
               ),
             ),
           ),
@@ -380,11 +379,11 @@ void main() {
           tester,
           terminal,
           metrics,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
             startCol: 0,
             endRow: 1,
-            endCol: 4,
+            endCol: 3,
           ),
         );
         await expectLater(
@@ -455,12 +454,9 @@ void main() {
 
 class _TestRenderObserver implements TerminalRenderObserver {
   @override
-  final TerminalSelection? selection;
-
-  @override
   final bool hasFocus;
 
-  const _TestRenderObserver({this.selection, this.hasFocus = true});
+  const _TestRenderObserver({this.hasFocus = true});
 
   @override
   void addListener(VoidCallback listener) {}

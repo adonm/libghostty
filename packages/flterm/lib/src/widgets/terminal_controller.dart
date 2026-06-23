@@ -68,6 +68,9 @@ abstract class TerminalController extends ChangeNotifier
   /// Screen content, scrollback, and cursor position are preserved.
   set config(TerminalConfig config);
 
+  /// Whether the terminal currently has an active text selection.
+  bool get hasSelection;
+
   /// Current soft keyboard state.
   KeyboardState get keyboardState;
 
@@ -85,12 +88,6 @@ abstract class TerminalController extends ChangeNotifier
 
   /// Scrollbar state: total rows, visible rows, and current offset.
   Scrollbar get scrollbar;
-
-  @override
-  TerminalSelection? get selection;
-
-  /// Sets the text selection.
-  set selection(TerminalSelection? value);
 
   /// Terminal title set by the running program.
   String get title;
@@ -171,8 +168,8 @@ abstract class TerminalController extends ChangeNotifier
   /// Selects all terminal content including scrollback.
   void selectAll();
 
-  /// Returns the text within the current [selection], or empty string
-  /// when there is no selection.
+  /// Returns the text within the current selection, or empty string when
+  /// there is no selection.
   ///
   /// [format] controls the output encoding:
   /// - [FormatterFormat.plain]: unstyled text, suitable for the clipboard
@@ -185,6 +182,21 @@ abstract class TerminalController extends ChangeNotifier
   /// line without an inserted newline. In block mode, every row is kept
   /// separate regardless of wrapping.
   String selectedText({FormatterFormat format = .plain});
+
+  /// Selects the inclusive range between two terminal cells.
+  ///
+  /// Coordinates are interpreted in [pointTag]. Use [PointTag.screen] for
+  /// rows counted from the top of scrollback through the active screen, or
+  /// [PointTag.viewport] for currently visible rows. When [rectangle] is
+  /// true, the endpoints describe opposite corners of a block selection.
+  void selectRange({
+    required int startRow,
+    required int startCol,
+    required int endRow,
+    required int endCol,
+    PointTag pointTag = .screen,
+    bool rectangle = false,
+  });
 
   /// Encodes a key press and sends it via [onOutput].
   ///

@@ -10,6 +10,7 @@ import 'package:meta/meta.dart';
 
 import '../foundation.dart';
 import '../rendering/kitty_png_decoder.dart';
+import 'selection_gesture_driver.dart';
 import 'terminal_controller.dart';
 import 'terminal_input_client.dart';
 import 'terminal_view_binding.dart';
@@ -35,10 +36,9 @@ class TerminalControllerImpl extends TerminalController
   @override
   final Terminal terminal;
   final _renderState = RenderState();
-  final _rowIterator = RowIterator();
-  final _cellIterator = CellIterator();
   final _keyEncoder = KeyEncoder();
   final _mouseEncoder = MouseEncoder();
+  late final SelectionGestureDriver _selectionGesture;
   final vt.KeyEvent _keyEvent;
   final MouseEvent _mouseEvent;
   final TerminalInputClient _textInput;
@@ -53,6 +53,7 @@ class TerminalControllerImpl extends TerminalController
   Brightness _brightness = .dark;
   var _cursorBlinking = true;
   var _wasFocused = false;
+  var _selectionMutationDepth = 0;
 
   CellMetrics _lastMetrics = const .new(
     cellWidth: 0,
@@ -62,8 +63,9 @@ class TerminalControllerImpl extends TerminalController
   var _lastDevicePixelRatio = 1.0;
 
   FocusNode? _focusNode;
-  TerminalSelection? _selection;
   ScrollController? _scrollController;
+  var _lastCols = 0;
+  var _lastRows = 0;
 
   TerminalControllerImpl({TerminalConfig config = const TerminalConfig()})
     : _config = config,
@@ -76,6 +78,7 @@ class TerminalControllerImpl extends TerminalController
         maxScrollback: config.scrollbackLimit,
       ),
       super.base() {
+    _selectionGesture = SelectionGestureDriver(terminal);
     installDefaultKittyPngDecoder();
     _textInput
       ..onTextCommitted = _handleTextCommitted
@@ -127,6 +130,9 @@ class TerminalControllerImpl extends TerminalController
   bool get hasFocus => _focusNode?.hasFocus ?? false;
 
   @override
+  bool get hasSelection => terminal.selection != null;
+
+  @override
   KeyboardState get keyboardState => _keyboardState;
 
   @override
@@ -143,16 +149,6 @@ class TerminalControllerImpl extends TerminalController
 
   @override
   Scrollbar get scrollbar => terminal.scrollbar;
-
-  @override
-  TerminalSelection? get selection => _selection;
-
-  @override
-  set selection(TerminalSelection? value) {
-    if (_selection == value) return;
-    _selection = value;
-    notifyListeners();
-  }
 
   @override
   String get title => terminal.title;
@@ -196,6 +192,12 @@ class TerminalControllerImpl extends TerminalController
   }
 
   @override
+  void cancelSelectionGesture() {
+    _selectionGesture.reset();
+    _setSelection(null, clearIfNull: true);
+  }
+
+  @override
   void clear() {
     if (_activeScreen == .alternate) return;
     clearSelection();
@@ -204,7 +206,11 @@ class TerminalControllerImpl extends TerminalController
   }
 
   @override
-  void clearSelection() => selection = null;
+  void clearSelection() {
+    if (terminal.selection == null) return;
+    _selectionGesture.reset();
+    _setSelection(null, clearIfNull: true);
+  }
 
   @override
   void clearVirtualMods() {
@@ -249,10 +255,9 @@ class TerminalControllerImpl extends TerminalController
     detach();
     _keyEvent.dispose();
     _mouseEvent.dispose();
+    _selectionGesture.dispose();
     _keyEncoder.dispose();
     _mouseEncoder.dispose();
-    _cellIterator.dispose();
-    _rowIterator.dispose();
     _renderState.dispose();
     terminal.dispose();
     super.dispose();
@@ -263,7 +268,7 @@ class TerminalControllerImpl extends TerminalController
     if (!_hasActiveComposition &&
         (event is KeyDownEvent || event is KeyRepeatEvent) &&
         HardwareKeyboard.instance.isShiftPressed &&
-        _selection != null) {
+        terminal.selection != null) {
       if (_extendSelection(event.logicalKey)) return .handled;
     }
 
@@ -349,6 +354,8 @@ class TerminalControllerImpl extends TerminalController
     required EdgeInsets padding,
     required double devicePixelRatio,
   }) {
+    _lastCols = cols;
+    _lastRows = rows;
     _lastMetrics = metrics;
     _lastDevicePixelRatio = devicePixelRatio;
     final cellWidthPx = (metrics.cellWidth * devicePixelRatio).round();
@@ -412,6 +419,37 @@ class TerminalControllerImpl extends TerminalController
   }
 
   @override
+  void handleSelectionPress({
+    required int row,
+    required int col,
+    required Offset position,
+    required TerminalGestureSettings settings,
+  }) {
+    final ref = _viewportRef(row: row, col: col);
+    if (ref == null) {
+      _setSelection(null, clearIfNull: true);
+      return;
+    }
+
+    var selection = _selectionGesture.press(
+      ref: ref,
+      position: position,
+      settings: settings,
+    );
+    if (selection != null &&
+        settings.lineSelectMode == .full &&
+        _selectionGesture.behavior == .line) {
+      selection = _fullWidthLineSelection(selection);
+    }
+    _setSelection(selection, clearIfNull: true);
+  }
+
+  @override
+  void handleSelectionRelease({required int row, required int col}) {
+    _setSelection(_selectionGesture.release(_viewportRef(row: row, col: col)));
+  }
+
+  @override
   void hideKeyboard() => _updateKeyboardState(.hidden);
 
   @override
@@ -453,129 +491,36 @@ class TerminalControllerImpl extends TerminalController
   }
 
   @override
-  void selectAll() {
-    terminal.scrollToBottom();
-    final scrollbackLen = terminal.scrollbackRows;
-    _renderState.update(terminal);
-    final rows = _renderState.rows;
-    final cols = _renderState.cols;
-
-    var lastScreenRow = -1;
-    var lastContentCol = 0;
-    _rowIterator.reset(_renderState);
-    while (_rowIterator.next() && _rowIterator.index < rows) {
-      final row = _rowIterator.index;
-      var rowLastCol = 0;
-      _cellIterator.reset(_rowIterator);
-      while (_cellIterator.next() && _cellIterator.col < cols) {
-        if (_cellIterator.hasText) rowLastCol = _cellIterator.col + 1;
-      }
-      if (rowLastCol > 0) {
-        lastScreenRow = row;
-        lastContentCol = rowLastCol;
-      }
-    }
-
-    if (lastScreenRow < 0 && scrollbackLen == 0) return;
-
-    final int endRow;
-    final int endCol;
-
-    if (lastScreenRow >= 0) {
-      endRow = scrollbackLen + lastScreenRow;
-      endCol = lastContentCol;
-    } else {
-      endRow = scrollbackLen - 1;
-      endCol = cols;
-    }
-
-    selection = TerminalSelection(
-      startRow: 0,
-      startCol: 0,
-      endRow: endRow,
-      endCol: endCol,
-    );
-  }
+  void selectAll() => _setSelection(terminal.selectAll());
 
   @override
   String selectedText({FormatterFormat format = .plain}) {
-    final selection = _selection;
+    final selection = terminal.selection;
     if (selection == null) return '';
-
-    _renderState.update(terminal);
-    final cols = _renderState.cols;
-    final total = terminal.totalRows;
-    if (cols <= 0 || total <= 0) return '';
-    final topRow = selection.topRow.clamp(0, total - 1);
-    final bottomRow = selection.bottomRow.clamp(0, total - 1);
-    if (topRow > bottomRow) return '';
-
-    final block = selection.mode == .block;
-    final topCol = selection.topCol.clamp(0, cols - 1);
-    final bottomCol = (selection.bottomCol - 1).clamp(0, cols - 1);
-    if (block && topCol > bottomCol) return '';
-
-    final formatter = Formatter(
-      terminal: terminal,
+    final formatted = terminal.formatSelection(
       format: format,
-      unwrap: !block,
-      selection: Selection.fromRefs(
-        start: GridRef.at(
-          terminal,
-          col: topCol,
-          row: topRow,
-          pointTag: .screen,
-        ),
-        end: GridRef.at(
-          terminal,
-          col: bottomCol,
-          row: bottomRow,
-          pointTag: .screen,
-        ),
-        rectangle: block,
+      unwrap: !selection.rectangle,
+      selection: selection,
+    );
+    return formatted ?? '';
+  }
+
+  @override
+  void selectRange({
+    required int startRow,
+    required int startCol,
+    required int endRow,
+    required int endCol,
+    PointTag pointTag = .screen,
+    bool rectangle = false,
+  }) {
+    _setSelection(
+      .fromRefs(
+        start: .at(terminal, col: startCol, row: startRow, pointTag: pointTag),
+        end: .at(terminal, col: endCol, row: endRow, pointTag: pointTag),
+        rectangle: rectangle,
       ),
     );
-
-    try {
-      return formatter.format();
-    } finally {
-      formatter.dispose();
-    }
-  }
-
-  @override
-  void selectLine(int row, LineSelectMode lineSelectMode) {
-    final (:startRow, :endRow, :endCol) = terminal.lineBoundaryAt(row);
-    final int effectiveEndCol;
-    switch (lineSelectMode) {
-      case .full:
-        _renderState.update(terminal);
-        effectiveEndCol = _renderState.cols;
-      case .content:
-        effectiveEndCol = endCol;
-    }
-    selection = TerminalSelection(
-      startRow: startRow,
-      startCol: 0,
-      endRow: endRow,
-      endCol: effectiveEndCol,
-    ).scroll(scrollbar.offset);
-  }
-
-  @override
-  void selectWord(int row, int col) {
-    final adjCol = terminal.snapColToWideBoundary(row, col, inclusive: true);
-    final (startCol, endCol) = terminal.wordBoundaryAt(
-      row,
-      adjCol,
-      wordPattern: _config.wordPattern,
-    );
-    selection = TerminalSelection(
-      startRow: row,
-      startCol: startCol,
-      endRow: row,
-      endCol: endCol,
-    ).scroll(scrollbar.offset);
   }
 
   @override
@@ -618,26 +563,42 @@ class TerminalControllerImpl extends TerminalController
   void unfocus() => _focusNode?.unfocus();
 
   @override
-  void updateSelection(
-    int startRow,
-    int startCol,
-    int endRow,
-    int endCol,
-    TerminalSelectionMode mode,
-  ) {
-    final (sc, ec) = terminal.snapSelectionCols(
-      startRow,
-      startCol,
-      endRow,
-      endCol,
+  void updateSelectionAutoscroll({
+    required int row,
+    required int col,
+    required Offset position,
+    required bool rectangle,
+  }) {
+    if (_lastCols <= 0 || _lastRows <= 0) return;
+    _setSelection(
+      _selectionGesture.autoscroll(
+        row: _clampInt(row, 0, _lastRows - 1),
+        col: _clampInt(col, 0, _lastCols - 1),
+        position: position,
+        rectangle: rectangle,
+        geometry: _selectionGestureGeometry(),
+      ),
     );
-    selection = TerminalSelection(
-      startRow: startRow,
-      startCol: sc,
-      endRow: endRow,
-      endCol: ec,
-      mode: mode,
-    ).scroll(scrollbar.offset);
+    _syncScrollControllerToTerminal();
+  }
+
+  @override
+  void updateSelectionDrag({
+    required int row,
+    required int col,
+    required Offset position,
+    required bool rectangle,
+  }) {
+    final ref = _viewportRef(row: row, col: col);
+    if (ref == null) return;
+    _setSelection(
+      _selectionGesture.drag(
+        ref: ref,
+        position: position,
+        rectangle: rectangle,
+        geometry: _selectionGestureGeometry(),
+      ),
+    );
   }
 
   @override
@@ -671,6 +632,12 @@ class TerminalControllerImpl extends TerminalController
     terminal.defaultCursorShape = _config.cursorStyle;
     terminal.defaultCursorBlink = _config.cursorBlink;
     _cursorBlinking = _effectiveCursorBlinking();
+  }
+
+  int _clampInt(int value, int min, int max) {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
   }
 
   bool _consumeCommittedCompositionEditKey(
@@ -747,23 +714,38 @@ class TerminalControllerImpl extends TerminalController
 
   void _emitOutput(Uint8List bytes) => onOutput?.call(bytes);
 
-  bool _extendSelection(LogicalKeyboardKey arrowKey) {
-    final (dRow, dCol) = switch (arrowKey) {
-      .arrowRight => (0, 1),
-      .arrowLeft => (0, -1),
-      .arrowUp => (-1, 0),
-      .arrowDown => (1, 0),
-      _ => (0, 0),
-    };
-    if (dRow == 0 && dCol == 0) return false;
+  void _ensureGridSize() {
+    if (_lastRows > 0 && _lastCols > 0) return;
     _renderState.update(terminal);
-    selection = _selection!.moveEnd(
-      dRow,
-      dCol,
-      totalCols: _renderState.cols,
-      totalRows: totalRows,
-    );
+    _lastRows = _renderState.rows;
+    _lastCols = _renderState.cols;
+  }
+
+  bool _extendSelection(LogicalKeyboardKey arrowKey) {
+    final SelectionAdjust? adjustment = switch (arrowKey) {
+      .arrowRight => .right,
+      .arrowLeft => .left,
+      .arrowUp => .up,
+      .arrowDown => .down,
+      _ => null,
+    };
+    if (adjustment == null) return false;
+    final selection = terminal.selection;
+    if (selection == null) return false;
+    _setSelection(selection.adjust(adjustment));
     return true;
+  }
+
+  Selection _fullWidthLineSelection(Selection selection) {
+    final start = selection.start.pointIn(.viewport);
+    final end = selection.end.pointIn(.viewport);
+    if (start == null || end == null) return selection;
+    _ensureGridSize();
+    if (_lastCols <= 0) return selection;
+    return Selection.fromRefs(
+      start: .at(terminal, row: start.row, col: 0, pointTag: .viewport),
+      end: .at(terminal, row: end.row, col: _lastCols - 1, pointTag: .viewport),
+    );
   }
 
   void _handleDelete(int count) {
@@ -791,6 +773,11 @@ class TerminalControllerImpl extends TerminalController
     if (_preeditText == text) return;
     _preeditText = text;
     if (text.isNotEmpty) _onTextInput();
+    notifyListeners();
+  }
+
+  void _handlePwdChanged() {
+    onPwdChanged?.call();
     notifyListeners();
   }
 
@@ -822,6 +809,15 @@ class TerminalControllerImpl extends TerminalController
     _emitOutput(utf8.encode(text));
     clearVirtualMods();
     _onTextInput();
+  }
+
+  void _mutateSelection(void Function() mutate) {
+    _selectionMutationDepth++;
+    try {
+      mutate();
+    } finally {
+      _selectionMutationDepth--;
+    }
   }
 
   void _onFocusChanged() {
@@ -876,7 +872,9 @@ class TerminalControllerImpl extends TerminalController
       changed = true;
     }
 
-    _scrollToBottomOnOutput();
+    // terminal.selection uses the same synchronous listener path as output.
+    // Controller-owned selection changes must preserve the scrollback viewport.
+    if (_selectionMutationDepth == 0) _scrollToBottomOnOutput();
     if (changed) notifyListeners();
   }
 
@@ -897,6 +895,35 @@ class TerminalControllerImpl extends TerminalController
     if (policy == .onOutput || policy == .both) scrollToBottom();
   }
 
+  SelectionGestureGeometry _selectionGestureGeometry() {
+    _ensureGridSize();
+    return SelectionGestureGeometry(
+      columns: _lastCols <= 0 ? 1 : _lastCols,
+      cellWidth: _lastMetrics.cellWidth <= 0
+          ? 1
+          : _lastMetrics.cellWidth.round(),
+      paddingLeft: 0,
+      screenHeight: _lastMetrics.cellHeight <= 0
+          ? 1
+          : (_lastMetrics.cellHeight * (_lastRows <= 0 ? 1 : _lastRows))
+                .round(),
+    );
+  }
+
+  void _setSelection(Selection? value, {bool clearIfNull = false}) {
+    if (value == null) {
+      if (!clearIfNull || terminal.selection == null) return;
+      _mutateSelection(() => terminal.selection = null);
+      notifyListeners();
+      return;
+    }
+
+    final current = terminal.selection;
+    if (current != null && current.equal(value)) return;
+    _mutateSelection(() => terminal.selection = value);
+    notifyListeners();
+  }
+
   bool _shouldRouteKeyThroughTextInput({
     required KeyAction action,
     required String? character,
@@ -912,6 +939,19 @@ class TerminalControllerImpl extends TerminalController
     if (action != .press && action != .repeat) return false;
     if (!_virtualMods.isEmpty) return false;
     return !mods.hasCtrl && !mods.hasAlt && !mods.hasSuper;
+  }
+
+  void _syncScrollControllerToTerminal() {
+    final scrollController = _scrollController;
+    if (scrollController == null || !scrollController.hasClients) return;
+    final target = terminal.scrollbar.offset * _lastMetrics.cellHeight;
+    final position = scrollController.position;
+    final clamped = target.clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if (clamped == position.pixels) return;
+    scrollController.jumpTo(clamped);
   }
 
   Future<void> _updateKeyboardState(KeyboardState newState) async {
@@ -936,6 +976,17 @@ class TerminalControllerImpl extends TerminalController
     notifyListeners();
   }
 
+  GridRef? _viewportRef({required int row, required int col}) {
+    _ensureGridSize();
+    if (_lastRows <= 0 || _lastCols <= 0) return null;
+    return .at(
+      terminal,
+      row: _clampInt(row, 0, _lastRows - 1),
+      col: _clampInt(col, 0, _lastCols - 1),
+      pointTag: .viewport,
+    );
+  }
+
   void _wireTerminalCallbacks() {
     terminal.onWritePty = _emitOutput;
     terminal.onBell = () => onBell?.call();
@@ -948,11 +999,6 @@ class TerminalControllerImpl extends TerminalController
     terminal.onEnquiry = enquiry.isEmpty
         ? null
         : () => .fromList(utf8.encode(enquiry));
-  }
-
-  void _handlePwdChanged() {
-    onPwdChanged?.call();
-    notifyListeners();
   }
 
   /// Filters out control characters and macOS function key private-use

@@ -48,7 +48,6 @@ void main() {
         expect(state.rows, 0);
         expect(state.cols, 0);
         expect(state.blinkVisible, isTrue);
-        expect(state.selection, isNull);
         expect(state.viewportOffset, 0);
         expect(state.cursorWide, isFalse);
         expect(state.cursorFocused, isTrue);

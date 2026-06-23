@@ -332,9 +332,6 @@ class _TestRenderObserver implements TerminalRenderObserver {
   bool get hasFocus => true;
 
   @override
-  TerminalSelection? get selection => null;
-
-  @override
   void addListener(VoidCallback listener) {}
 
   @override

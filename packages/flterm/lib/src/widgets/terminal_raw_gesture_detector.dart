@@ -2,33 +2,27 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:meta/meta.dart';
 
-/// Gesture detector that recognizes taps (with multi-tap counting), mouse
-/// drags, and touch long presses.
+/// Gesture detector that recognizes taps, mouse drags, and touch long presses.
 ///
-/// Counts consecutive taps within [kDoubleTapTimeout] and [kDoubleTapSlop]
-/// to distinguish single, double, and triple taps. Drag is restricted to
-/// mouse devices, long press to touch devices.
+/// Drag is restricted to mouse devices, long press to touch devices.
 ///
 /// ```dart
 /// TerminalRawGestureDetector(
-///   onSingleTapDown: (details) => handleTap(details),
-///   onDoubleTapDown: (details) => handleDoubleTap(details),
+///   onTapDown: (details) => handleTapDown(details),
+///   onTapUp: (details) => handleTapUp(details),
 ///   onDragStart: (details) => handleDragStart(details),
 ///   child: Container(),
 /// )
 /// ```
 @internal
-class TerminalRawGestureDetector extends StatefulWidget {
+class TerminalRawGestureDetector extends StatelessWidget {
   final Widget child;
 
-  /// Single tap (first tap, or after triple-tap reset).
-  final GestureTapDownCallback? onSingleTapDown;
+  /// Fires when a tap begins.
+  final GestureTapDownCallback? onTapDown;
 
-  /// Second consecutive tap within [kDoubleTapTimeout].
-  final GestureTapDownCallback? onDoubleTapDown;
-
-  /// Third consecutive tap. Resets the tap count afterward.
-  final GestureTapDownCallback? onTripleTapDown;
+  /// Fires when a tap ends.
+  final GestureTapUpCallback? onTapUp;
 
   /// Fires when a mouse drag begins.
   final GestureDragStartCallback? onDragStart;
@@ -51,9 +45,8 @@ class TerminalRawGestureDetector extends StatefulWidget {
   const TerminalRawGestureDetector({
     super.key,
     required this.child,
-    this.onSingleTapDown,
-    this.onDoubleTapDown,
-    this.onTripleTapDown,
+    this.onTapDown,
+    this.onTapUp,
     this.onDragStart,
     this.onDragUpdate,
     this.onDragEnd,
@@ -61,16 +54,6 @@ class TerminalRawGestureDetector extends StatefulWidget {
     this.onLongPressMoveUpdate,
     this.onLongPressUp,
   });
-
-  @override
-  State<TerminalRawGestureDetector> createState() =>
-      _TerminalRawGestureDetectorState();
-}
-
-class _TerminalRawGestureDetectorState
-    extends State<TerminalRawGestureDetector> {
-  var _tapCount = 0;
-  (DateTime, Offset)? _lastTapUp;
 
   @override
   Widget build(BuildContext context) {
@@ -81,8 +64,8 @@ class _TerminalRawGestureDetectorState
             GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
               () => TapGestureRecognizer(debugOwner: this),
               (instance) => instance
-                ..onTapDown = _handleTapDown
-                ..onTapUp = _handleTapUp,
+                ..onTapDown = onTapDown
+                ..onTapUp = onTapUp,
             ),
         LongPressGestureRecognizer:
             GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
@@ -91,9 +74,9 @@ class _TerminalRawGestureDetectorState
                 supportedDevices: const {PointerDeviceKind.touch},
               ),
               (instance) => instance
-                ..onLongPressStart = _handleLongPressStart
-                ..onLongPressMoveUpdate = widget.onLongPressMoveUpdate
-                ..onLongPressUp = widget.onLongPressUp,
+                ..onLongPressStart = onLongPressStart?.call
+                ..onLongPressMoveUpdate = onLongPressMoveUpdate
+                ..onLongPressUp = onLongPressUp,
             ),
         PanGestureRecognizer:
             GestureRecognizerFactoryWithHandlers<PanGestureRecognizer>(
@@ -104,47 +87,14 @@ class _TerminalRawGestureDetectorState
               (instance) {
                 instance
                   ..dragStartBehavior = .down
-                  ..onStart = widget.onDragStart
-                  ..onUpdate = widget.onDragUpdate
-                  ..onEnd = (_) => widget.onDragEnd?.call();
-                instance.onCancel = () => widget.onDragEnd?.call();
+                  ..onStart = onDragStart
+                  ..onUpdate = onDragUpdate
+                  ..onEnd = (_) => onDragEnd?.call();
+                instance.onCancel = () => onDragEnd?.call();
               },
             ),
       },
-      child: widget.child,
+      child: child,
     );
-  }
-
-  void _countTap(Offset position) {
-    if (_lastTapUp case (final time, final pos)
-        when DateTime.now().difference(time) < kDoubleTapTimeout &&
-            (position - pos).distance < kDoubleTapSlop) {
-      _tapCount++;
-    } else {
-      _tapCount = 1;
-    }
-  }
-
-  void _handleLongPressStart(LongPressStartDetails details) {
-    _tapCount = 0;
-    _lastTapUp = null;
-    widget.onLongPressStart?.call(details);
-  }
-
-  void _handleTapDown(TapDownDetails details) {
-    _countTap(details.localPosition);
-    switch (_tapCount) {
-      case >= 3:
-        _tapCount = 0;
-        widget.onTripleTapDown?.call(details);
-      case 2:
-        widget.onDoubleTapDown?.call(details);
-      default:
-        widget.onSingleTapDown?.call(details);
-    }
-  }
-
-  void _handleTapUp(TapUpDetails details) {
-    _lastTapUp = (DateTime.now(), details.localPosition);
   }
 }

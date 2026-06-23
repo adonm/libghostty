@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flterm/src/foundation/cell_metrics.dart';
-import 'package:flterm/src/foundation/terminal_selection.dart';
 import 'package:flterm/src/foundation/terminal_theme.dart';
 import 'package:flterm/src/rendering/atlas/atlas.dart';
 import 'package:flterm/src/rendering/paint_state.dart';
@@ -88,19 +87,16 @@ void main() {
       paint(pipeline);
     });
 
-    test('selection dirtying can repaint without terminal changes', () {
+    test('selection changes repaint through terminal dirty state', () {
       writeUtf8(terminal, 'hello');
       pipeline.sync(terminal, terminalDirty: true);
 
-      state.selection = const TerminalSelection(
-        startRow: 0,
-        startCol: 1,
-        endRow: 0,
-        endCol: 3,
+      terminal.selection = Selection.fromRefs(
+        start: GridRef.at(terminal, row: 0, col: 1),
+        end: GridRef.at(terminal, row: 0, col: 2),
       );
-      pipeline.markSelectionRowsDirty(state.selection, viewportOffset: 0);
 
-      pipeline.sync(terminal, terminalDirty: false);
+      pipeline.sync(terminal, terminalDirty: true);
 
       paint(pipeline);
     });

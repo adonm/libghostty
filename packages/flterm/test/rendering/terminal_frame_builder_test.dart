@@ -7,7 +7,6 @@ import 'dart:ui';
 
 import 'package:flterm/src/foundation/cell_metrics.dart';
 import 'package:flterm/src/foundation/dynamic_color.dart';
-import 'package:flterm/src/foundation/terminal_selection.dart';
 import 'package:flterm/src/foundation/terminal_theme.dart';
 import 'package:flterm/src/rendering/atlas/atlas.dart';
 import 'package:flterm/src/rendering/atlas/sprite_buffer.dart';
@@ -272,11 +271,9 @@ void main() {
       'sync emits selection background without terminal access in paint',
       () {
         writeUtf8(terminal, 'hello');
-        state.selection = const TerminalSelection(
-          startRow: 0,
-          startCol: 1,
-          endRow: 0,
-          endCol: 3,
+        terminal.selection = Selection.fromRefs(
+          start: GridRef.at(terminal, row: 0, col: 1),
+          end: GridRef.at(terminal, row: 0, col: 2),
         );
 
         builder.sync(terminal, terminalDirty: true);

@@ -121,8 +121,8 @@ void main() {
       });
     });
 
-    group('updateSelection', () {
-      test('creates selection with wide char snapping', () {
+    group('selection drag', () {
+      test('updates terminal selection', () {
         final custom = TerminalControllerImpl(
           config: const TerminalConfig(cols: 20, rows: 5),
         );
@@ -130,12 +130,32 @@ void main() {
         final customBinding = custom as TerminalViewBinding;
 
         custom.terminal.write(Uint8List.fromList(utf8.encode('AB日CD')));
+        customBinding.handleResize(
+          cols: 20,
+          rows: 5,
+          metrics: const CellMetrics(
+            cellWidth: 8,
+            cellHeight: 16,
+            baseline: 12,
+          ),
+          padding: EdgeInsets.zero,
+          devicePixelRatio: 1.0,
+        );
 
-        customBinding.updateSelection(0, 3, 0, 5, .normal);
+        customBinding.handleSelectionPress(
+          row: 0,
+          col: 2,
+          position: const Offset(16, 0),
+          settings: const TerminalGestureSettings(),
+        );
+        customBinding.updateSelectionDrag(
+          row: 0,
+          col: 4,
+          position: const Offset(32, 0),
+          rectangle: false,
+        );
 
-        final sel = custom.selection!;
-        expect(sel.startCol, 2);
-        expect(sel.endCol, 5);
+        expect(custom.selectedText(), '日');
       });
     });
 
@@ -170,12 +190,7 @@ void main() {
       });
 
       test('clears selection on typing when enabled', () {
-        controller.selection = const TerminalSelection(
-          startRow: 0,
-          startCol: 0,
-          endRow: 0,
-          endCol: 5,
-        );
+        controller.selectRange(startRow: 0, startCol: 0, endRow: 0, endCol: 4);
         controller.onOutput = (_) {};
 
         binding.handleKeyEvent(
@@ -187,7 +202,7 @@ void main() {
           ),
         );
 
-        expect(controller.selection, isNull);
+        expect(controller.hasSelection, isFalse);
       });
 
       test('scrolls to bottom on input', () {

@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart';
 
 import 'helpers/font_loader.dart';
+import 'helpers/test_selection.dart';
 
 void main() {
   setUpAll(loadBundledFonts);
@@ -71,7 +72,7 @@ void main() {
       Terminal terminal, {
       TerminalTheme? theme,
       CellMetrics metrics = defaultMetrics,
-      TerminalSelection? selection,
+      TestSelection? selection,
       double? maxWidth,
       double? maxHeight,
       bool focused = true,
@@ -79,6 +80,7 @@ void main() {
       String preeditText = '',
       OnResize? onResize,
     }) {
+      selection?.applyTo(terminal);
       final width = maxWidth ?? defaultCols * metrics.cellWidth;
       final height = maxHeight ?? defaultRows * metrics.cellHeight;
       return Directionality(
@@ -97,10 +99,7 @@ void main() {
               metrics: metrics,
               offset: ViewportOffset.zero(),
               renderCache: renderCache(),
-              renderObserver: _TestRenderObserver(
-                selection: selection,
-                hasFocus: focused,
-              ),
+              renderObserver: _TestRenderObserver(hasFocus: focused),
               blinkVisible: blinkVisible,
               preeditText: preeditText,
               onResize: onResize,
@@ -131,7 +130,7 @@ void main() {
     Future<void> pump(
       WidgetTester tester, {
       TerminalTheme? overrideTheme,
-      TerminalSelection? selection,
+      TestSelection? selection,
     }) async {
       tester.view.devicePixelRatio = 1.0;
       await tester.pumpWidget(
@@ -397,11 +396,11 @@ void main() {
         writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
             startCol: 0,
             endRow: 0,
-            endCol: 5,
+            endCol: 4,
           ),
         );
         await expectLater(
@@ -414,11 +413,11 @@ void main() {
         writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
             startCol: 5,
             endRow: 1,
-            endCol: 4,
+            endCol: 3,
           ),
         );
         await expectLater(
@@ -431,9 +430,9 @@ void main() {
         writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
-            startCol: 5,
+            startCol: 4,
             endRow: 0,
             endCol: 0,
           ),
@@ -448,11 +447,11 @@ void main() {
         writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
             startCol: 5,
             endRow: 2,
-            endCol: 4,
+            endCol: 3,
           ),
         );
         await expectLater(
@@ -465,9 +464,9 @@ void main() {
         writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 2,
-            startCol: 4,
+            startCol: 3,
             endRow: 0,
             endCol: 5,
           ),
@@ -482,11 +481,11 @@ void main() {
         writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
             startCol: 0,
             endRow: 0,
-            endCol: defaultCols,
+            endCol: defaultCols - 1,
           ),
         );
         await expectLater(
@@ -499,11 +498,11 @@ void main() {
         writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
             startCol: 3,
             endRow: 0,
-            endCol: 4,
+            endCol: 3,
           ),
         );
         await expectLater(
@@ -516,11 +515,11 @@ void main() {
         writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
             startCol: 0,
             endRow: 2,
-            endCol: 4,
+            endCol: 3,
           ),
         );
         await expectLater(
@@ -533,11 +532,11 @@ void main() {
         writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
             startCol: 5,
             endRow: 2,
-            endCol: defaultCols,
+            endCol: defaultCols - 1,
           ),
         );
         await expectLater(
@@ -550,11 +549,11 @@ void main() {
         writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: -1,
             startCol: -2,
             endRow: 1,
-            endCol: 30,
+            endCol: 29,
           ),
         );
         await expectLater(
@@ -569,12 +568,12 @@ void main() {
         writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
             startCol: 2,
             endRow: 0,
-            endCol: 7,
-            mode: TerminalSelectionMode.block,
+            endCol: 6,
+            rectangle: true,
           ),
         );
         await expectLater(
@@ -587,12 +586,12 @@ void main() {
         writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
             startCol: 2,
             endRow: 2,
-            endCol: 7,
-            mode: TerminalSelectionMode.block,
+            endCol: 6,
+            rectangle: true,
           ),
         );
         await expectLater(
@@ -605,12 +604,12 @@ void main() {
         writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 2,
-            startCol: 7,
+            startCol: 6,
             endRow: 0,
             endCol: 2,
-            mode: TerminalSelectionMode.block,
+            rectangle: true,
           ),
         );
         await expectLater(
@@ -623,12 +622,12 @@ void main() {
         writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
             startCol: 3,
             endRow: 0,
-            endCol: 4,
-            mode: TerminalSelectionMode.block,
+            endCol: 3,
+            rectangle: true,
           ),
         );
         await expectLater(
@@ -641,12 +640,12 @@ void main() {
         writeUtf8(terminal, 'Hello, World!');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
-            startCol: 7,
+            startCol: 6,
             endRow: 0,
             endCol: 2,
-            mode: TerminalSelectionMode.block,
+            rectangle: true,
           ),
         );
         await expectLater(
@@ -659,12 +658,12 @@ void main() {
         writeUtf8(terminal, 'Line one\r\nLine two\r\nLine three');
         await pump(
           tester,
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: -1,
             startCol: 2,
             endRow: 5,
-            endCol: 7,
-            mode: TerminalSelectionMode.block,
+            endCol: 6,
+            rectangle: true,
           ),
         );
         await expectLater(
@@ -718,11 +717,11 @@ void main() {
               background: DynamicColor.fixed(Color(0x80FF0000)),
             ),
           ),
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
             startCol: 0,
             endRow: 0,
-            endCol: 13,
+            endCol: 12,
           ),
         );
         await expectLater(
@@ -811,11 +810,11 @@ void main() {
               foreground: DynamicColor.fixed(Color(0xFFFFFF00)),
             ),
           ),
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
             startCol: 0,
             endRow: 0,
-            endCol: 9,
+            endCol: 8,
           ),
         );
         await expectLater(
@@ -836,11 +835,11 @@ void main() {
               foreground: DynamicColor.cellBackground(),
             ),
           ),
-          selection: const TerminalSelection(
+          selection: const TestSelection(
             startRow: 0,
             startCol: 0,
             endRow: 0,
-            endCol: 2,
+            endCol: 1,
           ),
         );
         await expectLater(
@@ -965,12 +964,9 @@ void main() {
 
 class _TestRenderObserver implements TerminalRenderObserver {
   @override
-  final TerminalSelection? selection;
-
-  @override
   final bool hasFocus;
 
-  const _TestRenderObserver({this.selection, this.hasFocus = true});
+  const _TestRenderObserver({this.hasFocus = true});
 
   @override
   void addListener(VoidCallback listener) {}

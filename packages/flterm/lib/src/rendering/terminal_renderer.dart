@@ -52,10 +52,10 @@ class TerminalRenderer extends LeafRenderObjectWidget {
   /// At `pixels == maxScrollExtent`, the live screen is visible.
   final ViewportOffset offset;
 
-  /// Observable state for selection and focus.
+  /// Observable focus state.
   ///
   /// Listened to by the render box. Changes trigger a repaint to update
-  /// selection highlights and cursor appearance (filled vs hollow).
+  /// cursor appearance (filled vs hollow).
   final TerminalRenderObserver renderObserver;
 
   /// Whether the cursor blink is currently in the visible phase.
@@ -111,12 +111,6 @@ class TerminalRenderer extends LeafRenderObjectWidget {
       ..add(DiagnosticsProperty<Terminal>('terminal', terminal))
       ..add(DiagnosticsProperty<TerminalTheme>('theme', theme))
       ..add(DiagnosticsProperty<CellMetrics>('metrics', metrics))
-      ..add(
-        DiagnosticsProperty<TerminalSelection?>(
-          'selection',
-          renderObserver.selection,
-        ),
-      )
       ..add(DiagnosticsProperty<ViewportOffset>('offset', offset))
       ..add(
         FlagProperty(
@@ -191,7 +185,6 @@ class TerminalRenderBox extends RenderBox {
     this._onResize,
   }) : _paintState = TerminalPaintState(theme, metrics)
          ..blinkVisible = blinkVisible
-         ..selection = _renderObserver.selection
          ..cursorFocused = _renderObserver.hasFocus {
     _atlasHandle = _renderCache.acquireAtlas(
       .fromTheme(
@@ -337,12 +330,6 @@ class TerminalRenderBox extends RenderBox {
       ..add(IntProperty('rows', _paintState.rows))
       ..add(DiagnosticsProperty<TerminalTheme>('theme', _paintState.theme))
       ..add(DiagnosticsProperty<CellMetrics>('metrics', _paintState.metrics))
-      ..add(
-        DiagnosticsProperty<TerminalSelection?>(
-          'selection',
-          _paintState.selection,
-        ),
-      )
       ..add(
         FlagProperty(
           'blinkVisible',
@@ -494,21 +481,7 @@ class TerminalRenderBox extends RenderBox {
   }
 
   void _onRenderObserverChanged() {
-    final previousSelection = _paintState.selection;
-    final newSelection = _renderObserver.selection;
-    _paintState.selection = newSelection;
     _paintState.cursorFocused = _renderObserver.hasFocus;
-    if (previousSelection != newSelection) {
-      final viewportOffset = _terminal.scrollbar.offset;
-      _pipeline.markSelectionRowsDirty(
-        previousSelection,
-        viewportOffset: viewportOffset,
-      );
-      _pipeline.markSelectionRowsDirty(
-        newSelection,
-        viewportOffset: viewportOffset,
-      );
-    }
     _pipeline.refreshCursorGlyph();
     markNeedsPaint();
   }

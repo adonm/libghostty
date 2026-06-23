@@ -105,7 +105,7 @@ class TerminalShortcutScope extends StatelessWidget {
       child: Actions(
         actions: <Type, Action<Intent>>{
           CopyIntent: _ConditionalAction<CopyIntent>(
-            isEnabledFn: () => controller.selection != null,
+            isEnabledFn: () => controller.hasSelection,
             onInvokeFn: () {
               final text = controller.selectedText();
               if (text.isNotEmpty) {
