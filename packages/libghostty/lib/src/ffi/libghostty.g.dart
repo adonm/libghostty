@@ -3379,7 +3379,7 @@ Result ghostty_terminal_grid_ref(
   ffi.Pointer<GridRef> out_ref,
 ) => Result.fromValue(_ghostty_terminal_grid_ref(terminal, point, out_ref));
 
-/// Create an owned tracked grid reference for a terminal point.
+/// Create an owned tracked grid reference for a position.
 ///
 /// This is the tracked variant of ghostty_terminal_grid_ref(). The returned
 /// handle follows the referenced cell as the terminal's page list is modified:
@@ -3837,7 +3837,7 @@ Result ghostty_terminal_selection_adjust(
   _ghostty_terminal_selection_adjust(terminal, selection, adjustment.value),
 );
 
-/// Test whether a terminal point is inside a selection snapshot.
+/// Test whether a position is inside a selection snapshot.
 ///
 /// This uses the same selection semantics as the terminal, including
 /// rectangular/block selections and linear selections spanning multiple rows.
@@ -4267,7 +4267,7 @@ Result ghostty_tracked_grid_ref_point(
   _ghostty_tracked_grid_ref_point(ref, tag.value, out_point),
 );
 
-/// Move an existing tracked grid reference to a new terminal point.
+/// Move an existing tracked grid reference to a new position.
 ///
 /// On success, the tracked reference begins tracking the new point and any prior
 /// "no value" state is cleared. On GHOSTTY_OUT_OF_MEMORY, the original tracked

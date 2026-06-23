@@ -477,7 +477,11 @@ void main() {
 
     group('handles', () {
       test('return selected cell and row', () {
-        final (_, ref) = bindings.terminalGridRef(terminal, .active, 0, 0);
+        final (_, ref) = bindings.terminalGridRef(
+          terminal,
+          .active,
+          const Position(row: 0, col: 0),
+        );
 
         final (_, cell) = bindings.gridRefCell(ref);
         expect(bindings.cellGetCodepoint(cell).$2, 'H'.codeUnitAt(0));
@@ -495,7 +499,11 @@ void main() {
           t,
           Uint8List.fromList('\x1b[1mBold'.codeUnits),
         );
-        final (_, ref) = bindings.terminalGridRef(t, .active, 0, 0);
+        final (_, ref) = bindings.terminalGridRef(
+          t,
+          .active,
+          const Position(row: 0, col: 0),
+        );
         final (_, style) = bindings.gridRefStyle(ref);
         expect(style.bold, isTrue);
       });
@@ -503,7 +511,11 @@ void main() {
 
     group('gridRefGraphemes', () {
       test('returns codepoints', () {
-        final (_, ref) = bindings.terminalGridRef(terminal, .active, 0, 0);
+        final (_, ref) = bindings.terminalGridRef(
+          terminal,
+          .active,
+          const Position(row: 0, col: 0),
+        );
         final (_, graphemes) = bindings.gridRefGraphemes(ref);
         expect(graphemes, contains('H'.codeUnitAt(0)));
       });
@@ -514,8 +526,7 @@ void main() {
         final (_, tracked) = bindings.terminalGridRefTrack(
           terminal,
           .active,
-          1,
-          0,
+          const Position(row: 0, col: 1),
         );
         addTearDown(() => bindings.trackedGridRefFree(tracked));
 
@@ -531,14 +542,13 @@ void main() {
         final (_, tracked) = bindings.terminalGridRefTrack(
           terminal,
           .active,
-          2,
-          0,
+          const Position(row: 0, col: 2),
         );
         addTearDown(() => bindings.trackedGridRefFree(tracked));
 
-        final (_, point) = bindings.trackedGridRefPoint(tracked, .active);
+        final (_, position) = bindings.trackedGridRefPoint(tracked, .active);
 
-        expect(point, (col: 2, row: 0));
+        expect(position, const Position(row: 0, col: 2));
       });
     });
 
@@ -547,15 +557,21 @@ void main() {
         final (_, tracked) = bindings.terminalGridRefTrack(
           terminal,
           .active,
-          2,
-          0,
+          const Position(row: 0, col: 2),
         );
         addTearDown(() => bindings.trackedGridRefFree(tracked));
 
-        checkCode(bindings.trackedGridRefSet(tracked, terminal, .active, 3, 0));
-        final (_, point) = bindings.trackedGridRefPoint(tracked, .active);
+        checkCode(
+          bindings.trackedGridRefSet(
+            tracked,
+            terminal,
+            .active,
+            const Position(row: 0, col: 3),
+          ),
+        );
+        final (_, position) = bindings.trackedGridRefPoint(tracked, .active);
 
-        expect(point, (col: 3, row: 0));
+        expect(position, const Position(row: 0, col: 3));
       });
     });
   });
@@ -751,7 +767,11 @@ void main() {
 
     group('gridRefHyperlinkUri', () {
       test('returns empty string for cell without hyperlink', () {
-        final (_, ref) = bindings.terminalGridRef(terminal, .active, 0, 0);
+        final (_, ref) = bindings.terminalGridRef(
+          terminal,
+          .active,
+          const Position(row: 0, col: 0),
+        );
         final (code, uri) = bindings.gridRefHyperlinkUri(ref);
         expect(code, Result.success);
         expect(uri, isEmpty);
@@ -759,7 +779,7 @@ void main() {
     });
   });
 
-  group('terminal point from grid ref', () {
+  group('position from grid ref', () {
     late int terminal;
 
     setUp(() {
@@ -772,15 +792,18 @@ void main() {
 
     group('terminalPointFromGridRef', () {
       test('roundtrips active coordinates', () {
-        final (_, ref) = bindings.terminalGridRef(terminal, .active, 3, 0);
-        final (code, point) = bindings.terminalPointFromGridRef(
+        final (_, ref) = bindings.terminalGridRef(
+          terminal,
+          .active,
+          const Position(row: 0, col: 3),
+        );
+        final (code, position) = bindings.terminalPointFromGridRef(
           terminal,
           ref,
           .active,
         );
         expect(code, Result.success);
-        expect(point.col, 3);
-        expect(point.row, 0);
+        expect(position, const Position(row: 0, col: 3));
       });
     });
   });
@@ -860,8 +883,16 @@ void main() {
           t,
           Uint8List.fromList('ABCDE\r\nFGHIJ'.codeUnits),
         );
-        final (_, startRef) = bindings.terminalGridRef(t, .active, 0, 0);
-        final (_, endRef) = bindings.terminalGridRef(t, .active, 2, 0);
+        final (_, startRef) = bindings.terminalGridRef(
+          t,
+          .active,
+          const Position(row: 0, col: 0),
+        );
+        final (_, endRef) = bindings.terminalGridRef(
+          t,
+          .active,
+          const Position(row: 0, col: 2),
+        );
         final (_, formatter) = bindings.formatterTerminalNew(
           t,
           .plain,
@@ -924,8 +955,16 @@ int _selectedRowIterator(int row) {
     terminal,
     Uint8List.fromList('ABCDE\r\nFGHIJ'.codeUnits),
   );
-  final (_, start) = bindings.terminalGridRef(terminal, .active, 1, 1);
-  final (_, end) = bindings.terminalGridRef(terminal, .active, 3, 1);
+  final (_, start) = bindings.terminalGridRef(
+    terminal,
+    .active,
+    const Position(row: 1, col: 1),
+  );
+  final (_, end) = bindings.terminalGridRef(
+    terminal,
+    .active,
+    const Position(row: 1, col: 3),
+  );
   checkCode(
     bindings.terminalSetSelection(terminal, (
       start: start,
@@ -954,8 +993,16 @@ int _selectedRowCells(int col) {
     terminal,
     Uint8List.fromList('ABCDE\r\nFGHIJ'.codeUnits),
   );
-  final (_, start) = bindings.terminalGridRef(terminal, .active, 1, 1);
-  final (_, end) = bindings.terminalGridRef(terminal, .active, 3, 1);
+  final (_, start) = bindings.terminalGridRef(
+    terminal,
+    .active,
+    const Position(row: 1, col: 1),
+  );
+  final (_, end) = bindings.terminalGridRef(
+    terminal,
+    .active,
+    const Position(row: 1, col: 3),
+  );
   checkCode(
     bindings.terminalSetSelection(terminal, (
       start: start,

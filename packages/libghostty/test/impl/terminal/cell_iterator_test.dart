@@ -7,6 +7,7 @@ import 'package:libghostty/libghostty.dart'
     show
         CellIterator,
         GridRef,
+        Position,
         RenderState,
         RowIterator,
         Selection,
@@ -37,8 +38,8 @@ void main() {
 
     void installSelection() {
       terminal.selection = Selection.fromRefs(
-        start: GridRef.at(terminal, col: 1, row: 1),
-        end: GridRef.at(terminal, col: 3, row: 1),
+        start: GridRef.at(terminal, const Position(row: 1, col: 1)),
+        end: GridRef.at(terminal, const Position(row: 1, col: 3)),
       );
     }
 

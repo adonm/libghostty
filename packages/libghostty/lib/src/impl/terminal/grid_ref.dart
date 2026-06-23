@@ -10,7 +10,7 @@ part of 'terminal.dart';
 /// [CellIterator] for performance-critical rendering.
 ///
 /// ```dart
-/// final ref = GridRef.at(terminal, col: 0, row: 0);
+/// final ref = GridRef.at(terminal, const Position(row: 0, col: 0));
 /// print(ref.content);
 /// print(ref.style);
 /// ```
@@ -19,7 +19,7 @@ final class GridRef {
   final RawGridRef _value;
   final Terminal _terminal;
 
-  /// Resolves the grid cell at ([col], [row]) in the coordinate space
+  /// Resolves the grid cell at [position] in the coordinate space
   /// identified by [pointTag].
   ///
   /// [PointTag.active] and [PointTag.viewport] are fast lookups;
@@ -29,21 +29,16 @@ final class GridRef {
   ///
   /// Throws [InvalidValueException] if the coordinates are out of range.
   factory GridRef.at(
-    Terminal terminal, {
-    required int col,
-    required int row,
+    Terminal terminal,
+    Position position, {
     PointTag pointTag = .active,
-  }) => GridRef._(terminal, col: col, row: row, pointTag: pointTag);
+  }) => GridRef._(terminal, position, pointTag: pointTag);
 
-  GridRef._(
-    Terminal terminal, {
-    required int col,
-    required int row,
-    PointTag pointTag = .active,
-  }) : this._fromValue(
-         terminal,
-         check(bindings.terminalGridRef(terminal._handle, pointTag, col, row)),
-       );
+  GridRef._(Terminal terminal, Position position, {PointTag pointTag = .active})
+    : this._fromValue(
+        terminal,
+        check(bindings.terminalGridRef(terminal._handle, pointTag, position)),
+      );
 
   const GridRef._fromValue(this._terminal, this._value);
 
@@ -100,15 +95,15 @@ final class GridRef {
   /// space. Returns null if the reference falls outside the requested
   /// system (e.g. a scrollback row cannot be expressed in active
   /// coordinates).
-  ({int col, int row})? pointIn(PointTag pointTag) {
-    final (code, point) = bindings.terminalPointFromGridRef(
+  Position? positionIn(PointTag pointTag) {
+    final (code, position) = bindings.terminalPointFromGridRef(
       _terminal._handle,
       _value,
       pointTag,
     );
     if (code == Result.noValue) return null;
     checkCode(code);
-    return point;
+    return position;
   }
 
   @override

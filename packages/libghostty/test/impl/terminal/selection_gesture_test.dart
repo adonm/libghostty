@@ -27,8 +27,8 @@ void main() {
         addTearDown(press.dispose);
         final drag = SelectionGestureEvent.drag();
         addTearDown(drag.dispose);
-        press.setRef(GridRef.at(terminal, col: 0, row: 0));
-        drag.setRef(GridRef.at(terminal, col: 2, row: 0));
+        press.setRef(GridRef.at(terminal, const Position(row: 0, col: 0)));
+        drag.setRef(GridRef.at(terminal, const Position(row: 0, col: 2)));
         drag.setGeometry(
           const SelectionGestureGeometry(
             columns: 80,
@@ -52,7 +52,7 @@ void main() {
         addTearDown(gesture.dispose);
         final press = SelectionGestureEvent.press();
         addTearDown(press.dispose);
-        press.setRef(GridRef.at(terminal, col: 0, row: 0));
+        press.setRef(GridRef.at(terminal, const Position(row: 0, col: 0)));
 
         gesture.apply(press);
 
@@ -65,7 +65,7 @@ void main() {
         addTearDown(gesture.dispose);
         final press = SelectionGestureEvent.press();
         addTearDown(press.dispose);
-        press.setRef(GridRef.at(terminal, col: 0, row: 0));
+        press.setRef(GridRef.at(terminal, const Position(row: 0, col: 0)));
         press.setBehaviors(
           const SelectionGestureBehaviors(
             singleClick: .line,
@@ -87,7 +87,7 @@ void main() {
         addTearDown(gesture.dispose);
         final press = SelectionGestureEvent.press();
         addTearDown(press.dispose);
-        press.setRef(GridRef.at(terminal, col: 0, row: 0));
+        press.setRef(GridRef.at(terminal, const Position(row: 0, col: 0)));
         gesture.apply(press);
 
         gesture.reset();
@@ -108,7 +108,7 @@ void main() {
         final gesture = SelectionGesture(terminal);
         final press = SelectionGestureEvent.press();
         addTearDown(press.dispose);
-        press.setRef(GridRef.at(terminal, col: 0, row: 0));
+        press.setRef(GridRef.at(terminal, const Position(row: 0, col: 0)));
         gesture.apply(press);
 
         terminal.dispose();
@@ -124,7 +124,7 @@ void main() {
         addTearDown(gesture.dispose);
         final press = SelectionGestureEvent.press();
         addTearDown(press.dispose);
-        press.setRef(GridRef.at(terminal, col: 0, row: 0));
+        press.setRef(GridRef.at(terminal, const Position(row: 0, col: 0)));
         press.setPosition(4, 8);
         press.setRepeatDistance(12);
         press.setRepeatIntervalNs(500);
@@ -144,8 +144,8 @@ void main() {
         addTearDown(press.dispose);
         final drag = SelectionGestureEvent.drag();
         addTearDown(drag.dispose);
-        press.setRef(GridRef.at(terminal, col: 0, row: 0));
-        drag.setRef(GridRef.at(terminal, col: 2, row: 1));
+        press.setRef(GridRef.at(terminal, const Position(row: 0, col: 0)));
+        drag.setRef(GridRef.at(terminal, const Position(row: 1, col: 2)));
         drag.setRectangle(value: true);
         drag.setGeometry(
           const SelectionGestureGeometry(

@@ -321,16 +321,14 @@ abstract interface class GhosttyBindings {
   CResult<RawGridRef> terminalGridRef(
     int terminal,
     PointTag pointTag,
-    int x,
-    int y,
+    Position position,
   );
   CResult<int> terminalGridRefTrack(
     int terminal,
     PointTag pointTag,
-    int x,
-    int y,
+    Position position,
   );
-  CResult<({int col, int row})> terminalPointFromGridRef(
+  CResult<Position> terminalPointFromGridRef(
     int terminal,
     RawGridRef ref,
     PointTag pointTag,
@@ -342,13 +340,12 @@ abstract interface class GhosttyBindings {
   CResult<String> gridRefHyperlinkUri(RawGridRef ref);
   void trackedGridRefFree(int ref);
   bool trackedGridRefHasValue(int ref);
-  CResult<({int col, int row})> trackedGridRefPoint(int ref, PointTag pointTag);
+  CResult<Position> trackedGridRefPoint(int ref, PointTag pointTag);
   Result trackedGridRefSet(
     int ref,
     int terminal,
     PointTag pointTag,
-    int x,
-    int y,
+    Position position,
   );
   CResult<RawGridRef> trackedGridRefSnapshot(int ref);
 
@@ -391,8 +388,7 @@ abstract interface class GhosttyBindings {
     int terminal,
     RawSelection selection,
     PointTag pointTag,
-    int col,
-    int row,
+    Position position,
   );
   CResult<bool> terminalSelectionEqual(
     int terminal,
@@ -446,8 +442,7 @@ abstract interface class GhosttyBindings {
   });
   Result selectionGestureEventSetViewport(
     int event, {
-    required int col,
-    required int row,
+    required Position position,
   });
   CResult<int> selectionGestureGetClickCount(int gesture, int terminal);
   CResult<bool> selectionGestureGetDragged(int gesture, int terminal);

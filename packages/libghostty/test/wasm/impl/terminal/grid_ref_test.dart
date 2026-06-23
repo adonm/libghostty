@@ -4,7 +4,7 @@ library;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:libghostty/libghostty.dart'
-    show CellWidth, GridRef, InvalidValueException, Style, Terminal;
+    show CellWidth, GridRef, InvalidValueException, Position, Style, Terminal;
 import 'package:test/test.dart';
 
 import '../../helpers/setup.dart';
@@ -26,7 +26,7 @@ void main() {
 
     group('at', () {
       test('returns content for a resolved cell', () {
-        final ref = GridRef.at(terminal, col: 0, row: 0);
+        final ref = GridRef.at(terminal, const Position(row: 0, col: 0));
 
         final result = ref.content;
 
@@ -34,7 +34,7 @@ void main() {
       });
 
       test('returns empty content for an empty cell', () {
-        final ref = GridRef.at(terminal, col: 79, row: 23);
+        final ref = GridRef.at(terminal, const Position(row: 23, col: 79));
 
         final result = ref.content;
 
@@ -43,7 +43,7 @@ void main() {
 
       test('throws for an out of range column', () {
         expect(
-          () => GridRef.at(terminal, col: 80, row: 0),
+          () => GridRef.at(terminal, const Position(row: 0, col: 80)),
           throwsA(isA<InvalidValueException>()),
         );
       });
@@ -51,7 +51,7 @@ void main() {
 
     group('cell', () {
       test('returns a cell handle', () {
-        final ref = GridRef.at(terminal, col: 0, row: 0);
+        final ref = GridRef.at(terminal, const Position(row: 0, col: 0));
 
         final result = ref.cell;
 
@@ -61,7 +61,7 @@ void main() {
 
     group('row', () {
       test('returns a row handle', () {
-        final ref = GridRef.at(terminal, col: 0, row: 0);
+        final ref = GridRef.at(terminal, const Position(row: 0, col: 0));
 
         final result = ref.row;
 
@@ -72,7 +72,7 @@ void main() {
     group('style', () {
       test('returns the cell style', () {
         terminal.write(Uint8List.fromList('\x1b[1mB'.codeUnits));
-        final ref = GridRef.at(terminal, col: 5, row: 0);
+        final ref = GridRef.at(terminal, const Position(row: 0, col: 5));
 
         final result = ref.style;
 
@@ -81,7 +81,7 @@ void main() {
 
       test('reflects bold text', () {
         terminal.write(Uint8List.fromList('\x1b[1mB'.codeUnits));
-        final ref = GridRef.at(terminal, col: 5, row: 0);
+        final ref = GridRef.at(terminal, const Position(row: 0, col: 5));
 
         final result = ref.style.bold;
 
@@ -91,7 +91,7 @@ void main() {
 
     group('graphemes', () {
       test('returns the cell codepoints', () {
-        final ref = GridRef.at(terminal, col: 0, row: 0);
+        final ref = GridRef.at(terminal, const Position(row: 0, col: 0));
 
         final result = ref.graphemes;
 
@@ -101,7 +101,7 @@ void main() {
 
     group('hyperlinkUri', () {
       test('returns null when the cell has no hyperlink', () {
-        final ref = GridRef.at(terminal, col: 0, row: 0);
+        final ref = GridRef.at(terminal, const Position(row: 0, col: 0));
 
         final result = ref.hyperlinkUri;
 
@@ -111,7 +111,7 @@ void main() {
 
     group('wide', () {
       test('returns narrow for a single width cell', () {
-        final ref = GridRef.at(terminal, col: 0, row: 0);
+        final ref = GridRef.at(terminal, const Position(row: 0, col: 0));
 
         final result = ref.wide;
 
@@ -120,7 +120,7 @@ void main() {
 
       test('returns wide for a leading wide cell', () {
         terminal.write(Uint8List.fromList([0xE6, 0x97, 0xA5]));
-        final ref = GridRef.at(terminal, col: 5, row: 0);
+        final ref = GridRef.at(terminal, const Position(row: 0, col: 5));
 
         final result = ref.wide;
 
@@ -130,7 +130,7 @@ void main() {
 
     group('isWide', () {
       test('returns false for a single width cell', () {
-        final ref = GridRef.at(terminal, col: 0, row: 0);
+        final ref = GridRef.at(terminal, const Position(row: 0, col: 0));
 
         final result = ref.isWide;
 
@@ -139,7 +139,7 @@ void main() {
 
       test('returns true for a leading wide cell', () {
         terminal.write(Uint8List.fromList([0xE6, 0x97, 0xA5]));
-        final ref = GridRef.at(terminal, col: 5, row: 0);
+        final ref = GridRef.at(terminal, const Position(row: 0, col: 5));
 
         final result = ref.isWide;
 
@@ -152,7 +152,7 @@ void main() {
         final wrapped = Terminal(cols: 5, rows: 2);
         addTearDown(wrapped.dispose);
         wrapped.write(Uint8List.fromList('ABCDEF'.codeUnits));
-        final ref = GridRef.at(wrapped, col: 0, row: 0);
+        final ref = GridRef.at(wrapped, const Position(row: 0, col: 0));
 
         final result = ref.rowWrap;
 
@@ -160,13 +160,13 @@ void main() {
       });
     });
 
-    group('pointIn', () {
+    group('positionIn', () {
       test('returns coordinates in the requested coordinate space', () {
-        final ref = GridRef.at(terminal, col: 2, row: 0);
+        final ref = GridRef.at(terminal, const Position(row: 0, col: 2));
 
-        final result = ref.pointIn(.active);
+        final result = ref.positionIn(.active);
 
-        expect(result, (col: 2, row: 0));
+        expect(result, const Position(row: 0, col: 2));
       });
     });
   });

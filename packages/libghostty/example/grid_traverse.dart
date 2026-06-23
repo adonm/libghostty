@@ -7,7 +7,7 @@ void main() {
   terminal.write(Uint8List.fromList('Hello, World!'.codeUnits));
 
   for (var col = 0; col < 13; col++) {
-    final ref = GridRef.at(terminal, col: col, row: 0);
+    final ref = GridRef.at(terminal, Position(row: 0, col: col));
     print('($col, 0): "${ref.content}"');
   }
 

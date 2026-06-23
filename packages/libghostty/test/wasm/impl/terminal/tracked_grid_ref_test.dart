@@ -4,7 +4,7 @@ library;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:libghostty/libghostty.dart'
-    show GridRef, InvalidValueException, Terminal, TrackedGridRef;
+    show GridRef, InvalidValueException, Position, Terminal, TrackedGridRef;
 import 'package:test/test.dart';
 
 import '../../helpers/setup.dart';
@@ -27,7 +27,7 @@ void main() {
     group('at', () {
       test('throws for an out of range column', () {
         expect(
-          () => TrackedGridRef.at(terminal, col: 80, row: 0),
+          () => TrackedGridRef.at(terminal, const Position(row: 0, col: 80)),
           throwsA(isA<InvalidValueException>()),
         );
       });
@@ -35,7 +35,10 @@ void main() {
 
     group('hasValue', () {
       test('returns true for a live cell', () {
-        final tracked = TrackedGridRef.at(terminal, col: 0, row: 0);
+        final tracked = TrackedGridRef.at(
+          terminal,
+          const Position(row: 0, col: 0),
+        );
         addTearDown(tracked.dispose);
 
         final result = tracked.hasValue;
@@ -44,7 +47,10 @@ void main() {
       });
 
       test('returns false after reset', () {
-        final tracked = TrackedGridRef.at(terminal, col: 0, row: 0);
+        final tracked = TrackedGridRef.at(
+          terminal,
+          const Position(row: 0, col: 0),
+        );
         addTearDown(tracked.dispose);
 
         terminal.reset();
@@ -54,44 +60,56 @@ void main() {
       });
     });
 
-    group('pointIn', () {
+    group('positionIn', () {
       test('returns coordinates in the requested coordinate space', () {
-        final tracked = TrackedGridRef.at(terminal, col: 1, row: 0);
+        final tracked = TrackedGridRef.at(
+          terminal,
+          const Position(row: 0, col: 1),
+        );
         addTearDown(tracked.dispose);
 
-        final result = tracked.pointIn(.active);
+        final result = tracked.positionIn(.active);
 
-        expect(result, (col: 1, row: 0));
+        expect(result, const Position(row: 0, col: 1));
       });
 
       test('returns null after reset', () {
-        final tracked = TrackedGridRef.at(terminal, col: 0, row: 0);
+        final tracked = TrackedGridRef.at(
+          terminal,
+          const Position(row: 0, col: 0),
+        );
         addTearDown(tracked.dispose);
 
         terminal.reset();
-        final result = tracked.pointIn(.active);
+        final result = tracked.positionIn(.active);
 
         expect(result, isNull);
       });
     });
 
     group('set', () {
-      test('moves the tracked point', () {
-        final tracked = TrackedGridRef.at(terminal, col: 0, row: 0);
+      test('moves the tracked position', () {
+        final tracked = TrackedGridRef.at(
+          terminal,
+          const Position(row: 0, col: 0),
+        );
         addTearDown(tracked.dispose);
 
-        tracked.set(col: 2, row: 0);
-        final result = tracked.pointIn(.active);
+        tracked.set(const Position(row: 0, col: 2));
+        final result = tracked.positionIn(.active);
 
-        expect(result, (col: 2, row: 0));
+        expect(result, const Position(row: 0, col: 2));
       });
 
       test('throws for an out of range column', () {
-        final tracked = TrackedGridRef.at(terminal, col: 0, row: 0);
+        final tracked = TrackedGridRef.at(
+          terminal,
+          const Position(row: 0, col: 0),
+        );
         addTearDown(tracked.dispose);
 
         expect(
-          () => tracked.set(col: 80, row: 0),
+          () => tracked.set(const Position(row: 0, col: 80)),
           throwsA(isA<InvalidValueException>()),
         );
       });
@@ -99,7 +117,10 @@ void main() {
 
     group('snapshot', () {
       test('returns a grid reference for a live cell', () {
-        final tracked = TrackedGridRef.at(terminal, col: 1, row: 0);
+        final tracked = TrackedGridRef.at(
+          terminal,
+          const Position(row: 0, col: 1),
+        );
         addTearDown(tracked.dispose);
 
         final result = tracked.snapshot();
@@ -108,7 +129,10 @@ void main() {
       });
 
       test('returns content from the tracked cell', () {
-        final tracked = TrackedGridRef.at(terminal, col: 1, row: 0);
+        final tracked = TrackedGridRef.at(
+          terminal,
+          const Position(row: 0, col: 1),
+        );
         addTearDown(tracked.dispose);
 
         final result = tracked.snapshot();
@@ -117,7 +141,10 @@ void main() {
       });
 
       test('returns null after reset', () {
-        final tracked = TrackedGridRef.at(terminal, col: 0, row: 0);
+        final tracked = TrackedGridRef.at(
+          terminal,
+          const Position(row: 0, col: 0),
+        );
         addTearDown(tracked.dispose);
 
         terminal.reset();
@@ -132,7 +159,10 @@ void main() {
         scrolled.write(
           Uint8List.fromList('alpha\r\nbravo\r\ncharlie'.codeUnits),
         );
-        final tracked = TrackedGridRef.at(scrolled, col: 0, row: 0);
+        final tracked = TrackedGridRef.at(
+          scrolled,
+          const Position(row: 0, col: 0),
+        );
         addTearDown(tracked.dispose);
 
         scrolled.write(Uint8List.fromList('\r\ndelta'.codeUnits));

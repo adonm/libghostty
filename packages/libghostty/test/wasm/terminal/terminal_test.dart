@@ -121,8 +121,8 @@ void main() {
       test('tracks write position', () {
         terminal.write(Uint8List.fromList('Hi'.codeUnits));
         renderState.update(terminal);
-        expect(renderState.cursor.col, 2);
-        expect(renderState.cursor.row, 0);
+        expect(renderState.cursor.position.col, 2);
+        expect(renderState.cursor.position.row, 0);
       });
 
       test('tracks visibility mode', () {
@@ -323,8 +323,8 @@ void main() {
         terminal.write(Uint8List.fromList('\x1b[24;80H'.codeUnits));
         terminal.resize(cols: 40, rows: 10);
         renderState.update(terminal);
-        expect(renderState.cursor.row, lessThan(10));
-        expect(renderState.cursor.col, lessThan(40));
+        expect(renderState.cursor.position.row, lessThan(10));
+        expect(renderState.cursor.position.col, lessThan(40));
       });
 
       test('shrinking rows adjusts cursor position', () {
@@ -334,11 +334,11 @@ void main() {
         addTearDown(t.dispose);
         t.write(Uint8List.fromList('A\r\nB\r\nC\r\nD\r\nE'.codeUnits));
         rs.update(t);
-        expect(rs.cursor.row, 4);
+        expect(rs.cursor.position.row, 4);
 
         t.resize(cols: 10, rows: 3);
         rs.update(t);
-        expect(rs.cursor.row, 2);
+        expect(rs.cursor.position.row, 2);
       });
 
       test('no content duplication after shrink', () {
@@ -438,8 +438,8 @@ void main() {
           addTearDown(t.dispose);
           _expectAllCellsEmpty(t);
           rs.update(t);
-          expect(rs.cursor.row, 0);
-          expect(rs.cursor.col, 0);
+          expect(rs.cursor.position.row, 0);
+          expect(rs.cursor.position.col, 0);
         });
 
         test('multiple dispose-recreate cycles produce clean screens', () {
@@ -701,8 +701,8 @@ void main() {
           terminal: terminal,
           format: .plain,
           selection: Selection.fromRefs(
-            start: GridRef.at(terminal, col: 0, row: 0),
-            end: GridRef.at(terminal, col: 2, row: 0),
+            start: GridRef.at(terminal, const Position(row: 0, col: 0)),
+            end: GridRef.at(terminal, const Position(row: 0, col: 2)),
           ),
         );
         addTearDown(formatter.dispose);
@@ -722,8 +722,8 @@ void main() {
       test('formats an explicit selection', () {
         terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
         final selection = Selection.fromRefs(
-          start: GridRef.at(terminal, col: 1, row: 0),
-          end: GridRef.at(terminal, col: 3, row: 0),
+          start: GridRef.at(terminal, const Position(row: 0, col: 1)),
+          end: GridRef.at(terminal, const Position(row: 0, col: 3)),
         );
 
         final text = terminal.formatSelection(selection: selection);
@@ -748,7 +748,7 @@ void main() {
     group('selectLine', () {
       test('selects the line under a ref', () {
         terminal.write(Uint8List.fromList('ABC\r\nDEF'.codeUnits));
-        final ref = GridRef.at(terminal, col: 1, row: 1);
+        final ref = GridRef.at(terminal, const Position(row: 1, col: 1));
 
         final selection = terminal.selectLine(ref);
 
@@ -768,7 +768,7 @@ void main() {
                 .codeUnits,
           ),
         );
-        final ref = GridRef.at(terminal, col: 1, row: 1);
+        final ref = GridRef.at(terminal, const Position(row: 1, col: 1));
 
         final selection = terminal.selectOutput(ref);
 
@@ -782,7 +782,7 @@ void main() {
     group('selectWord', () {
       test('returns the selected word', () {
         terminal.write(Uint8List.fromList('hello world'.codeUnits));
-        final ref = GridRef.at(terminal, col: 1, row: 0);
+        final ref = GridRef.at(terminal, const Position(row: 0, col: 1));
 
         final selection = terminal.selectWord(ref);
 
@@ -792,7 +792,7 @@ void main() {
       test('rejects refs from another terminal', () {
         final other = Terminal(cols: 80, rows: 24);
         addTearDown(other.dispose);
-        final ref = GridRef.at(other, col: 0, row: 0);
+        final ref = GridRef.at(other, const Position(row: 0, col: 0));
 
         expect(() => terminal.selectWord(ref), throwsA(isA<ArgumentError>()));
       });
@@ -801,8 +801,8 @@ void main() {
     group('selectWordBetween', () {
       test('selects the word between two refs', () {
         terminal.write(Uint8List.fromList('hello world'.codeUnits));
-        final start = GridRef.at(terminal, col: 1, row: 0);
-        final end = GridRef.at(terminal, col: 3, row: 0);
+        final start = GridRef.at(terminal, const Position(row: 0, col: 1));
+        final end = GridRef.at(terminal, const Position(row: 0, col: 3));
 
         final selection = terminal.selectWordBetween(start, end);
 
@@ -814,8 +814,8 @@ void main() {
       test('setter installs active selection', () {
         terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
         final selection = Selection.fromRefs(
-          start: GridRef.at(terminal, col: 0, row: 0),
-          end: GridRef.at(terminal, col: 2, row: 0),
+          start: GridRef.at(terminal, const Position(row: 0, col: 0)),
+          end: GridRef.at(terminal, const Position(row: 0, col: 2)),
         );
 
         terminal.selection = selection;
@@ -826,8 +826,8 @@ void main() {
       test('getter returns active selection', () {
         terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
         final selection = Selection.fromRefs(
-          start: GridRef.at(terminal, col: 0, row: 0),
-          end: GridRef.at(terminal, col: 2, row: 0),
+          start: GridRef.at(terminal, const Position(row: 0, col: 0)),
+          end: GridRef.at(terminal, const Position(row: 0, col: 2)),
         );
         terminal.selection = selection;
 
@@ -839,8 +839,8 @@ void main() {
       test('setter clears active selection', () {
         terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
         terminal.selection = Selection.fromRefs(
-          start: GridRef.at(terminal, col: 0, row: 0),
-          end: GridRef.at(terminal, col: 2, row: 0),
+          start: GridRef.at(terminal, const Position(row: 0, col: 0)),
+          end: GridRef.at(terminal, const Position(row: 0, col: 2)),
         );
 
         terminal.selection = null;
@@ -852,8 +852,8 @@ void main() {
         final other = Terminal(cols: 80, rows: 24);
         addTearDown(other.dispose);
         final selection = Selection.fromRefs(
-          start: GridRef.at(other, col: 0, row: 0),
-          end: GridRef.at(other, col: 2, row: 0),
+          start: GridRef.at(other, const Position(row: 0, col: 0)),
+          end: GridRef.at(other, const Position(row: 0, col: 2)),
         );
 
         expect(

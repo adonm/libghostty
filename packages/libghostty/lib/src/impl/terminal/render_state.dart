@@ -94,7 +94,7 @@ final class RenderState {
 
   /// Cursor state from the last [update]: position, visibility, blink,
   /// shape, and password input flag. If the cursor is outside the
-  /// viewport, position fields default to zero and [Cursor.wideTail]
+  /// viewport, [Cursor.position] defaults to zero and [Cursor.wideTail]
   /// defaults to false.
   Cursor get cursor {
     final inViewport = check(bindings.renderStateGetCursorInViewport(_handle));
@@ -120,8 +120,7 @@ final class RenderState {
       bindings.renderStateGetCursorViewportWideTail(_handle),
     );
     return Cursor(
-      col: col,
-      row: row,
+      position: Position(row: row, col: col),
       visible: visible,
       blinking: blinking,
       wideTail: wideTail,

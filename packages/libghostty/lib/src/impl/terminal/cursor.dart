@@ -3,11 +3,8 @@ part of 'terminal.dart';
 /// An immutable snapshot of the terminal cursor state.
 @immutable
 final class Cursor {
-  /// The row position within the viewport.
-  final int row;
-
-  /// The column position within the viewport.
-  final int col;
+  /// Position within the viewport.
+  final Position position;
 
   /// Whether the cursor is visible.
   final bool visible;
@@ -25,8 +22,7 @@ final class Cursor {
   final bool passwordInput;
 
   const Cursor({
-    this.row = 0,
-    this.col = 0,
+    this.position = const Position(row: 0, col: 0),
     this.visible = true,
     this.shape = .block,
     this.wideTail = false,
@@ -36,13 +32,12 @@ final class Cursor {
 
   @override
   int get hashCode =>
-      Object.hash(row, col, visible, shape, blinking, passwordInput, wideTail);
+      Object.hash(position, visible, shape, blinking, passwordInput, wideTail);
 
   @override
   bool operator ==(Object other) =>
       other is Cursor &&
-      other.row == row &&
-      other.col == col &&
+      other.position == position &&
       other.visible == visible &&
       other.shape == shape &&
       other.blinking == blinking &&
@@ -51,8 +46,7 @@ final class Cursor {
 
   /// Returns a copy with the given fields replaced.
   Cursor copyWith({
-    int? row,
-    int? col,
+    Position? position,
     bool? visible,
     CursorShape? shape,
     bool? blinking,
@@ -60,8 +54,7 @@ final class Cursor {
     bool? wideTail,
   }) {
     return Cursor(
-      row: row ?? this.row,
-      col: col ?? this.col,
+      position: position ?? this.position,
       visible: visible ?? this.visible,
       shape: shape ?? this.shape,
       blinking: blinking ?? this.blinking,
@@ -72,5 +65,5 @@ final class Cursor {
 
   @override
   String toString() =>
-      'Cursor(row: $row, col: $col, visible: $visible, shape: $shape)';
+      'Cursor(position: $position, visible: $visible, shape: $shape)';
 }

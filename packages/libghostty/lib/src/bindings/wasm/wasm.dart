@@ -2405,14 +2405,13 @@ class WasmBindings implements GhosttyBindings {
   CResult<RawGridRef> terminalGridRef(
     int terminal,
     PointTag pointTag,
-    int x,
-    int y,
+    Position position,
   ) {
     final pointPtr = _exports.ghostty_wasm_alloc_u8_array(_layout.pointSize);
     final gridRefPtr = _exports.ghostty_wasm_alloc_u8_array(
       _layout.gridRefSize,
     );
-    _writePoint(pointPtr, pointTag, x, y);
+    _writePoint(pointPtr, pointTag, position);
     _mem.writeU32(gridRefPtr, _layout.gridRefSize);
     final result = _exports.ghostty_terminal_grid_ref(
       terminal,
@@ -2429,12 +2428,11 @@ class WasmBindings implements GhosttyBindings {
   CResult<int> terminalGridRefTrack(
     int terminal,
     PointTag pointTag,
-    int x,
-    int y,
+    Position position,
   ) {
     final pointPtr = _exports.ghostty_wasm_alloc_u8_array(_layout.pointSize);
     final outPtr = _exports.ghostty_wasm_alloc_opaque();
-    _writePoint(pointPtr, pointTag, x, y);
+    _writePoint(pointPtr, pointTag, position);
     final result = _exports.ghostty_terminal_grid_ref_track(
       terminal,
       pointPtr,
@@ -2562,10 +2560,7 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
-  CResult<({int col, int row})> trackedGridRefPoint(
-    int ref,
-    PointTag pointTag,
-  ) {
+  CResult<Position> trackedGridRefPoint(int ref, PointTag pointTag) {
     final size = _layout.pointCoordinateSize;
     final outPtr = _exports.ghostty_wasm_alloc_u8_array(size);
     final result = Result.fromValue(
@@ -2574,7 +2569,7 @@ class WasmBindings implements GhosttyBindings {
     final col = _mem.readU16(outPtr + _layout.pointCoordinateX);
     final row = _mem.readU32(outPtr + _layout.pointCoordinateY);
     _exports.ghostty_wasm_free_u8_array(outPtr, size);
-    return (result, (col: col, row: row));
+    return (result, Position(row: row, col: col));
   }
 
   @override
@@ -2582,11 +2577,10 @@ class WasmBindings implements GhosttyBindings {
     int ref,
     int terminal,
     PointTag pointTag,
-    int x,
-    int y,
+    Position position,
   ) {
     final pointPtr = _exports.ghostty_wasm_alloc_u8_array(_layout.pointSize);
-    _writePoint(pointPtr, pointTag, x, y);
+    _writePoint(pointPtr, pointTag, position);
     final result = _exports.ghostty_tracked_grid_ref_set(
       ref,
       terminal,
@@ -2611,7 +2605,7 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
-  CResult<({int col, int row})> terminalPointFromGridRef(
+  CResult<Position> terminalPointFromGridRef(
     int terminal,
     RawGridRef ref,
     PointTag pointTag,
@@ -2631,7 +2625,7 @@ class WasmBindings implements GhosttyBindings {
     final row = _mem.readU32(outPtr + _layout.pointCoordinateY);
     _freeGridRef(refPtr);
     _exports.ghostty_wasm_free_u8_array(outPtr, size);
-    return (result, (col: col, row: row));
+    return (result, Position(row: row, col: col));
   }
 
   @override
@@ -2857,13 +2851,12 @@ class WasmBindings implements GhosttyBindings {
     int terminal,
     RawSelection selection,
     PointTag pointTag,
-    int col,
-    int row,
+    Position position,
   ) {
     final selPtr = _allocSelection(selection);
     final pointPtr = _exports.ghostty_wasm_alloc_u8_array(_layout.pointSize);
     final outPtr = _exports.ghostty_wasm_alloc_u8_array(1);
-    _writePoint(pointPtr, pointTag, col, row);
+    _writePoint(pointPtr, pointTag, position);
     final result = Result.fromValue(
       _exports.ghostty_terminal_selection_contains(
         terminal,
@@ -3184,14 +3177,13 @@ class WasmBindings implements GhosttyBindings {
   @override
   Result selectionGestureEventSetViewport(
     int event, {
-    required int col,
-    required int row,
+    required Position position,
   }) {
     final ptr = _exports.ghostty_wasm_alloc_u8_array(
       _layout.pointCoordinateSize,
     );
-    _mem.writeU16(ptr + _layout.pointCoordinateX, col);
-    _mem.writeU32(ptr + _layout.pointCoordinateY, row);
+    _mem.writeU16(ptr + _layout.pointCoordinateX, position.col);
+    _mem.writeU32(ptr + _layout.pointCoordinateY, position.row);
     final result = Result.fromValue(
       _exports.ghostty_selection_gesture_event_set(
         event,
@@ -3759,10 +3751,10 @@ class WasmBindings implements GhosttyBindings {
     }
   }
 
-  void _writePoint(int pointPtr, PointTag pointTag, int x, int y) {
+  void _writePoint(int pointPtr, PointTag pointTag, Position position) {
     _mem.writeU32(pointPtr, pointTag.value);
-    _mem.writeU16(pointPtr + _layout.pointX, x);
-    _mem.writeU32(pointPtr + _layout.pointY, y);
+    _mem.writeU16(pointPtr + _layout.pointX, position.col);
+    _mem.writeU32(pointPtr + _layout.pointY, position.row);
   }
 
   void _zero(int ptr, int len) {

@@ -27,6 +27,7 @@ export 'src/bindings/types/types.dart'
         OptimizeMode,
         OutOfMemoryException,
         PaletteColor,
+        Position,
         RgbColor,
         Scrollbar,
         SemanticContent,

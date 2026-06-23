@@ -21,8 +21,8 @@ void main() {
     group('fromRefs', () {
       test('preserves endpoint refs', () {
         terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
-        final start = GridRef.at(terminal, col: 0, row: 0);
-        final end = GridRef.at(terminal, col: 2, row: 0);
+        final start = GridRef.at(terminal, const Position(row: 0, col: 0));
+        final end = GridRef.at(terminal, const Position(row: 0, col: 2));
 
         final selection = Selection.fromRefs(start: start, end: end);
 
@@ -32,8 +32,8 @@ void main() {
 
       test('preserves rectangle mode', () {
         terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
-        final start = GridRef.at(terminal, col: 0, row: 0);
-        final end = GridRef.at(terminal, col: 2, row: 0);
+        final start = GridRef.at(terminal, const Position(row: 0, col: 0));
+        final end = GridRef.at(terminal, const Position(row: 0, col: 2));
 
         final selection = Selection.fromRefs(
           start: start,
@@ -47,8 +47,8 @@ void main() {
       test('rejects refs from another terminal', () {
         final other = Terminal(cols: 80, rows: 24);
         addTearDown(other.dispose);
-        final start = GridRef.at(terminal, col: 0, row: 0);
-        final end = GridRef.at(other, col: 0, row: 0);
+        final start = GridRef.at(terminal, const Position(row: 0, col: 0));
+        final end = GridRef.at(other, const Position(row: 0, col: 0));
 
         expect(
           () => Selection.fromRefs(start: start, end: end),
@@ -61,11 +61,11 @@ void main() {
       test('reports included points', () {
         terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
         final selection = Selection.fromRefs(
-          start: GridRef.at(terminal, col: 0, row: 0),
-          end: GridRef.at(terminal, col: 2, row: 0),
+          start: GridRef.at(terminal, const Position(row: 0, col: 0)),
+          end: GridRef.at(terminal, const Position(row: 0, col: 2)),
         );
 
-        final contains = selection.contains(col: 1, row: 0);
+        final contains = selection.contains(const Position(row: 0, col: 1));
 
         expect(contains, isTrue);
       });
@@ -73,11 +73,11 @@ void main() {
       test('reports excluded points', () {
         terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
         final selection = Selection.fromRefs(
-          start: GridRef.at(terminal, col: 0, row: 0),
-          end: GridRef.at(terminal, col: 2, row: 0),
+          start: GridRef.at(terminal, const Position(row: 0, col: 0)),
+          end: GridRef.at(terminal, const Position(row: 0, col: 2)),
         );
 
-        final contains = selection.contains(col: 4, row: 0);
+        final contains = selection.contains(const Position(row: 0, col: 4));
 
         expect(contains, isFalse);
       });
@@ -87,8 +87,8 @@ void main() {
       test('moves the logical end endpoint', () {
         terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
         final selection = Selection.fromRefs(
-          start: GridRef.at(terminal, col: 0, row: 0),
-          end: GridRef.at(terminal, col: 1, row: 0),
+          start: GridRef.at(terminal, const Position(row: 0, col: 0)),
+          end: GridRef.at(terminal, const Position(row: 0, col: 1)),
         );
 
         final adjusted = selection.adjust(.right);
@@ -101,8 +101,8 @@ void main() {
       test('returns requested endpoint order', () {
         terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
         final selection = Selection.fromRefs(
-          start: GridRef.at(terminal, col: 2, row: 0),
-          end: GridRef.at(terminal, col: 0, row: 0),
+          start: GridRef.at(terminal, const Position(row: 0, col: 2)),
+          end: GridRef.at(terminal, const Position(row: 0, col: 0)),
         );
 
         final ordered = selection.ordered(.forward);
@@ -115,12 +115,12 @@ void main() {
       test('compares selections through libghostty', () {
         terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
         final selection = Selection.fromRefs(
-          start: GridRef.at(terminal, col: 0, row: 0),
-          end: GridRef.at(terminal, col: 2, row: 0),
+          start: GridRef.at(terminal, const Position(row: 0, col: 0)),
+          end: GridRef.at(terminal, const Position(row: 0, col: 2)),
         );
         final other = Selection.fromRefs(
-          start: GridRef.at(terminal, col: 0, row: 0),
-          end: GridRef.at(terminal, col: 2, row: 0),
+          start: GridRef.at(terminal, const Position(row: 0, col: 0)),
+          end: GridRef.at(terminal, const Position(row: 0, col: 2)),
         );
 
         final equal = selection.equal(other);
@@ -132,12 +132,12 @@ void main() {
         final other = Terminal(cols: 80, rows: 24);
         addTearDown(other.dispose);
         final selection = Selection.fromRefs(
-          start: GridRef.at(terminal, col: 0, row: 0),
-          end: GridRef.at(terminal, col: 2, row: 0),
+          start: GridRef.at(terminal, const Position(row: 0, col: 0)),
+          end: GridRef.at(terminal, const Position(row: 0, col: 2)),
         );
         final otherSelection = Selection.fromRefs(
-          start: GridRef.at(other, col: 0, row: 0),
-          end: GridRef.at(other, col: 2, row: 0),
+          start: GridRef.at(other, const Position(row: 0, col: 0)),
+          end: GridRef.at(other, const Position(row: 0, col: 2)),
         );
 
         expect(
@@ -151,8 +151,8 @@ void main() {
       test('returns selected content', () {
         terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
         final selection = Selection.fromRefs(
-          start: GridRef.at(terminal, col: 1, row: 0),
-          end: GridRef.at(terminal, col: 3, row: 0),
+          start: GridRef.at(terminal, const Position(row: 0, col: 1)),
+          end: GridRef.at(terminal, const Position(row: 0, col: 3)),
         );
 
         final text = selection.format();

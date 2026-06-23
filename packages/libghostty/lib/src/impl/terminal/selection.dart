@@ -12,8 +12,8 @@ part of 'terminal.dart';
 /// create a fresh [Selection] from their snapshots immediately before use.
 ///
 /// ```dart
-/// final start = GridRef.at(terminal, col: 0, row: 0);
-/// final end = GridRef.at(terminal, col: 4, row: 0);
+/// final start = GridRef.at(terminal, const Position(row: 0, col: 0));
+/// final end = GridRef.at(terminal, const Position(row: 0, col: 4));
 /// terminal.selection = Selection.fromRefs(start: start, end: end);
 /// ```
 @immutable
@@ -84,20 +84,15 @@ final class Selection {
     );
   }
 
-  /// Whether this selection includes the terminal point at [col], [row].
-  bool contains({
-    required int col,
-    required int row,
-    PointTag pointTag = .active,
-  }) {
+  /// Whether this selection includes [position].
+  bool contains(Position position, {PointTag pointTag = .active}) {
     final terminal = start._terminal;
     return check(
       bindings.terminalSelectionContains(
         terminal._handle,
         _raw,
         pointTag,
-        col,
-        row,
+        position,
       ),
     );
   }

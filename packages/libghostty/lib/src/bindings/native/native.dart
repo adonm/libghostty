@@ -1733,10 +1733,10 @@ class NativeBindings implements GhosttyBindings {
     ref.value.rgb.b = color.b;
   }
 
-  static void _writePoint(Point point, PointTag pointTag, int x, int y) {
-    point.tagAsInt = pointTag.value;
-    point.value.coordinate.x = x;
-    point.value.coordinate.y = y;
+  static void _writePoint(Point target, PointTag pointTag, Position position) {
+    target.tagAsInt = pointTag.value;
+    target.value.coordinate.x = position.col;
+    target.value.coordinate.y = position.row;
   }
 
   static RawGridRef _readGridRef(GridRef ref) {
@@ -1961,12 +1961,11 @@ class NativeBindings implements GhosttyBindings {
   CResult<RawGridRef> terminalGridRef(
     int terminal,
     PointTag pointTag,
-    int x,
-    int y,
+    Position position,
   ) {
     return using((arena) {
       final point = arena<Point>();
-      _writePoint(point.ref, pointTag, x, y);
+      _writePoint(point.ref, pointTag, position);
       final gridRef = arena<GridRef>();
       gridRef.ref.size = sizeOf<GridRef>();
       final result = ghostty_terminal_grid_ref(
@@ -1982,13 +1981,12 @@ class NativeBindings implements GhosttyBindings {
   CResult<int> terminalGridRefTrack(
     int terminal,
     PointTag pointTag,
-    int x,
-    int y,
+    Position position,
   ) {
     return using((arena) {
       final point = arena<Point>();
       final out = arena<Pointer<TrackedGridRefImpl>>();
-      _writePoint(point.ref, pointTag, x, y);
+      _writePoint(point.ref, pointTag, position);
       final result = ghostty_terminal_grid_ref_track(
         Pointer.fromAddress(terminal),
         point.ref,
@@ -2087,10 +2085,7 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
-  CResult<({int col, int row})> trackedGridRefPoint(
-    int ref,
-    PointTag pointTag,
-  ) {
+  CResult<Position> trackedGridRefPoint(int ref, PointTag pointTag) {
     return using((arena) {
       final out = arena<PointCoordinate>();
       final result = ghostty_tracked_grid_ref_point(
@@ -2098,7 +2093,7 @@ class NativeBindings implements GhosttyBindings {
         pointTag,
         out,
       );
-      return (result, (col: out.ref.x, row: out.ref.y));
+      return (result, Position(row: out.ref.y, col: out.ref.x));
     });
   }
 
@@ -2107,12 +2102,11 @@ class NativeBindings implements GhosttyBindings {
     int ref,
     int terminal,
     PointTag pointTag,
-    int x,
-    int y,
+    Position position,
   ) {
     return using((arena) {
       final point = arena<Point>();
-      _writePoint(point.ref, pointTag, x, y);
+      _writePoint(point.ref, pointTag, position);
       return ghostty_tracked_grid_ref_set(
         Pointer.fromAddress(ref),
         Pointer.fromAddress(terminal),
@@ -2135,7 +2129,7 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
-  CResult<({int col, int row})> terminalPointFromGridRef(
+  CResult<Position> terminalPointFromGridRef(
     int terminal,
     RawGridRef ref,
     PointTag pointTag,
@@ -2150,7 +2144,7 @@ class NativeBindings implements GhosttyBindings {
         pointTag,
         out,
       );
-      return (result, (col: out.ref.x, row: out.ref.y));
+      return (result, Position(row: out.ref.y, col: out.ref.x));
     });
   }
 
@@ -2367,14 +2361,13 @@ class NativeBindings implements GhosttyBindings {
     int terminal,
     RawSelection selection,
     PointTag pointTag,
-    int col,
-    int row,
+    Position position,
   ) {
     return using((arena) {
       final sel = arena<Selection>();
       final point = arena<Point>();
       _writeSelection(sel.ref, selection);
-      _writePoint(point.ref, pointTag, col, row);
+      _writePoint(point.ref, pointTag, position);
       final result = ghostty_terminal_selection_contains(
         Pointer.fromAddress(terminal),
         sel,
@@ -2664,14 +2657,13 @@ class NativeBindings implements GhosttyBindings {
   @override
   Result selectionGestureEventSetViewport(
     int event, {
-    required int col,
-    required int row,
+    required Position position,
   }) {
     return using((arena) {
       final ptr = arena<PointCoordinate>();
       ptr.ref
-        ..x = col
-        ..y = row;
+        ..x = position.col
+        ..y = position.row;
       return ghostty_selection_gesture_event_set(
         Pointer.fromAddress(event),
         .viewport,

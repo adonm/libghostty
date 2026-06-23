@@ -202,9 +202,9 @@ final class SelectionGestureEvent {
   }
 
   /// Sets the viewport coordinate for an autoscroll tick.
-  void setViewport({required int col, required int row}) {
+  void setViewport(Position position) {
     checkCode(
-      bindings.selectionGestureEventSetViewport(_handle, col: col, row: row),
+      bindings.selectionGestureEventSetViewport(_handle, position: position),
     );
   }
 
