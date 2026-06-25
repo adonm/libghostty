@@ -197,7 +197,7 @@ final class HyperlinkTheme {
   /// throughput.
   final HyperlinkStyle idle;
 
-  /// Appearance when the user Cmd+hovers over the hyperlink.
+  /// Appearance when the hyperlink is highlighted.
   final HyperlinkStyle highlighted;
 
   const HyperlinkTheme({
@@ -296,7 +296,7 @@ final class TerminalTheme {
   /// Cursor appearance settings.
   final CursorTheme cursor;
 
-  /// Hyperlink appearance for idle and Cmd+hover states.
+  /// Hyperlink appearance for idle and highlighted states.
   final HyperlinkTheme hyperlink;
 
   /// Font family name for rendering terminal text.

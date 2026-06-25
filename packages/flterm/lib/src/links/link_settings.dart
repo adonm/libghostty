@@ -83,8 +83,7 @@ final class LinkedFile {
   /// Current working directory used to resolve [path], when one was reported.
   final String? cwd;
 
-  /// Absolute path resolved from [cwd], when it can be resolved
-  /// without shell expansion or filesystem access.
+  /// Absolute path resolved from [cwd] for relative paths.
   final String? resolvedPath;
 
   const LinkedFile({
@@ -193,9 +192,7 @@ final class LinkSettings {
   /// link detection.
   ///
   /// ```dart
-  /// const links = LinkSettings(
-  ///   types: {LinkType.osc8, LinkType.text},
-  /// );
+  /// const links = LinkSettings(types: {.osc8, .text});
   /// ```
   final Set<LinkType> types;
 
