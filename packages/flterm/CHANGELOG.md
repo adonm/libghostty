@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.0.4
+
+### Breaking
+
+- **Selection APIs**: selection is backed by libghostty. `TerminalSelection`
+  and `TerminalSelectionMode` are removed, `TerminalConfig.wordPattern`
+  moves to `TerminalGestureSettings.wordBoundaries`, and gesture toggles
+  are explicit settings.
+
+### Added
+
+- **Terminal links**: `TerminalView.linkSettings` detects OSC 8 links,
+  text URLs, file paths, and custom regex links.
+- **Controller APIs**: `selectRange`, `hasSelection`, `pwd`, and
+  `onPwdChanged` expose selection and working-directory state.
+- **Glyph Protocol**: `TerminalConfig.glyphProtocol` toggles Glyph Protocol
+  APC handling.
+
+### Changed
+
+- **Rendering pipeline**: selection, cursor viewport state, and cell metadata
+  use refreshed libghostty render snapshots.
+
 ## 0.0.3
 
 ### Breaking

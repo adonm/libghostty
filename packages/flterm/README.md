@@ -29,13 +29,14 @@ libghostty-vt engine.
   `Intent`.
 - Themes for ANSI 16, 256-color, and truecolor palettes; cursor;
   hyperlinks; fonts. Immutable and `lerp`-able.
-- OSC 8 hyperlinks with idle and highlighted styles.
+- Links for OSC 8 metadata, text URLs, file paths, and custom regex
+  rules with activation callbacks.
 
 ## Getting started
 
 ```yaml
 dependencies:
-  flterm: ^0.0.3
+  flterm: ^0.0.4
 ```
 
 On web, initialize the wasm module once before mounting any terminal:
@@ -59,7 +60,7 @@ import 'package:flterm/flterm.dart';
 
 final controller = TerminalController()
   ..onOutput = (bytes) => pty.write(bytes)
-  ..onResize = (size) => pty.resize(size.cols, size.rows)
+  ..onResize = (cols, rows) => pty.resize(cols, rows)
   ..onBell = playSound;
 
 ptyOutputStream.listen(controller.write);
@@ -86,6 +87,46 @@ controller.paste('hello');
 // Reset
 controller.clear();
 ```
+
+Links are configured on the view. Built-in detection covers OSC 8
+metadata, text URLs, and file paths.
+
+```dart
+TerminalView(
+  controller: controller,
+  linkSettings: LinkSettings(
+    onActivate: (link) {
+      if (link.uri case final uri?) openUri(uri);
+      if (link.file case final file?) openFile(file);
+    },
+  ),
+);
+```
+
+Custom matchers can add project-specific selectors:
+
+```dart
+TerminalView(
+  controller: controller,
+  linkSettings: LinkSettings(
+    rules: [
+      .regex(
+        id: 'issue',
+        pattern: RegExp(r'#(\d+)'),
+      ),
+    ],
+    onActivate: (link) {
+      if (link.id == 'issue') openIssue(link.text.substring(1));
+    },
+  ),
+);
+```
+
+> **Note**: Idle link styling and custom rules with `LinkHighlightMode.always` 
+> scan visible content after terminal updates. The cost grows with output rate, 
+> visible rows, and line length, which can impact rendering performance and 
+> frame rate. Avoid always-on or idle highlighting unless that extra scanning 
+> is acceptable.
 
 Custom themes are constructed directly:
 
