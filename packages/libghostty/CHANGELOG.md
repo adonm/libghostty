@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.0.10
+
+### Breaking
+
+- **Position coordinates**: cursor and grid lookup APIs use `Position`
+  values. `GridRef.positionIn()` replaces `pointIn()`, and `GridRef`
+  no longer needs `dispose()`.
+
+### Added
+
+- **Selection APIs**: `Selection`, `SelectionGesture`, active terminal
+  selection, and selection formatting expose libghostty selection behavior.
+- **Tracked grid references**: `TrackedGridRef` follows a cell across
+  terminal mutations until the referenced cell is discarded.
+- **Terminal APIs**: working-directory changes, device attributes queries,
+  default cursor blink, and Glyph Protocol toggling are exposed.
+- **Render selection metadata**: `RowIterator.selection` and
+  `CellIterator.isSelected`
+  expose row-local selection state for render snapshots.
+
 ## 0.0.9
 
 ### Added

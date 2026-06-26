@@ -15,7 +15,7 @@ the terminal emulator library from [Ghostty](https://ghostty.org).
 ```yaml
 # pubspec.yaml
 dependencies:
-  libghostty: ^0.0.9
+  libghostty: ^0.0.10
 ```
 
 On web, initialize the WASM module once before using any bindings:
@@ -49,7 +49,7 @@ void main() {
   terminal.resize(cols: 120, rows: 40, cellWidthPx: 8, cellHeightPx: 16);
 
   // Read a single cell via grid reference (for ad-hoc lookups).
-  final ref = GridRef.at(terminal, col: 0, row: 0);
+  final ref = GridRef.at(terminal, const Position(row: 0, col: 0));
   print(ref.content); // the character at (0, 0)
 
   // Read screen via render state and reusable iterators.
