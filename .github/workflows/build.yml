@@ -70,20 +70,20 @@ jobs:
       matrix:
         include:
           - target: aarch64-macos
-            runner: macos-latest
+            runner: macos-15
             ext: dylib
           - target: x86_64-macos
-            runner: macos-latest
+            runner: macos-15
             ext: dylib
           - target: aarch64-ios
-            runner: macos-latest
+            runner: macos-15
             ext: dylib
           - target: aarch64-ios-simulator
-            runner: macos-latest
+            runner: macos-15
             ext: dylib
             extra_args: -Dcpu=apple_a17
           - target: x86_64-ios-simulator
-            runner: macos-latest
+            runner: macos-15
             ext: dylib
           - target: x86_64-linux-gnu
             runner: ubuntu-latest

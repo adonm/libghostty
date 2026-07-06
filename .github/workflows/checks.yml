@@ -152,7 +152,7 @@ jobs:
       matrix:
         include:
           - os: macos-arm64
-            runner: macos-latest
+            runner: macos-15
           - os: linux-x64
             runner: ubuntu-latest
           - os: windows-x64
