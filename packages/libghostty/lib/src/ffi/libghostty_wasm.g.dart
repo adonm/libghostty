@@ -77,24 +77,220 @@ extension type GhosttyExports(JSObject _) implements JSObject {
     Pointer out_written,
   );
 
+  /// Calculate the WCAG contrast ratio between two RGB colors.
+  ///
+  /// The contrast ratio is symmetric and ranges from 1.0 for identical
+  /// colors to 21.0 for black and white.
+  ///
+  /// @param a The first RGB color (must not be NULL)
+  /// @param b The second RGB color (must not be NULL)
+  /// @return WCAG contrast ratio in the range 1.0 to 21.0
+  ///
+  /// @ingroup color
+  external double ghostty_color_contrast(Pointer a, Pointer b);
+
+  /// Calculate W3C relative luminance for an RGB color.
+  ///
+  /// Returns a normalized value from 0.0 for black to 1.0 for white.
+  /// See https://www.w3.org/TR/WCAG20/#relativeluminancedef.
+  ///
+  /// @param color The RGB color (must not be NULL)
+  /// @return Relative luminance in the range 0.0 to 1.0
+  ///
+  /// @ingroup color
+  external double ghostty_color_luminance(Pointer color);
+
+  /// Get Ghostty's built-in default 256-color palette.
+  ///
+  /// Writes exactly 256 entries: Ghostty's base16 defaults, the xterm
+  /// 6x6x6 color cube, and the grayscale ramp.
+  ///
+  /// @param[out] out The output palette, an array of exactly 256
+  /// GhosttyColorRgb values
+  ///
+  /// @ingroup color
+  external void ghostty_color_palette_default(Pointer out);
+
+  /// Generate a 256-color palette from base colors.
+  ///
+  /// The base palette supplies indices 0-15, which are always preserved.
+  /// If @p base is NULL, Ghostty's default palette is used. If @p skip is
+  /// NULL, no extra indices are skipped. Set bits in @p skip preserve those
+  /// indices from @p base. The 216-color cube at indices 16-231 is generated
+  /// with trilinear CIELAB interpolation, and the grayscale ramp at indices
+  /// 232-255 is interpolated from the background to the foreground.
+  ///
+  /// For light themes, @p harmonious controls whether the generated palette
+  /// keeps the background-to-foreground orientation. When false, Ghostty
+  /// swaps the light background and dark foreground so the cube and ramp run
+  /// dark-to-light. The output palette may be the same pointer as @p base.
+  ///
+  /// @param base The base palette, an array of exactly 256 GhosttyColorRgb
+  /// values, or NULL to use Ghostty's default palette
+  /// @param skip The palette indices to preserve from @p base, or NULL for
+  /// an empty mask
+  /// @param bg The terminal background color (must not be NULL)
+  /// @param fg The terminal foreground color (must not be NULL)
+  /// @param harmonious Whether light themes keep background-to-foreground
+  /// orientation
+  /// @param[out] out The output palette, an array of exactly 256
+  /// GhosttyColorRgb values
+  ///
+  /// @ingroup color
+  external void ghostty_color_palette_generate(
+    Pointer base,
+    Pointer skip,
+    Pointer bg,
+    Pointer fg,
+    int harmonious,
+    Pointer out,
+  );
+
+  /// Parse a flexible Ghostty color value.
+  ///
+  /// Accepts Ghostty's terminal color syntax: X11 color names, hex colors
+  /// in 3-, 6-, 9-, or 12-digit form (the leading # is optional for 3- and
+  /// 6-digit values), and rgb:<red>/<green>/<blue> or
+  /// rgbi:<red>/<green>/<blue> specifications. Leading and trailing spaces
+  /// and tabs are trimmed.
+  ///
+  /// @param value The color value bytes (must not be NULL)
+  /// @param len The length of @p value in bytes
+  /// @param[out] out The parsed RGB color
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if parsing
+  /// fails or @p value is NULL
+  ///
+  /// @ingroup color
+  external int ghostty_color_parse(Pointer value, int len, Pointer out);
+
+  /// Parse a Ghostty palette entry.
+  ///
+  /// Accepts Ghostty palette config syntax: N=COLOR. N is a palette index
+  /// from 0 to 255 in decimal or in 0x, 0o, or 0b-prefixed form. Spaces and
+  /// tabs around N and COLOR are ignored. COLOR accepts the same syntax as
+  /// ghostty_color_parse().
+  ///
+  /// @param value The palette entry bytes (must not be NULL)
+  /// @param len The length of @p value in bytes
+  /// @param[out] out_index The parsed palette index
+  /// @param[out] out_rgb The parsed RGB color
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE on any
+  /// failure, including index overflow
+  ///
+  /// @ingroup color
+  external int ghostty_color_parse_palette_entry(
+    Pointer value,
+    int len,
+    Pointer out_index,
+    Pointer out_rgb,
+  );
+
+  /// Parse an X11 color name.
+  ///
+  /// The color name is resolved from Ghostty's embedded rgb.txt table.
+  /// Leading and trailing spaces and tabs are trimmed, and matching is
+  /// ASCII case-insensitive. Hex values are not accepted by this function.
+  ///
+  /// @param name The color name bytes (must not be NULL)
+  /// @param len The length of @p name in bytes
+  /// @param[out] out The parsed RGB color
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if no color
+  /// matches or @p name is NULL
+  ///
+  /// @ingroup color
+  external int ghostty_color_parse_x11(Pointer name, int len, Pointer out);
+
+  /// Calculate perceived luminance for an RGB color.
+  ///
+  /// Returns a normalized value from 0.0 for black to 1.0 for white.
+  /// Ghostty treats a background color as light when this exceeds 0.5.
+  /// This is not the metric used internally by
+  /// ghostty_color_palette_generate(), which uses CIELAB lightness.
+  ///
+  /// @param color The RGB color (must not be NULL)
+  /// @return Perceived luminance in the range 0.0 to 1.0
+  ///
+  /// @ingroup color
+  external double ghostty_color_perceived_luminance(Pointer color);
+
   /// Get the RGB color components.
   ///
   /// This function extracts the individual red, green, and blue components
   /// from a GhosttyColorRgb value. Primarily useful in WebAssembly environments
   /// where accessing struct fields directly is difficult.
   ///
-  /// @param color The RGB color value
+  /// @param color Pointer to the RGB color value
   /// @param r Pointer to store the red component (0-255)
   /// @param g Pointer to store the green component (0-255)
   /// @param b Pointer to store the blue component (0-255)
   ///
-  /// @ingroup sgr
+  /// @ingroup color
   external void ghostty_color_rgb_get(
-    int color,
+    Pointer color,
     Pointer r,
     Pointer g,
     Pointer b,
   );
+
+  /// Encode a color scheme report into an escape sequence.
+  ///
+  /// Encodes a color scheme report into the provided buffer. Dark color schemes
+  /// emit ESC [ ? 997 ; 1 n, and light color schemes emit ESC [ ? 997 ; 2 n.
+  /// The encoded bytes are identical to the terminal's internal CSI ? 996 n
+  /// query response.
+  ///
+  /// Hosts should gate unsolicited sends on GHOSTTY_MODE_COLOR_SCHEME_REPORT
+  /// (mode 2031) being set, which can be checked via the mode getters.
+  ///
+  /// If the buffer is too small, the function returns GHOSTTY_OUT_OF_SPACE
+  /// and writes the required buffer size to @p out_written. The caller can
+  /// then retry with a sufficiently sized buffer.
+  ///
+  /// @param scheme The color scheme to encode
+  /// @param buf Output buffer to write the encoded sequence into (may be NULL)
+  /// @param buf_len Size of the output buffer in bytes
+  /// @param[out] out_written On success, the number of bytes written. On
+  /// GHOSTTY_OUT_OF_SPACE, the required buffer size.
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_OUT_OF_SPACE if the buffer
+  /// is too small
+  external int ghostty_color_scheme_report_encode(
+    int scheme,
+    Pointer buf,
+    int buf_len,
+    Pointer out_written,
+  );
+
+  /// Get the number of X11 color name entries.
+  ///
+  /// The returned count excludes the NULL terminator and is provided so
+  /// bindings can preallocate storage before reading ghostty_color_x11_names().
+  ///
+  /// @return Number of X11 color name entries
+  ///
+  /// @ingroup color
+  external int ghostty_color_x11_name_count();
+
+  /// Get Ghostty's X11 color name table.
+  ///
+  /// The returned pointer references static memory valid for the program
+  /// lifetime and is never NULL. Entries are in rgb.txt order and are
+  /// terminated by an entry with name == NULL. Aliases are separate entries,
+  /// such as "medium spring green" and "MediumSpringGreen". Names are the
+  /// exact supported spellings from rgb.txt; ghostty_color_parse_x11() also
+  /// matches them case-insensitively.
+  ///
+  /// @code{.c}
+  /// for (const GhosttyColorX11Entry* e = ghostty_color_x11_names();
+  /// e->name != NULL;
+  /// e++) {
+  /// // e->name and e->color are valid here.
+  /// }
+  /// @endcode
+  ///
+  /// @return Pointer to the first X11 color entry
+  ///
+  /// @ingroup color
+  external Pointer ghostty_color_x11_names();
 
   /// Encode a focus event into a terminal escape sequence.
   ///
@@ -1296,6 +1492,35 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// @return true if the data is safe to paste, false otherwise
   external int ghostty_paste_is_safe(Pointer data, int len);
 
+  /// Begin an update of a render state instance from a terminal.
+  ///
+  /// Every begin must be completed with a ghostty_render_state_end_update call
+  /// before the render state is read.
+  ///
+  /// This two-phase structure exists for callers that synchronize access to the
+  /// terminal state (e.g. with a lock shared with an IO thread): only this
+  /// function requires terminal access, so a caller can hold its lock for this
+  /// call only and then call ghostty_render_state_end_update after releasing
+  /// it. The end phase exclusively reads and writes memory owned by the render
+  /// state, so it is safe to call while the terminal is being modified.
+  ///
+  /// Work that doesn't require terminal access may be deferred to the end phase
+  /// to keep this call (and therefore lock hold time) as short as possible.
+  /// Callers must treat the render state as incomplete until
+  /// ghostty_render_state_end_update is called.
+  ///
+  /// This consumes terminal/screen dirty state in the same way as the internal
+  /// render state update path.
+  ///
+  /// @param state The render state handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param terminal The terminal handle to read from (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` or
+  /// `terminal` is NULL, GHOSTTY_OUT_OF_MEMORY if updating the state requires
+  /// allocation and that allocation fails
+  ///
+  /// @ingroup render
+  external int ghostty_render_state_begin_update(int state, int terminal);
+
   /// Get the current color information from a render state.
   ///
   /// This writes as many fields as fit in the caller-provided sized struct.
@@ -1310,6 +1535,20 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   ///
   /// @ingroup render
   external int ghostty_render_state_colors_get(int state, Pointer out_colors);
+
+  /// Complete a prior ghostty_render_state_begin_update call by performing any
+  /// deferred work.
+  ///
+  /// This only reads and writes memory owned by the render state, so it is safe
+  /// to call while the terminal is being modified (no terminal synchronization
+  /// is required). Calling this without a prior begin is a safe no-op.
+  ///
+  /// @param state The render state handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` is
+  /// NULL
+  ///
+  /// @ingroup render
+  external int ghostty_render_state_end_update(int state);
 
   /// Free a render state instance.
   ///
@@ -1596,6 +1835,12 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   ///
   /// This consumes terminal/screen dirty state in the same way as the internal
   /// render state update path.
+  ///
+  /// This is a convenience function that performs a full update in one call,
+  /// equivalent to ghostty_render_state_begin_update immediately followed by
+  /// ghostty_render_state_end_update. Callers that hold a lock over the
+  /// terminal state should prefer calling the two phases directly so that the
+  /// lock is only held for the begin phase.
   ///
   /// @param state The render state handle (NULL returns GHOSTTY_INVALID_VALUE)
   /// @param terminal The terminal handle to read from (NULL returns GHOSTTY_INVALID_VALUE)
@@ -2141,7 +2386,7 @@ extension type GhosttyExports(JSObject _) implements JSObject {
     Pointer out_ref,
   );
 
-  /// Create an owned tracked grid reference for a position.
+  /// Create an owned tracked grid reference for a terminal point.
   ///
   /// This is the tracked variant of ghostty_terminal_grid_ref(). The returned
   /// handle follows the referenced cell as the terminal's page list is modified:
@@ -2292,7 +2537,10 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// Scrolls the terminal's viewport according to the given behavior.
   /// When using GHOSTTY_SCROLL_VIEWPORT_DELTA, set the delta field in
   /// the value union to specify the number of rows to scroll (negative
-  /// for up, positive for down). For other behaviors, the value is ignored.
+  /// for up, positive for down). When using GHOSTTY_SCROLL_VIEWPORT_ROW,
+  /// set the row field to the absolute row offset from the top of the
+  /// scrollable area (the same row space as the offset field of
+  /// GhosttyTerminalScrollbar). For other behaviors, the value is ignored.
   ///
   /// @param terminal The terminal handle (may be NULL, in which case this is a no-op)
   /// @param behavior The scroll behavior as a tagged union
@@ -2435,7 +2683,7 @@ extension type GhosttyExports(JSObject _) implements JSObject {
     int adjustment,
   );
 
-  /// Test whether a position is inside a selection snapshot.
+  /// Test whether a terminal point is inside a selection snapshot.
   ///
   /// This uses the same selection semantics as the terminal, including
   /// rectangular/block selections and linear selections spanning multiple rows.
@@ -2704,7 +2952,7 @@ extension type GhosttyExports(JSObject _) implements JSObject {
     Pointer out_point,
   );
 
-  /// Move an existing tracked grid reference to a new position.
+  /// Move an existing tracked grid reference to a new terminal point.
   ///
   /// On success, the tracked reference begins tracking the new point and any prior
   /// "no value" state is cleared. On GHOSTTY_OUT_OF_MEMORY, the original tracked
@@ -2778,6 +3026,114 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   ///
   /// @return Pointer to the null-terminated JSON string.
   external Pointer ghostty_type_json();
+
+  /// Returns the terminal display width of a Unicode codepoint in
+  /// terminal grid cells: 0, 1, or 2.
+  ///
+  /// This is the same width table the terminal itself uses when laying
+  /// out printed text, so callers can predict column layout (e.g. IME
+  /// preedit overlays) that exactly matches what the terminal will do
+  /// when the text is actually written to it.
+  ///
+  /// Semantics:
+  /// - Returns 0 for zero-width codepoints: C0/C1 control characters,
+  /// nonspacing and enclosing combining marks, default-ignorable
+  /// codepoints (ZWJ, ZWNJ, variation selectors, etc.), and
+  /// surrogate codepoints.
+  /// - Returns 2 for wide codepoints: East Asian Wide/Fullwidth
+  /// (including emoji with default emoji presentation) and regional
+  /// indicators. Width is clamped to 2 (e.g. the three-em dash).
+  /// - Returns 1 for everything else, including invalid codepoints
+  /// beyond U+10FFFF (this function is total; it never fails).
+  ///
+  /// This operates on a single codepoint only and therefore cannot account
+  /// for grapheme-cluster-level width rules (VS16 emoji presentation,
+  /// combining sequences, etc.). For cluster-accurate widths, use
+  /// ghostty_unicode_grapheme_width(). Summing per-codepoint widths is only
+  /// correct when mode 2027 (grapheme clustering) is disabled.
+  ///
+  /// This function is pure, allocates nothing, and is thread-safe.
+  ///
+  /// @param cp The Unicode codepoint to measure
+  /// @return Display width in cells: 0, 1, or 2
+  external int ghostty_unicode_codepoint_width(int cp);
+
+  /// Measures the terminal display width of the first grapheme cluster in a
+  /// sequence of Unicode codepoints.
+  ///
+  /// This uses the exact same grapheme segmentation and cluster width rules
+  /// the terminal itself uses when printing text with grapheme clustering
+  /// enabled (mode 2027), so callers can predict column layout (e.g. IME
+  /// preedit overlays) that exactly matches what the terminal will do when
+  /// the text is actually written to it. Unlike
+  /// ghostty_unicode_codepoint_width(), this accounts for cluster-level
+  /// rules: emoji variation selectors, ZWJ sequences, combining marks, and
+  /// skin tone modifiers.
+  ///
+  /// Reads codepoints from cps until the terminal would consider the
+  /// grapheme cluster complete, stores the cluster's total width in cells
+  /// (0, 1, or 2) into width (which may be NULL if only segmentation is
+  /// desired), and returns the number of codepoints consumed. Returns 0 if
+  /// and only if len is 0; otherwise consumes at least one codepoint. Measure
+  /// a whole string by calling in a loop:
+  ///
+  /// @code
+  /// size_t total = 0;
+  /// for (size_t i = 0; i < len;) {
+  /// uint8_t width;
+  /// i += ghostty_unicode_grapheme_width(cps + i, len - i, &width);
+  /// total += width;
+  /// }
+  /// @endcode
+  ///
+  /// This is not a streaming API. The provided sequence must contain a
+  /// complete first grapheme cluster, or the logical end of the string. If
+  /// input arrives in chunks, keep buffering while this function consumes all
+  /// available codepoints (return value == len) and the stream may still
+  /// continue; a later codepoint could still extend the cluster and change
+  /// its width.
+  ///
+  /// Width semantics, matching the terminal with mode 2027 enabled:
+  /// - The cluster starts at the width of its first codepoint, as returned by
+  /// ghostty_unicode_codepoint_width().
+  /// - VS16 (U+FE0F) forces the cluster wide (2) and VS15 (U+FE0E) forces it
+  /// narrow (1), but only when the immediately preceding codepoint in the
+  /// cluster is a valid emoji variation sequence base (per Unicode
+  /// emoji-variation-sequences.txt). Invalid variation selectors are
+  /// ignored entirely.
+  /// - Any other continuation codepoint that contributes to grapheme width
+  /// forces the cluster wide (2). Note this means cluster width is NOT the
+  /// maximum of per-codepoint widths: some continuation marks have narrow
+  /// codepoint width yet still widen the cluster.
+  ///
+  /// Mode dependence: this models mode 2027 (grapheme clustering) enabled,
+  /// which is Ghostty's recommended configuration. When mode 2027 is
+  /// disabled, clusters never combine and variation selectors never change
+  /// width; predict layout in that case by summing
+  /// ghostty_unicode_codepoint_width() over each codepoint instead.
+  ///
+  /// Edge cases:
+  /// - Codepoints beyond U+10FFFF consume one codepoint, have width 1, and
+  /// are always cluster boundaries. This function is total; it never fails.
+  /// - Control characters (C0/C1, CR, LF) are never printed through the
+  /// terminal's text path; passing them here returns an unspecified (but
+  /// stable and bounded) result.
+  /// - A cluster whose first codepoint is zero-width (e.g. a lone combining
+  /// mark) is malformed at a cell start; the terminal may attach it to
+  /// earlier screen content. This function reports the fold result for the
+  /// sequence in isolation (typically 0).
+  ///
+  /// This function is pure, allocates nothing, and is thread-safe.
+  ///
+  /// @param cps Pointer to codepoints (may be NULL only when len is 0)
+  /// @param len Number of codepoints available
+  /// @param width Out: cluster display width in cells (0-2); may be NULL
+  /// @return Number of codepoints in the first grapheme cluster
+  external int ghostty_unicode_grapheme_width(
+    Pointer cps,
+    int len,
+    Pointer width,
+  );
 
   /// Allocate an opaque pointer. This can be used for any opaque pointer
   /// types such as GhosttyKeyEncoder, GhosttyKeyEvent, etc.

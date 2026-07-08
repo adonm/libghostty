@@ -375,8 +375,13 @@ final class Terminal with Listenable {
 
   /// Scrollbar position and dimensions for rendering a scrollbar widget.
   ///
-  /// May be expensive for terminals with large scrollback, as it requires
-  /// traversing the scrollback page list to compute the total size.
+  /// The total is maintained incrementally and the viewport offset is cached.
+  /// The first read after moving the viewport to an arbitrary non-row position
+  /// may traverse the scrollback page list to compute the offset, after which
+  /// it is cached again.
+  ///
+  /// There is no scroll-state notification. Callers building scrollbars should
+  /// poll this once per frame or per write batch and diff the result.
   Scrollbar get scrollbar => check(bindings.terminalGetScrollbar(_handle));
 
   /// Active selection on the terminal screen, or null when none is active.
@@ -499,6 +504,20 @@ final class Terminal with Listenable {
 
   /// Scrolls the viewport to the top of the scrollback history.
   void scrollToTop() => bindings.terminalScrollViewport(_handle, .top, 0);
+
+  /// Scrolls the viewport to an absolute row in the scrollable area.
+  ///
+  /// Row zero is the top of scrollback. The requested row becomes the first
+  /// visible viewport row and is clamped so the viewport never scrolls beyond
+  /// the active area. If the terminal has no scrollback, for example when the
+  /// alternate screen is active, the viewport remains on the active area.
+  ///
+  /// This uses the same row space as [Scrollbar.offset], so a scrollbar value
+  /// can be passed here to restore that viewport position.
+  void scrollToRow(int row) {
+    RangeError.checkNotNegative(row, 'row');
+    bindings.terminalScrollViewport(_handle, .row, row);
+  }
 
   /// Scrolls the viewport by [delta] rows. Positive values scroll down
   /// (toward the active area), negative values scroll up (toward history).

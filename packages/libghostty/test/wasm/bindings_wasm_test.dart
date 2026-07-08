@@ -14,6 +14,33 @@ import 'helpers/setup.dart';
 void main() {
   setUpAll(setUpWasm);
 
+  group('color utilities', () {
+    group('colorParse', () {
+      test('parses X11 color names', () {
+        final (code, color) = bindings.colorParse('ForestGreen');
+        expect(code, Result.success);
+        expect(color, const RgbColor(34, 139, 34));
+      });
+    });
+
+    group('colorPaletteDefault', () {
+      test('returns 256 colors', () {
+        final palette = bindings.colorPaletteDefault();
+        expect(palette, hasLength(256));
+        expect(palette, everyElement(isA<RgbColor>()));
+      });
+    });
+  });
+
+  group('unicode utilities', () {
+    group('unicodeCodepointWidth', () {
+      test('returns two for wide codepoints', () {
+        final width = bindings.unicodeCodepointWidth(0x1F600);
+        expect(width, 2);
+      });
+    });
+  });
+
   group('terminal', () {
     late int terminal;
     late int renderState;

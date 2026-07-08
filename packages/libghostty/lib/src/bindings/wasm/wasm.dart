@@ -630,6 +630,208 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  double colorContrast(RgbColor a, RgbColor b) {
+    final aPtr = _allocRgb(a);
+    final bPtr = _allocRgb(b);
+    final result = _exports.ghostty_color_contrast(aPtr, bPtr);
+    _exports.ghostty_wasm_free_u8_array(aPtr, _layout.colorRgbSize);
+    _exports.ghostty_wasm_free_u8_array(bPtr, _layout.colorRgbSize);
+    return result;
+  }
+
+  @override
+  double colorLuminance(RgbColor color) {
+    final ptr = _allocRgb(color);
+    final result = _exports.ghostty_color_luminance(ptr);
+    _exports.ghostty_wasm_free_u8_array(ptr, _layout.colorRgbSize);
+    return result;
+  }
+
+  @override
+  double colorPerceivedLuminance(RgbColor color) {
+    final ptr = _allocRgb(color);
+    final result = _exports.ghostty_color_perceived_luminance(ptr);
+    _exports.ghostty_wasm_free_u8_array(ptr, _layout.colorRgbSize);
+    return result;
+  }
+
+  @override
+  List<RgbColor> colorPaletteDefault() {
+    final paletteSize = 256 * _layout.colorRgbSize;
+    final out = _exports.ghostty_wasm_alloc_u8_array(paletteSize);
+    _exports.ghostty_color_palette_default(out);
+    final result = _readPalette(out);
+    _exports.ghostty_wasm_free_u8_array(out, paletteSize);
+    return result;
+  }
+
+  @override
+  List<RgbColor> colorPaletteGenerate({
+    List<RgbColor>? base,
+    Set<int> skip = const {},
+    required RgbColor background,
+    required RgbColor foreground,
+    required bool harmonious,
+  }) {
+    final paletteSize = 256 * _layout.colorRgbSize;
+    final basePtr = base == null
+        ? 0
+        : _exports.ghostty_wasm_alloc_u8_array(paletteSize);
+    if (base != null) {
+      for (var i = 0; i < 256; i++) {
+        _writeRgb(basePtr + i * _layout.colorRgbSize, base[i]);
+      }
+    }
+    const skipSize = 32;
+    final skipPtr = skip.isEmpty
+        ? 0
+        : _exports.ghostty_wasm_alloc_u8_array(skipSize);
+    if (skip.isNotEmpty) {
+      for (var i = 0; i < 4; i++) {
+        _mem.writeU64(skipPtr + i * 8, 0);
+      }
+      for (final index in skip) {
+        final offset = skipPtr + (index >> 6) * 8;
+        _mem.writeU64(offset, _mem.readU64(offset) | (1 << (index & 63)));
+      }
+    }
+    final bgPtr = _allocRgb(background);
+    final fgPtr = _allocRgb(foreground);
+    final out = _exports.ghostty_wasm_alloc_u8_array(paletteSize);
+    _exports.ghostty_color_palette_generate(
+      basePtr,
+      skipPtr,
+      bgPtr,
+      fgPtr,
+      harmonious ? 1 : 0,
+      out,
+    );
+    final result = _readPalette(out);
+    if (basePtr != 0) _exports.ghostty_wasm_free_u8_array(basePtr, paletteSize);
+    if (skipPtr != 0) _exports.ghostty_wasm_free_u8_array(skipPtr, skipSize);
+    _exports.ghostty_wasm_free_u8_array(bgPtr, _layout.colorRgbSize);
+    _exports.ghostty_wasm_free_u8_array(fgPtr, _layout.colorRgbSize);
+    _exports.ghostty_wasm_free_u8_array(out, paletteSize);
+    return result;
+  }
+
+  @override
+  CResult<RgbColor> colorParse(String value) {
+    final (:ptr, :len, :allocLen) = _allocUtf8Bytes(value);
+    final out = _exports.ghostty_wasm_alloc_u8_array(_layout.colorRgbSize);
+    final result = _exports.ghostty_color_parse(ptr, len, out);
+    final color = _readRgb(out);
+    _exports.ghostty_wasm_free_u8_array(ptr, allocLen);
+    _exports.ghostty_wasm_free_u8_array(out, _layout.colorRgbSize);
+    return (.fromValue(result), color);
+  }
+
+  @override
+  CResult<({int index, RgbColor color})> colorParsePaletteEntry(String value) {
+    final (:ptr, :len, :allocLen) = _allocUtf8Bytes(value);
+    final outIndex = _exports.ghostty_wasm_alloc_u8();
+    final outRgb = _exports.ghostty_wasm_alloc_u8_array(_layout.colorRgbSize);
+    final result = _exports.ghostty_color_parse_palette_entry(
+      ptr,
+      len,
+      outIndex,
+      outRgb,
+    );
+    final parsed = (index: _mem.readU8(outIndex), color: _readRgb(outRgb));
+    _exports.ghostty_wasm_free_u8_array(ptr, allocLen);
+    _exports.ghostty_wasm_free_u8(outIndex);
+    _exports.ghostty_wasm_free_u8_array(outRgb, _layout.colorRgbSize);
+    return (.fromValue(result), parsed);
+  }
+
+  @override
+  CResult<RgbColor> colorParseX11(String name) {
+    final (:ptr, :len, :allocLen) = _allocUtf8Bytes(name);
+    final out = _exports.ghostty_wasm_alloc_u8_array(_layout.colorRgbSize);
+    final result = _exports.ghostty_color_parse_x11(ptr, len, out);
+    final color = _readRgb(out);
+    _exports.ghostty_wasm_free_u8_array(ptr, allocLen);
+    _exports.ghostty_wasm_free_u8_array(out, _layout.colorRgbSize);
+    return (.fromValue(result), color);
+  }
+
+  @override
+  List<X11ColorName> colorX11Names() {
+    final names = _exports.ghostty_color_x11_names();
+    final count = _exports.ghostty_color_x11_name_count();
+    return <X11ColorName>[
+      for (var i = 0; i < count; i++)
+        (
+          name: _mem.readCString(
+            _mem.readPtr(
+              names + i * _layout.colorX11EntrySize + _layout.colorX11EntryName,
+            ),
+          ),
+          color: _readRgb(
+            names + i * _layout.colorX11EntrySize + _layout.colorX11EntryColor,
+          ),
+        ),
+    ];
+  }
+
+  @override
+  CResult<String> colorSchemeReportEncode(ColorScheme scheme) {
+    final outWritten = _exports.ghostty_wasm_alloc_usize();
+    var result = Result.fromValue(
+      _exports.ghostty_color_scheme_report_encode(
+        scheme.value,
+        0,
+        0,
+        outWritten,
+      ),
+    );
+    if (result != .outOfSpace) {
+      _exports.ghostty_wasm_free_usize(outWritten);
+      return (result, '');
+    }
+
+    final bufLen = _mem.readU32(outWritten);
+    final buf = _exports.ghostty_wasm_alloc_u8_array(bufLen);
+    result = Result.fromValue(
+      _exports.ghostty_color_scheme_report_encode(
+        scheme.value,
+        buf,
+        bufLen,
+        outWritten,
+      ),
+    );
+    final written = _mem.readU32(outWritten);
+    final text = utf8.decode(_mem.view.buffer.asUint8List(buf, written));
+    _exports.ghostty_wasm_free_u8_array(buf, bufLen);
+    _exports.ghostty_wasm_free_usize(outWritten);
+    return (result, text);
+  }
+
+  @override
+  int unicodeCodepointWidth(int codepoint) {
+    return _exports.ghostty_unicode_codepoint_width(codepoint);
+  }
+
+  @override
+  ({int consumed, int width}) unicodeGraphemeWidth(List<int> codepoints) {
+    final len = codepoints.length;
+    final ptr = len == 0 ? 0 : _exports.ghostty_wasm_alloc_u8_array(len * 4);
+    for (var i = 0; i < len; i++) {
+      _mem.writeU32(ptr + i * 4, codepoints[i]);
+    }
+    final outWidth = _exports.ghostty_wasm_alloc_u8();
+    final consumed = _exports.ghostty_unicode_grapheme_width(
+      ptr,
+      len,
+      outWidth,
+    );
+    final width = _mem.readU8(outWidth);
+    if (ptr != 0) _exports.ghostty_wasm_free_u8_array(ptr, len * 4);
+    _exports.ghostty_wasm_free_u8(outWidth);
+    return (consumed: consumed, width: width);
+  }
+
+  @override
   CResult<int> terminalNew(int cols, int rows, int maxScrollback) {
     final outPtr = _exports.ghostty_wasm_alloc_opaque();
     final optsPtr = _exports.ghostty_wasm_alloc_u8_array(
@@ -683,13 +885,20 @@ class WasmBindings implements GhosttyBindings {
   void terminalScrollViewport(
     int handle,
     TerminalScrollViewportTag tag,
-    int delta,
+    int value,
   ) {
     final svPtr = _exports.ghostty_wasm_alloc_u8_array(
       _layout.scrollViewportSize,
     );
     _mem.writeU32(svPtr, tag.value);
-    _mem.writeI32(svPtr + _layout.scrollViewportDelta, delta);
+    switch (tag) {
+      case .row:
+        _mem.writeU32(svPtr + _layout.scrollViewportDelta, value);
+      case .delta:
+        _mem.writeI32(svPtr + _layout.scrollViewportDelta, value);
+      case .top || .bottom:
+        _mem.writeI32(svPtr + _layout.scrollViewportDelta, 0);
+    }
     _exports.ghostty_terminal_scroll_viewport(handle, svPtr);
     _exports.ghostty_wasm_free_u8_array(svPtr, _layout.scrollViewportSize);
   }
@@ -1487,6 +1696,25 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<int> kittyGraphicsImageGetGeneration(int image) {
+    return _kittyImageGetU64(image, KittyGraphicsImageData.generation);
+  }
+
+  @override
+  CResult<int> kittyGraphicsGetGeneration(int graphics) {
+    if (graphics == 0) return (Result.invalidValue, 0);
+    final outPtr = _exports.ghostty_wasm_alloc_u8_array(8);
+    final code = _exports.ghostty_kitty_graphics_get(
+      graphics,
+      KittyGraphicsData.generation.value,
+      outPtr,
+    );
+    final value = _mem.readU64(outPtr);
+    _exports.ghostty_wasm_free_u8_array(outPtr, 8);
+    return (Result.fromValue(code), value);
+  }
+
+  @override
   CResult<Uint8List> kittyGraphicsImageGetPixelData(int image) {
     if (image == 0) return (Result.invalidValue, Uint8List(0));
     final ptrOut = _exports.ghostty_wasm_alloc_opaque();
@@ -1533,6 +1761,19 @@ class WasmBindings implements GhosttyBindings {
     );
     final value = _mem.readU32(outPtr);
     _exports.ghostty_wasm_free_usize(outPtr);
+    return (Result.fromValue(code), value);
+  }
+
+  CResult<int> _kittyImageGetU64(int image, KittyGraphicsImageData data) {
+    if (image == 0) return (Result.invalidValue, 0);
+    final outPtr = _exports.ghostty_wasm_alloc_u8_array(8);
+    final code = _exports.ghostty_kitty_graphics_image_get(
+      image,
+      data.value,
+      outPtr,
+    );
+    final value = _mem.readU64(outPtr);
+    _exports.ghostty_wasm_free_u8_array(outPtr, 8);
     return (Result.fromValue(code), value);
   }
 
@@ -1716,6 +1957,18 @@ class WasmBindings implements GhosttyBindings {
   @override
   void renderStateFree(int handle) {
     _exports.ghostty_render_state_free(handle);
+  }
+
+  @override
+  Result renderStateBeginUpdate(int state, int terminal) {
+    return .fromValue(
+      _exports.ghostty_render_state_begin_update(state, terminal),
+    );
+  }
+
+  @override
+  Result renderStateEndUpdate(int state) {
+    return .fromValue(_exports.ghostty_render_state_end_update(state));
   }
 
   @override
@@ -3824,6 +4077,40 @@ class WasmBindings implements GhosttyBindings {
   void _freeCodepoints(({int ptr, int bytes}) codepoints) {
     if (codepoints.ptr == 0) return;
     _exports.ghostty_wasm_free_u8_array(codepoints.ptr, codepoints.bytes);
+  }
+
+  ({int ptr, int len, int allocLen}) _allocUtf8Bytes(String value) {
+    final encoded = utf8.encode(value);
+    final allocLen = encoded.isEmpty ? 1 : encoded.length;
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(allocLen);
+    _mem.writeBytes(ptr, encoded);
+    return (ptr: ptr, len: encoded.length, allocLen: allocLen);
+  }
+
+  int _allocRgb(RgbColor color) {
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(_layout.colorRgbSize);
+    _writeRgb(ptr, color);
+    return ptr;
+  }
+
+  RgbColor _readRgb(int ptr) {
+    return RgbColor(
+      _mem.readU8(ptr),
+      _mem.readU8(ptr + _layout.colorRgbG),
+      _mem.readU8(ptr + _layout.colorRgbB),
+    );
+  }
+
+  List<RgbColor> _readPalette(int ptr) {
+    return <RgbColor>[
+      for (var i = 0; i < 256; i++) _readRgb(ptr + i * _layout.colorRgbSize),
+    ];
+  }
+
+  void _writeRgb(int ptr, RgbColor color) {
+    _mem.writeU8(ptr, color.r);
+    _mem.writeU8(ptr + _layout.colorRgbG, color.g);
+    _mem.writeU8(ptr + _layout.colorRgbB, color.b);
   }
 
   SgrAttribute _readSgrAttribute(int attrPtr) {

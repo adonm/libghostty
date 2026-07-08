@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import '../../ffi/libghostty_enums.g.dart';
+import 'color.dart';
 
 /// Cell wide property.
 ///
@@ -59,6 +60,9 @@ typedef DecodedImage = ({int width, int height, Uint8List rgba});
 /// PNG form. Returning null signals a decode failure; the library
 /// rejects the payload and no image is stored.
 typedef PngDecoder = DecodedImage? Function(Uint8List pngBytes);
+
+/// An X11 color name recognized by Ghostty's color parser.
+typedef X11ColorName = ({String name, RgbColor color});
 
 /// Raw placement metadata read from a Kitty graphics placement
 /// iterator.

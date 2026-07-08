@@ -87,6 +87,26 @@ abstract interface class GhosttyBindings {
 
   bool pasteIsSafe(String data);
 
+  double colorContrast(RgbColor a, RgbColor b);
+  double colorLuminance(RgbColor color);
+  double colorPerceivedLuminance(RgbColor color);
+  List<RgbColor> colorPaletteDefault();
+  List<RgbColor> colorPaletteGenerate({
+    List<RgbColor>? base,
+    Set<int> skip = const {},
+    required RgbColor background,
+    required RgbColor foreground,
+    required bool harmonious,
+  });
+  CResult<RgbColor> colorParse(String value);
+  CResult<({int index, RgbColor color})> colorParsePaletteEntry(String value);
+  CResult<RgbColor> colorParseX11(String name);
+  List<X11ColorName> colorX11Names();
+  CResult<String> colorSchemeReportEncode(ColorScheme scheme);
+
+  int unicodeCodepointWidth(int codepoint);
+  ({int consumed, int width}) unicodeGraphemeWidth(List<int> codepoints);
+
   CResult<int> terminalNew(int cols, int rows, int maxScrollback);
   void terminalFree(int handle);
   void terminalVtWrite(int handle, Uint8List data);
@@ -195,6 +215,8 @@ abstract interface class GhosttyBindings {
   CResult<int> kittyGraphicsImageGetHeight(int image);
   CResult<KittyImageFormat> kittyGraphicsImageGetFormat(int image);
   CResult<KittyImageCompression> kittyGraphicsImageGetCompression(int image);
+  CResult<int> kittyGraphicsImageGetGeneration(int image);
+  CResult<int> kittyGraphicsGetGeneration(int graphics);
 
   /// Returns a borrowed view of the image's raw pixel bytes. Valid only
   /// until the next mutating terminal call.
@@ -231,6 +253,8 @@ abstract interface class GhosttyBindings {
 
   CResult<int> renderStateNew();
   void renderStateFree(int handle);
+  Result renderStateBeginUpdate(int state, int terminal);
+  Result renderStateEndUpdate(int state);
   Result renderStateUpdate(int state, int terminal);
   CResult<int> renderStateGetCols(int state);
   CResult<int> renderStateGetRows(int state);

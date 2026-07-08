@@ -18,30 +18,21 @@ void main() {
     });
 
     group('setLogger', () {
-      test('receives decoded log emissions', () {
+      test('receives decoded log emissions from current logger', () {
+        final replaced = <String>[];
         final captured = <_LogEntry>[];
+        LibGhostty.setLogger((_, _, msg) => replaced.add(msg));
         LibGhostty.setLogger((level, scope, message) {
           captured.add((level: level, scope: scope, message: message));
         });
 
         terminal.write(_logTrigger);
 
+        expect(replaced, isEmpty);
         expect(captured, isNotEmpty);
         expect(captured.single.level, SysLogLevel.warning);
         expect(captured.single.scope, 'stream');
         expect(captured.single.message, contains('invalid C0 character'));
-      });
-
-      test('replaces previous logger', () {
-        final first = <String>[];
-        final second = <String>[];
-        LibGhostty.setLogger((_, _, msg) => first.add(msg));
-        LibGhostty.setLogger((_, _, msg) => second.add(msg));
-
-        terminal.write(_logTrigger);
-
-        expect(first, isEmpty);
-        expect(second, isNotEmpty);
       });
     });
 

@@ -15,6 +15,11 @@ class Layouts {
   late final int colorRgbG;
   late final int colorRgbB;
 
+  // GhosttyColorX11Entry
+  late final int colorX11EntrySize;
+  late final int colorX11EntryName;
+  late final int colorX11EntryColor;
+
   // GhosttyDeviceAttributes
   late final int deviceAttrsFeatures;
   late final int deviceAttrsNumFeatures;
@@ -220,6 +225,11 @@ class Layouts {
     colorRgbSize = struct.size;
     colorRgbG = struct['g'];
     colorRgbB = struct['b'];
+
+    struct = _Struct(types, 'GhosttyColorX11Entry');
+    colorX11EntrySize = struct.size;
+    colorX11EntryName = struct['name'];
+    colorX11EntryColor = struct['color'];
 
     struct = _Struct(types, 'GhosttyDeviceAttributes');
     final primaryOff = struct['primary'];

@@ -580,6 +580,190 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  double colorContrast(RgbColor a, RgbColor b) {
+    return using((arena) {
+      final aPtr = arena<ColorRgb>();
+      final bPtr = arena<ColorRgb>();
+      _writeColorRgb(aPtr.ref, a);
+      _writeColorRgb(bPtr.ref, b);
+      return ghostty_color_contrast(aPtr, bPtr);
+    });
+  }
+
+  @override
+  double colorLuminance(RgbColor color) {
+    return using((arena) {
+      final ptr = arena<ColorRgb>();
+      _writeColorRgb(ptr.ref, color);
+      return ghostty_color_luminance(ptr);
+    });
+  }
+
+  @override
+  double colorPerceivedLuminance(RgbColor color) {
+    return using((arena) {
+      final ptr = arena<ColorRgb>();
+      _writeColorRgb(ptr.ref, color);
+      return ghostty_color_perceived_luminance(ptr);
+    });
+  }
+
+  @override
+  List<RgbColor> colorPaletteDefault() {
+    return using((arena) {
+      final out = arena<ColorRgb>(256);
+      ghostty_color_palette_default(out);
+      return _readPalette(out);
+    });
+  }
+
+  @override
+  List<RgbColor> colorPaletteGenerate({
+    List<RgbColor>? base,
+    Set<int> skip = const {},
+    required RgbColor background,
+    required RgbColor foreground,
+    required bool harmonious,
+  }) {
+    return using((arena) {
+      final basePtr = base == null ? nullptr : arena<ColorRgb>(256);
+      if (base != null) {
+        for (var i = 0; i < 256; i++) {
+          _writeColorRgb(basePtr[i], base[i]);
+        }
+      }
+      final skipPtr = skip.isEmpty ? nullptr : arena<ColorPaletteMask>();
+      if (skip.isNotEmpty) {
+        for (var i = 0; i < 4; i++) {
+          skipPtr.ref.bits[i] = 0;
+        }
+        for (final index in skip) {
+          skipPtr.ref.bits[index >> 6] |= 1 << (index & 63);
+        }
+      }
+      final bgPtr = arena<ColorRgb>();
+      final fgPtr = arena<ColorRgb>();
+      _writeColorRgb(bgPtr.ref, background);
+      _writeColorRgb(fgPtr.ref, foreground);
+      final out = arena<ColorRgb>(256);
+      ghostty_color_palette_generate(
+        basePtr,
+        skipPtr,
+        bgPtr,
+        fgPtr,
+        harmonious,
+        out,
+      );
+      return _readPalette(out);
+    });
+  }
+
+  @override
+  CResult<RgbColor> colorParse(String value) {
+    return using((arena) {
+      final encoded = utf8.encode(value);
+      final ptr = arena<Char>(encoded.isEmpty ? 1 : encoded.length);
+      ptr.cast<Uint8>().asTypedList(encoded.length).setAll(0, encoded);
+      final out = arena<ColorRgb>();
+      final result = ghostty_color_parse(ptr, encoded.length, out);
+      return (result, RgbColor(out.ref.r, out.ref.g, out.ref.b));
+    });
+  }
+
+  @override
+  CResult<({int index, RgbColor color})> colorParsePaletteEntry(String value) {
+    return using((arena) {
+      final encoded = utf8.encode(value);
+      final ptr = arena<Char>(encoded.isEmpty ? 1 : encoded.length);
+      ptr.cast<Uint8>().asTypedList(encoded.length).setAll(0, encoded);
+      final outIndex = arena<Uint8>();
+      final outRgb = arena<ColorRgb>();
+      final result = ghostty_color_parse_palette_entry(
+        ptr,
+        encoded.length,
+        outIndex,
+        outRgb,
+      );
+      return (
+        result,
+        (
+          index: outIndex.value,
+          color: RgbColor(outRgb.ref.r, outRgb.ref.g, outRgb.ref.b),
+        ),
+      );
+    });
+  }
+
+  @override
+  CResult<RgbColor> colorParseX11(String name) {
+    return using((arena) {
+      final encoded = utf8.encode(name);
+      final ptr = arena<Char>(encoded.isEmpty ? 1 : encoded.length);
+      ptr.cast<Uint8>().asTypedList(encoded.length).setAll(0, encoded);
+      final out = arena<ColorRgb>();
+      final result = ghostty_color_parse_x11(ptr, encoded.length, out);
+      return (result, RgbColor(out.ref.r, out.ref.g, out.ref.b));
+    });
+  }
+
+  @override
+  List<X11ColorName> colorX11Names() {
+    final names = ghostty_color_x11_names();
+    final count = ghostty_color_x11_name_count();
+    return <X11ColorName>[
+      for (var i = 0; i < count; i++)
+        (
+          name: names[i].name.cast<Utf8>().toDartString(),
+          color: RgbColor(names[i].color.r, names[i].color.g, names[i].color.b),
+        ),
+    ];
+  }
+
+  @override
+  CResult<String> colorSchemeReportEncode(ColorScheme scheme) {
+    return using((arena) {
+      final outWritten = arena<Size>();
+      var result = ghostty_color_scheme_report_encode(
+        scheme,
+        nullptr,
+        0,
+        outWritten,
+      );
+      if (result != .outOfSpace) return (result, '');
+
+      final bufLen = outWritten.value;
+      final buf = arena<Char>(bufLen);
+      result = ghostty_color_scheme_report_encode(
+        scheme,
+        buf,
+        bufLen,
+        outWritten,
+      );
+      final written = outWritten.value;
+      return (result, utf8.decode(buf.cast<Uint8>().asTypedList(written)));
+    });
+  }
+
+  @override
+  int unicodeCodepointWidth(int codepoint) {
+    return ghostty_unicode_codepoint_width(codepoint);
+  }
+
+  @override
+  ({int consumed, int width}) unicodeGraphemeWidth(List<int> codepoints) {
+    return using((arena) {
+      final len = codepoints.length;
+      final ptr = len == 0 ? nullptr : arena<Uint32>(len);
+      for (var i = 0; i < len; i++) {
+        ptr[i] = codepoints[i];
+      }
+      final outWidth = arena<Uint8>();
+      final consumed = ghostty_unicode_grapheme_width(ptr, len, outWidth);
+      return (consumed: consumed, width: outWidth.value);
+    });
+  }
+
+  @override
   CResult<int> terminalNew(int cols, int rows, int maxScrollback) {
     return using((arena) {
       final ptr = arena<Pointer<TerminalImpl>>();
@@ -633,12 +817,19 @@ class NativeBindings implements GhosttyBindings {
   void terminalScrollViewport(
     int handle,
     TerminalScrollViewportTag tag,
-    int delta,
+    int value,
   ) {
     using((arena) {
       final sv = arena<TerminalScrollViewport>();
       sv.ref.tagAsInt = tag.value;
-      sv.ref.value.delta = delta;
+      switch (tag) {
+        case .row:
+          sv.ref.value.row = value;
+        case .delta:
+          sv.ref.value.delta = value;
+        case .top || .bottom:
+          sv.ref.value.delta = 0;
+      }
       ghostty_terminal_scroll_viewport(Pointer.fromAddress(handle), sv.ref);
     });
   }
@@ -975,6 +1166,19 @@ class NativeBindings implements GhosttyBindings {
   @override
   void renderStateFree(int handle) {
     ghostty_render_state_free(Pointer.fromAddress(handle));
+  }
+
+  @override
+  Result renderStateBeginUpdate(int state, int terminal) {
+    return ghostty_render_state_begin_update(
+      Pointer.fromAddress(state),
+      Pointer.fromAddress(terminal),
+    );
+  }
+
+  @override
+  Result renderStateEndUpdate(int state) {
+    return ghostty_render_state_end_update(Pointer.fromAddress(state));
   }
 
   @override
@@ -1724,6 +1928,16 @@ class NativeBindings implements GhosttyBindings {
     g: c.value.rgb.g,
     b: c.value.rgb.b,
   );
+
+  static List<RgbColor> _readPalette(Pointer<ColorRgb> ptr) => <RgbColor>[
+    for (var i = 0; i < 256; i++) RgbColor(ptr[i].r, ptr[i].g, ptr[i].b),
+  ];
+
+  static void _writeColorRgb(ColorRgb ref, RgbColor color) {
+    ref.r = color.r;
+    ref.g = color.g;
+    ref.b = color.b;
+  }
 
   static void _writeNativeColor(StyleColor ref, RawColor color) {
     ref.tagAsInt = color.tag.value;
@@ -3369,6 +3583,22 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<int> kittyGraphicsImageGetGeneration(int image) {
+    return _kittyImageGetU64(image, KittyGraphicsImageData.generation);
+  }
+
+  @override
+  CResult<int> kittyGraphicsGetGeneration(int graphics) {
+    if (graphics == 0) return (Result.invalidValue, 0);
+    final code = ghostty_kitty_graphics_get(
+      Pointer.fromAddress(graphics),
+      KittyGraphicsData.generation,
+      _outU64.cast(),
+    );
+    return (code, _outU64.value);
+  }
+
+  @override
   CResult<Uint8List> kittyGraphicsImageGetPixelData(int image) {
     if (image == 0) return (Result.invalidValue, Uint8List(0));
     final ptrOut = calloc<Pointer<Uint8>>();
@@ -3404,6 +3634,16 @@ class NativeBindings implements GhosttyBindings {
       _outU32.cast(),
     );
     return (code, _outU32.value);
+  }
+
+  CResult<int> _kittyImageGetU64(int image, KittyGraphicsImageData data) {
+    if (image == 0) return (Result.invalidValue, 0);
+    final code = ghostty_kitty_graphics_image_get(
+      Pointer.fromAddress(image),
+      data,
+      _outU64.cast(),
+    );
+    return (code, _outU64.value);
   }
 
   @override

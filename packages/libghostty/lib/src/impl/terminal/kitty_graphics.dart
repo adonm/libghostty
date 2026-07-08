@@ -40,6 +40,22 @@ final class KittyGraphics {
     return handle == 0 ? null : KittyGraphics._(handle, terminal);
   }
 
+  /// Storage-wide generation stamp for image content and placement changes.
+  ///
+  /// A changed value means the placement set or image data may be stale. If
+  /// the value is unchanged since a previous query, the placement set and all
+  /// image data are identical, so placement iteration and image staleness
+  /// checks can be skipped.
+  ///
+  /// Geometry can still change when this value is unchanged, for example when
+  /// scrolling or resizing moves placements through the viewport. Recompute
+  /// placement [RenderInfo] on frames where terminal geometry or scroll state
+  /// may have changed.
+  ///
+  /// Generation stamps are unique and monotonically increasing process-wide.
+  /// Zero means the storage has never been mutated and is empty.
+  int get generation => check(bindings.kittyGraphicsGetGeneration(_handle));
+
   /// Looks up an image by its Kitty graphics [imageId].
   ///
   /// Returns null when no image with that id is stored or when Kitty
@@ -307,14 +323,24 @@ final class KittyImage {
     return check(bindings.kittyGraphicsImageGetCompression(_handle));
   }
 
+  /// Generation stamp for this image's pixel contents.
+  ///
+  /// A changed value means cached texture data for this image id is stale, even
+  /// when dimensions, format, and byte length are unchanged. This catches
+  /// same-sized retransmissions that size heuristics cannot detect.
+  ///
+  /// Generation stamps are unique and monotonically increasing process-wide and
+  /// use the same sequence as [KittyGraphics.generation]. Stored images never
+  /// have generation zero, so zero can be used as an empty cache sentinel.
+  int get generation =>
+      check(bindings.kittyGraphicsImageGetGeneration(_handle));
+
   /// Raw pixel bytes, copied into a Dart-owned buffer so the list remains
   /// valid after subsequent terminal mutations.
   ///
-  /// The layout honors [format] and [compression]: decompressing
-  /// zlib-compressed payloads and reinterpreting non-RGB/RGBA formats is
-  /// the caller's responsibility. PNG payloads are decoded ahead of time
-  /// by the callback installed via [LibGhostty.setPngDecoder] and are
-  /// stored here as RGBA.
+  /// Stored images are already decoded and decompressed before they reach this
+  /// API. PNG payloads are decoded through the callback installed via
+  /// [LibGhostty.setPngDecoder] and exposed here as RGBA.
   Uint8List get pixelData {
     return check(bindings.kittyGraphicsImageGetPixelData(_handle));
   }

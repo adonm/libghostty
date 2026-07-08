@@ -6,7 +6,8 @@
 library;
 
 export 'src/bindings/bindings.dart' show initializeForWeb;
-export 'src/bindings/types/aliases.dart' show DecodedImage, PngDecoder;
+export 'src/bindings/types/aliases.dart'
+    show DecodedImage, PngDecoder, X11ColorName;
 export 'src/bindings/types/types.dart'
     show
         CellColor,
@@ -63,7 +64,19 @@ export 'src/ffi/libghostty_enums.g.dart'
         SysLogLevel,
         TerminalScreen;
 export 'src/impl/build_info.dart' show LibGhosttyBuildInfo;
-export 'src/impl/encode.dart' show FocusEventEncode, SizeReportStyleEncode;
+export 'src/impl/color.dart'
+    show
+        colorContrast,
+        colorLuminance,
+        colorPerceivedLuminance,
+        defaultColorPalette,
+        generateColorPalette,
+        parseColor,
+        parsePaletteEntry,
+        parseX11ColorName,
+        x11ColorNames;
+export 'src/impl/encode.dart'
+    show ColorSchemeReportEncode, FocusEventEncode, SizeReportStyleEncode;
 export 'src/impl/key/kitty_key_flags.dart' show KittyKeyFlags;
 export 'src/impl/key/mods.dart' show Mods;
 export 'src/impl/osc_parser.dart' show OscCommand, OscParser;
@@ -97,4 +110,5 @@ export 'src/impl/terminal/terminal.dart'
         Terminal,
         TrackedGridRef;
 export 'src/impl/terminal/terminal_mode.dart' show TerminalMode;
+export 'src/impl/unicode.dart' show unicodeCodepointWidth, unicodeGraphemeWidth;
 export 'src/listenable.dart' show Listenable;

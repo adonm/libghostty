@@ -18,6 +18,17 @@ extension FocusEventEncode on FocusEvent {
   String encode() => check(bindings.focusEncode(this));
 }
 
+/// Adds [encode] to [ColorScheme] for encoding color-scheme reports.
+extension ColorSchemeReportEncode on ColorScheme {
+  /// Encodes this color scheme as the terminal escape sequence used by
+  /// color-scheme reporting mode.
+  ///
+  /// [ColorScheme.dark] emits `ESC [ ? 997 ; 1 n`; [ColorScheme.light] emits
+  /// `ESC [ ? 997 ; 2 n`. Hosts should only send unsolicited reports when
+  /// color-scheme reporting mode 2031 is enabled.
+  String encode() => check(bindings.colorSchemeReportEncode(this));
+}
+
 /// Adds [encode] to [SizeReportStyle] for encoding terminal size reports
 /// into escape sequences, supporting in-band size reports (mode 2048) and
 /// XTWINOPS responses (CSI 14 t, CSI 16 t, CSI 18 t).

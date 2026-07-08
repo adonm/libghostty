@@ -772,7 +772,28 @@ enum KittyGraphicsData {
   /// terminal is not mutated.
   ///
   /// Output type: KittyGraphicsPlacementIterator *
-  placementIterator(1);
+  placementIterator(1),
+
+  /// Generation stamp of the last content mutation to this storage:
+  /// any image transmit/replace, placement add, or delete. Zero means
+  /// the storage has never been mutated (and is therefore empty).
+  ///
+  /// If the generation is unchanged since a previous query, the set of
+  /// placements and all image data are identical, so placement iteration
+  /// and image staleness checks can be skipped entirely. Note that
+  /// placement *geometry* may still have changed (scrolling and resizing
+  /// move placements without changing the storage contents), so rendering
+  /// geometry such as ghostty_kitty_graphics_placement_render_info()
+  /// must still be recomputed for frames marked dirty.
+  ///
+  /// Stamps are unique and monotonically increasing process-wide: a
+  /// value observed from any storage never recurs for different content,
+  /// even across screen switches (main vs. alternate screen have
+  /// independent storages) or terminal resets. It is therefore safe to
+  /// key caches on this value alone.
+  ///
+  /// Output type: uint64_t *
+  generation(2);
 
   final int value;
   const KittyGraphicsData(this.value);
@@ -780,6 +801,7 @@ enum KittyGraphicsData {
   static KittyGraphicsData fromValue(int value) => switch (value) {
     0 => invalid,
     1 => placementIterator,
+    2 => generation,
     _ => throw ArgumentError('Unknown value for KittyGraphicsData: $value'),
   };
 }
@@ -811,12 +833,15 @@ enum KittyGraphicsImageData {
   /// Output type: uint32_t *
   height(4),
 
-  /// Pixel format of the image.
+  /// Pixel format of the image. Never GHOSTTY_KITTY_IMAGE_FORMAT_PNG;
+  /// PNG payloads are decoded to RGBA before storage.
   ///
   /// Output type: KittyImageFormat *
   format(5),
 
-  /// Compression of the image.
+  /// Compression of the image. Always
+  /// GHOSTTY_KITTY_IMAGE_COMPRESSION_NONE; compressed payloads are
+  /// inflated before storage.
   ///
   /// Output type: KittyImageCompression *
   compression(6),
@@ -824,13 +849,35 @@ enum KittyGraphicsImageData {
   /// Borrowed pointer to the raw pixel data. Valid as long as the
   /// underlying terminal is not mutated.
   ///
+  /// The data is always fully decoded, uncompressed pixels in the
+  /// format reported by GHOSTTY_KITTY_IMAGE_DATA_FORMAT: zlib payloads
+  /// are inflated and PNG payloads are decoded to RGBA at transmission
+  /// time, before the image is stored. Consumers can upload this
+  /// directly to the GPU without any decode step.
+  ///
   /// Output type: const uint8_t **
   dataPtr(7),
 
-  /// Length of the raw pixel data in bytes.
+  /// Length of the raw pixel data in bytes. Always equal to
+  /// width * height * bytes-per-pixel for the reported format.
   ///
   /// Output type: size_t *
-  dataLen(8);
+  dataLen(8),
+
+  /// Generation stamp assigned when this image was added to (or
+  /// replaced in) the storage. A changed generation for a given image
+  /// ID means the pixel contents may have changed even when the
+  /// dimensions, format, and data length are identical (e.g. a
+  /// retransmission of the same image ID), so texture caches must key
+  /// staleness on this value rather than on size heuristics.
+  ///
+  /// Stamps are unique and monotonically increasing process-wide and
+  /// are drawn from the same sequence as
+  /// GHOSTTY_KITTY_GRAPHICS_DATA_GENERATION. Never zero for a stored
+  /// image, so zero can be used as an "empty" sentinel by callers.
+  ///
+  /// Output type: uint64_t *
+  generation(9);
 
   final int value;
   const KittyGraphicsImageData(this.value);
@@ -845,6 +892,7 @@ enum KittyGraphicsImageData {
     6 => compression,
     7 => dataPtr,
     8 => dataLen,
+    9 => generation,
     _ => throw ArgumentError(
       'Unknown value for KittyGraphicsImageData: $value',
     ),
@@ -964,6 +1012,12 @@ enum KittyGraphicsPlacementIteratorOption {
 
 /// Compression of a Kitty graphics image.
 ///
+/// Note that stored images are always decompressed:
+/// GHOSTTY_KITTY_IMAGE_COMPRESSION_ZLIB_DEFLATE payloads are inflated
+/// before storage, so ghostty_kitty_graphics_image_get() always reports
+/// GHOSTTY_KITTY_IMAGE_COMPRESSION_NONE. Consumers never need to
+/// inflate image data themselves.
+///
 /// @ingroup kitty_graphics
 enum KittyImageCompression {
   none(0),
@@ -980,6 +1034,12 @@ enum KittyImageCompression {
 }
 
 /// Pixel format of a Kitty graphics image.
+///
+/// Note that stored images are always fully decoded:
+/// GHOSTTY_KITTY_IMAGE_FORMAT_PNG is never returned by
+/// ghostty_kitty_graphics_image_get() because PNG payloads are decoded
+/// to GHOSTTY_KITTY_IMAGE_FORMAT_RGBA before storage. The PNG value
+/// exists only for protocol-level completeness.
 ///
 /// @ingroup kitty_graphics
 enum KittyImageFormat {
@@ -2397,9 +2457,16 @@ enum TerminalData {
 
   /// Scrollbar state for the terminal viewport.
   ///
-  /// This may be expensive to calculate depending on where the viewport
-  /// is (arbitrary pins are expensive). The caller should take care to only
-  /// call this as needed and not too frequently.
+  /// This is amortized O(1): the total is maintained incrementally as
+  /// the terminal is modified and the viewport offset is cached. The
+  /// first read after the viewport moves to an arbitrary position that
+  /// isn't an absolute row (e.g. scrolling to a selection) may cost
+  /// O(pages) to compute the offset, after which it is cached again.
+  ///
+  /// There is intentionally no change notification for scroll state.
+  /// Callers building scrollbars should poll this once per frame or
+  /// per write batch and diff the result to detect changes; this is
+  /// what 's own renderer does.
   ///
   /// Output type: TerminalScrollbar *
   scrollbar(9),
@@ -2893,7 +2960,20 @@ enum TerminalScrollViewportTag {
   bottom(1),
 
   /// Scroll by a delta amount (up is negative).
-  delta(2);
+  delta(2),
+
+  /// Scroll to an absolute row offset from the top of the scrollable
+  /// area. Row 0 is the top of the scrollback and the requested row
+  /// becomes the first visible row of the viewport. The value is
+  /// clamped so the viewport never scrolls beyond the top of the
+  /// active area. If the terminal has no scrollback (e.g. the
+  /// alternate screen is active), the viewport always remains on the
+  /// active area.
+  ///
+  /// This is the same row space as the offset field of
+  /// TerminalScrollbar, so a scrollbar position obtained from
+  /// GHOSTTY_TERMINAL_DATA_SCROLLBAR round-trips cleanly.
+  row(3);
 
   final int value;
   const TerminalScrollViewportTag(this.value);
@@ -2902,6 +2982,7 @@ enum TerminalScrollViewportTag {
     0 => top,
     1 => bottom,
     2 => delta,
+    3 => row,
     _ => throw ArgumentError(
       'Unknown value for TerminalScrollViewportTag: $value',
     ),
