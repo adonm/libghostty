@@ -351,6 +351,57 @@ void main() {
       expect(xPositions(sprites.wide), [16.0]);
     });
 
+    test('sync treats Unicode preedit text as grapheme clusters', () {
+      const preeditClusterCases = [
+        (
+          description: 'ZWJ emoji preedit text as one cluster',
+          text: '👩‍💻',
+          regularPositions: [0.0, 8.0, 32.0, 40.0],
+          emojiPositions: [16.0],
+        ),
+        (
+          description: 'skin tone emoji preedit text as one cluster',
+          text: '👍🏽',
+          regularPositions: [0.0, 8.0, 32.0, 40.0],
+          emojiPositions: [16.0],
+        ),
+        (
+          description: 'combining preedit text as one narrow cluster',
+          text: 'é',
+          regularPositions: [0.0, 8.0, 16.0, 24.0, 32.0, 40.0],
+          emojiPositions: <double>[],
+        ),
+        (
+          description: 'variation selector preedit text as one cluster',
+          text: '❤️',
+          regularPositions: [0.0, 8.0, 32.0, 40.0],
+          emojiPositions: [16.0],
+        ),
+      ];
+
+      for (final clusterCase in preeditClusterCases) {
+        final frame = createFrame(cols: 8, rows: 2);
+        writeUtf8(frame.terminal, 'abcdef\x1b[1;3H');
+
+        frame.builder.sync(
+          frame.terminal,
+          terminalDirty: true,
+          preeditText: clusterCase.text,
+        );
+
+        expect(
+          xPositions(frame.sprites.regular),
+          clusterCase.regularPositions,
+          reason: clusterCase.description,
+        );
+        expect(
+          xPositions(frame.sprites.emoji),
+          clusterCase.emojiPositions,
+          reason: clusterCase.description,
+        );
+      }
+    });
+
     test('sync emits a continuous preedit underline', () {
       writeUtf8(terminal, 'abcdef\x1b[1;3H');
 

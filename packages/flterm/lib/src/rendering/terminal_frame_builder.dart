@@ -10,7 +10,6 @@ import '../links/link_snapshot.dart';
 import 'atlas/atlas.dart';
 import 'atlas/sprite_buffer.dart';
 import 'cell_content_resolver.dart';
-import 'codepoint_classification.dart';
 import 'paint_state.dart';
 
 const _italicOverhangFontSizeFactor = 0.15;
@@ -27,34 +26,6 @@ bool _isOperator(int cp) {
       (cp > 0x39 && cp < 0x41) ||
       (cp > 0x5A && cp < 0x61) ||
       cp > 0x7A;
-}
-
-bool _isRemovedPreeditCodepoint(int cp) {
-  return (cp >= 0x0000 && cp <= 0x001F) ||
-      (cp >= 0x007F && cp <= 0x009F) ||
-      (cp >= 0x200B && cp <= 0x200F) ||
-      (cp >= 0x202A && cp <= 0x202E) ||
-      (cp >= 0x2060 && cp <= 0x206F) ||
-      cp == 0xFFFC ||
-      cp == 0xFEFF;
-}
-
-bool _isWideEmojiCodepoint(int cp) {
-  return (cp >= 0x1F000 && cp <= 0x1FAFF) || (cp >= 0x2600 && cp <= 0x27BF);
-}
-
-bool _isZeroWidthPreeditCodepoint(int cp) {
-  return (cp >= 0x0300 && cp <= 0x036F) ||
-      (cp >= 0x1AB0 && cp <= 0x1AFF) ||
-      (cp >= 0x1DC0 && cp <= 0x1DFF) ||
-      (cp >= 0x20D0 && cp <= 0x20FF) ||
-      (cp >= 0xFE00 && cp <= 0xFE0F) ||
-      (cp >= 0xFE20 && cp <= 0xFE2F) ||
-      (cp >= 0xE0100 && cp <= 0xE01EF);
-}
-
-int _preeditCellWidth(int cp) {
-  return isCjkCodepoint(cp) || _isWideEmojiCodepoint(cp) ? 2 : 1;
 }
 
 int _resolveColorArgb(
@@ -509,24 +480,23 @@ final class _ForegroundEmitter {
   }
 
   void emitPreedit(
-    _PreeditCodepoint codepoint,
+    _PreeditCluster cluster,
     _RowBuildState row, {
     required double x,
   }) {
-    final content = String.fromCharCode(codepoint.codepoint);
     final entry = _content.resolve(
-      content: content,
-      codepoint: codepoint.codepoint,
-      graphemeLength: 1,
+      content: cluster.text,
+      codepoint: cluster.firstCodepoint,
+      graphemeLength: cluster.graphemeLength,
       style: const Style(),
-      span: codepoint.span,
+      span: cluster.span,
     );
     if (entry == null) return;
     _emitEntry(
       entry,
       row,
       x: x,
-      wideText: codepoint.span == 2,
+      wideText: cluster.span == 2,
       foreground: _state.terminalForegroundArgb,
     );
   }
@@ -748,30 +718,38 @@ final class _FrameSnapshot {
   }
 }
 
-final class _PreeditCodepoint {
-  final int codepoint;
+final class _PreeditCluster {
+  final String text;
+  final int firstCodepoint;
+  final int graphemeLength;
   final int span;
 
-  const _PreeditCodepoint(this.codepoint, this.span);
+  const _PreeditCluster({
+    required this.text,
+    required this.firstCodepoint,
+    required this.graphemeLength,
+    required this.span,
+  });
 }
 
 /// Cell-based terminal range temporarily replaced by visible preedit text.
 ///
-/// [startCol] and [endCol] are terminal columns. [codepointOffset] points at
-/// the first visible codepoint when overflow clips the preedit from the left.
+/// [startCol] and [endCol] are terminal columns. [clusterOffset] points at
+/// the first visible grapheme cluster when overflow clips the preedit from
+/// the left.
 final class _PreeditRange {
   final int row;
   final int startCol;
   final int endCol;
-  final int codepointOffset;
-  final List<_PreeditCodepoint> codepoints;
+  final int clusterOffset;
+  final List<_PreeditCluster> clusters;
 
   const _PreeditRange({
     required this.row,
     required this.startCol,
     required this.endCol,
-    required this.codepointOffset,
-    required this.codepoints,
+    required this.clusterOffset,
+    required this.clusters,
   });
 
   bool overlaps(int row, int col, int span) {
@@ -784,7 +762,7 @@ final class _PreeditRange {
         row == other.row &&
         startCol == other.startCol &&
         endCol == other.endCol &&
-        codepointOffset == other.codepointOffset;
+        clusterOffset == other.clusterOffset;
   }
 
   static _PreeditRange? resolve({
@@ -816,40 +794,53 @@ final class _PreeditRange {
       row: cursor.position.row,
       startCol: startCol,
       endCol: endCol,
-      codepointOffset: visible.codepointOffset,
-      codepoints: preedit.codepoints,
+      clusterOffset: visible.clusterOffset,
+      clusters: preedit.clusters,
     );
   }
 }
 
 /// Preedit text split into terminal-cell spans.
 ///
-/// Rendering uses these spans instead of paragraph widths so CJK, emoji, and
-/// narrow text replace exactly the terminal cells they occupy.
+/// Rendering uses libghostty's grapheme-cluster spans instead of paragraph
+/// widths so preedit text replaces exactly the terminal cells it occupies.
 final class _PreeditText {
-  final List<_PreeditCodepoint> codepoints;
+  final List<_PreeditCluster> clusters;
   final int cellWidth;
 
-  const _PreeditText(this.codepoints, this.cellWidth);
+  const _PreeditText(this.clusters, this.cellWidth);
 
   factory _PreeditText.parse(String text) {
     if (text.isEmpty) return const _PreeditText([], 0);
 
-    final codepoints = <_PreeditCodepoint>[];
+    final codepoints = text.runes.toList(growable: false);
+    final clusters = <_PreeditCluster>[];
     var cellWidth = 0;
-    for (final cp in text.runes) {
-      if (_isRemovedPreeditCodepoint(cp) || _isZeroWidthPreeditCodepoint(cp)) {
-        continue;
+    var index = 0;
+    while (index < codepoints.length) {
+      final result = unicodeGraphemeWidth(codepoints.sublist(index));
+      final end = math.min(index + result.consumed, codepoints.length);
+      if (end <= index) break;
+
+      final span = result.width;
+      if (span > 0) {
+        cellWidth += span;
+        clusters.add(
+          _PreeditCluster(
+            text: String.fromCharCodes(codepoints, index, end),
+            firstCodepoint: codepoints[index],
+            graphemeLength: end - index,
+            span: span,
+          ),
+        );
       }
-      final span = _preeditCellWidth(cp);
-      cellWidth += span;
-      codepoints.add(_PreeditCodepoint(cp, span));
+      index = end;
     }
 
-    return _PreeditText(codepoints, cellWidth);
+    return _PreeditText(clusters, cellWidth);
   }
 
-  bool get isEmpty => codepoints.isEmpty;
+  bool get isEmpty => clusters.isEmpty;
 
   int startCol(int cursorCol, int cols) {
     final rightWidth = cols - cursorCol;
@@ -858,16 +849,16 @@ final class _PreeditText {
         : math.max(0, cursorCol - (cellWidth - rightWidth));
   }
 
-  ({int codepointOffset, int width}) visibleSuffix(int maxWidth) {
-    var codepointOffset = codepoints.length;
+  ({int clusterOffset, int width}) visibleSuffix(int maxWidth) {
+    var clusterOffset = clusters.length;
     var width = 0;
-    for (var i = codepoints.length - 1; i >= 0; i--) {
-      final nextWidth = width + codepoints[i].span;
+    for (var i = clusters.length - 1; i >= 0; i--) {
+      final nextWidth = width + clusters[i].span;
       if (nextWidth > maxWidth) break;
       width = nextWidth;
-      codepointOffset = i;
+      clusterOffset = i;
     }
-    return (codepointOffset: codepointOffset, width: width);
+    return (clusterOffset: clusterOffset, width: width);
   }
 }
 
@@ -1258,12 +1249,12 @@ final class _TerminalRowBuilder {
     );
 
     var col = range.startCol;
-    for (var i = range.codepointOffset; i < range.codepoints.length; i++) {
-      final codepoint = range.codepoints[i];
-      final nextCol = col + codepoint.span;
+    for (var i = range.clusterOffset; i < range.clusters.length; i++) {
+      final cluster = range.clusters[i];
+      final nextCol = col + cluster.span;
       if (nextCol > range.endCol) break;
       final x = col * _frame.cellWidth;
-      _foreground.emitPreedit(codepoint, row, x: x);
+      _foreground.emitPreedit(cluster, row, x: x);
       col = nextCol;
     }
   }
