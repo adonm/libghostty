@@ -98,7 +98,18 @@ void main() {
         binding.handleScroll(-3);
 
         expect(output, hasLength(1));
-        expect(output.first.length, greaterThan(0));
+        expect(utf8.decode(output.single), '\x1b[A\x1b[A\x1b[A');
+      });
+
+      test('uses libghostty application cursor key state', () {
+        writeUtf8(controller.terminal, '\x1b[?1049h\x1b[?1h');
+        final output = <Uint8List>[];
+        controller.onOutput = output.add;
+
+        binding.handleScroll(-2);
+
+        expect(output, hasLength(1));
+        expect(utf8.decode(output.single), '\x1bOA\x1bOA');
       });
 
       test('emits no output on primary screen', () {

@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show immutable;
+import 'package:flutter/foundation.dart' show immutable, mapEquals;
 import 'package:libghostty/libghostty.dart';
 
 /// When to auto-scroll the viewport to the bottom.
@@ -43,11 +43,12 @@ enum ScrollToBottom {
 /// ```
 @immutable
 class TerminalConfig {
-  /// Default terminal modes.
+  /// Overrides applied on top of libghostty's terminal defaults.
   ///
-  /// Includes grapheme cluster mode for proper multi-codepoint character
-  /// handling. Applied on terminal init and restored when the alternate
-  /// screen exits back to the primary screen.
+  /// Flterm only overrides behavior needed by its renderer: cursor blinking
+  /// and grapheme clustering. Other modes retain libghostty's defaults.
+  /// Applied on terminal init and restored when the alternate screen exits
+  /// back to the primary screen.
   ///
   /// Spread and override to change individual defaults:
   ///
@@ -60,13 +61,7 @@ class TerminalConfig {
   /// );
   /// ```
   static const defaultModes = <TerminalMode, bool>{
-    .srm(): true,
-    .autoWrap(): true,
     .cursorBlinking(): true,
-    .cursorVisible(): true,
-    .alternateScroll(): true,
-    .numlockKeypad(): true,
-    .altEscPrefix(): true,
     .graphemeCluster(): true,
   };
 
@@ -115,9 +110,10 @@ class TerminalConfig {
   /// - `false`: never blink, ignore DEC mode 12 (DECSCUSR still respected).
   final bool? cursorBlink;
 
-  /// Terminal modes applied on init and primary screen restore.
+  /// Terminal mode overrides applied on init and primary screen restore.
   ///
-  /// Programs can change modes at runtime via escape sequences. Use
+  /// Modes absent from this map retain libghostty's defaults. Programs can
+  /// change modes at runtime via escape sequences. Use
   /// [TerminalController.modeGet] and [TerminalController.modeSet] to
   /// query or override the live state.
   final Map<TerminalMode, bool> modes;
@@ -195,7 +191,7 @@ class TerminalConfig {
           glyphProtocol == other.glyphProtocol &&
           cursorStyle == other.cursorStyle &&
           cursorBlink == other.cursorBlink &&
-          _modesEqual(modes, other.modes) &&
+          mapEquals(modes, other.modes) &&
           scrollToBottom == other.scrollToBottom &&
           selectionClearOnTyping == other.selectionClearOnTyping &&
           enquiryResponse == other.enquiryResponse &&
@@ -242,16 +238,4 @@ class TerminalConfig {
       'cols: $cols, rows: $rows, '
       'scrollbackLimit: $scrollbackLimit, '
       'modes: ${modes.length} entries)';
-
-  static bool _modesEqual(
-    Map<TerminalMode, bool> a,
-    Map<TerminalMode, bool> b,
-  ) {
-    if (identical(a, b)) return true;
-    if (a.length != b.length) return false;
-    for (final entry in a.entries) {
-      if (b[entry.key] != entry.value) return false;
-    }
-    return true;
-  }
 }
