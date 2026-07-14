@@ -10,7 +10,6 @@ import 'package:meta/meta.dart';
 import '../foundation.dart';
 import '../links/link_settings.dart';
 import 'link_interaction.dart';
-import 'terminal_raw_gesture_detector.dart';
 import 'terminal_view_binding.dart';
 
 /// Interprets gestures as terminal actions: selection, mouse tracking
@@ -63,15 +62,45 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
       onPointerDown: tracked ? _handleTrackedDown : null,
       onPointerMove: tracked ? _handleTrackedMove : null,
       onPointerUp: tracked ? _handleTrackedUp : null,
-      child: TerminalRawGestureDetector(
-        onTapDown: _handleTapDown,
-        onTapUp: _handleTapUp,
-        onDragStart: _handleDragStart,
-        onDragUpdate: _handleDragUpdate,
-        onDragEnd: _handleDragEnd,
-        onLongPressStart: _handleLongPressStart,
-        onLongPressMoveUpdate: _handleLongPressMoveUpdate,
-        onLongPressUp: _handleLongPressUp,
+      child: RawGestureDetector(
+        behavior: HitTestBehavior.opaque,
+        gestures: <Type, GestureRecognizerFactory>{
+          TapGestureRecognizer:
+              GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+                () => TapGestureRecognizer(debugOwner: this),
+                (recognizer) => recognizer
+                  ..onTapDown = _handleTapDown
+                  ..onTapUp = _handleTapUp,
+              ),
+          LongPressGestureRecognizer:
+              GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+                () => LongPressGestureRecognizer(
+                  debugOwner: this,
+                  supportedDevices: const {PointerDeviceKind.touch},
+                ),
+                (recognizer) => recognizer
+                  ..onLongPressStart = _handleLongPressStart
+                  ..onLongPressMoveUpdate = _handleLongPressMoveUpdate
+                  ..onLongPressUp = _handleLongPressUp,
+              ),
+          PanGestureRecognizer:
+              GestureRecognizerFactoryWithHandlers<PanGestureRecognizer>(
+                () => PanGestureRecognizer(
+                  debugOwner: this,
+                  supportedDevices: const {PointerDeviceKind.mouse},
+                ),
+                (recognizer) {
+                  recognizer
+                    ..dragStartBehavior = .down
+                    ..onStart = _handleDragStart
+                    ..onUpdate = _handleDragUpdate
+                    ..onEnd = (_) {
+                      _handleDragEnd();
+                    }
+                    ..onCancel = _handleDragEnd;
+                },
+              ),
+        },
         child: widget.child,
       ),
     );
@@ -123,12 +152,6 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
     if (_pressCell == null) return;
     _binding.cancelSelectionGesture();
     _pressCell = null;
-  }
-
-  int _clampInt(int value, int min, int max) {
-    if (value < min) return min;
-    if (value > max) return max;
-    return value;
   }
 
   void _endDrag() {
@@ -320,7 +343,7 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
     }
 
     final clampedRow = visibleRows > 0
-        ? _clampInt(cell.row, 0, visibleRows - 1)
+        ? cell.row.clamp(0, visibleRows - 1)
         : cell.row;
     final clampedCell = Position(row: clampedRow, col: cell.col);
     final rectangle = drag.baseRectangle || _isBlockModifierPressed();
