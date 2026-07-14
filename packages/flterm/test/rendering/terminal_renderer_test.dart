@@ -62,7 +62,7 @@ void main() {
             metrics: metrics,
             offset: ViewportOffset.zero(),
             renderCache: renderCache,
-            renderObserver: _TestRenderObserver(hasFocus: focused),
+            focused: focused,
             blinkVisible: blinkVisible,
             onResize: onResize,
           ),
@@ -226,17 +226,4 @@ class _TrackingRenderCache extends TerminalRenderCache {
     acquiredKeys.add(config);
     return super.acquireAtlas(config);
   }
-}
-
-class _TestRenderObserver implements TerminalRenderObserver {
-  @override
-  final bool hasFocus;
-
-  const _TestRenderObserver({this.hasFocus = true});
-
-  @override
-  void addListener(VoidCallback listener) {}
-
-  @override
-  void removeListener(VoidCallback listener) {}
 }

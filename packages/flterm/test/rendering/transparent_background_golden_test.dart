@@ -77,7 +77,7 @@ void main() {
                       metrics: metrics,
                       offset: ViewportOffset.zero(),
                       renderCache: renderCache(),
-                      renderObserver: const _Observer(),
+                      focused: true,
                     ),
                   ),
                 ),
@@ -149,17 +149,4 @@ void main() {
       await expectGolden('transparent_explicit_default.png');
     });
   });
-}
-
-class _Observer implements TerminalRenderObserver {
-  const _Observer();
-
-  @override
-  bool get hasFocus => true;
-
-  @override
-  void addListener(VoidCallback listener) {}
-
-  @override
-  void removeListener(VoidCallback listener) {}
 }

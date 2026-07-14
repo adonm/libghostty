@@ -79,7 +79,7 @@ void main() {
                 terminal: terminal,
                 offset: ViewportOffset.zero(),
                 renderCache: renderCache(),
-                renderObserver: _TestRenderObserver(),
+                focused: true,
               ),
             ),
           ),
@@ -341,15 +341,4 @@ void main() {
       });
     });
   });
-}
-
-class _TestRenderObserver implements TerminalRenderObserver {
-  @override
-  bool get hasFocus => true;
-
-  @override
-  void addListener(VoidCallback listener) {}
-
-  @override
-  void removeListener(VoidCallback listener) {}
 }

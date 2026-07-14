@@ -5,7 +5,6 @@ import 'package:libghostty/libghostty.dart';
 
 import '../atlas/atlas.dart';
 import '../paint_state.dart';
-import 'terminal_painter.dart';
 
 /// Renders the terminal cursor in block, hollow, underline, and bar shapes.
 ///
@@ -22,14 +21,13 @@ import 'terminal_painter.dart';
 ///
 /// Cursor opacity from [CursorTheme.opacity] is applied when focused.
 /// Unfocused cursors draw at full opacity.
-class CursorPainter implements TerminalPainter {
+class CursorPainter {
   final Paint _paint;
   final Atlas _atlas;
   final TerminalPaintState _state;
 
   CursorPainter(this._state, this._atlas) : _paint = Paint();
 
-  @override
   void paint(Canvas canvas) {
     final cursor = _state.cursor;
     if (_state.preeditActive) return;

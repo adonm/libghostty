@@ -98,7 +98,7 @@ void main() {
               metrics: metrics,
               offset: ViewportOffset.zero(),
               renderCache: renderCache(),
-              renderObserver: const _TestRenderObserver(),
+              focused: true,
             ),
           ),
         ),
@@ -323,17 +323,4 @@ void main() {
       });
     });
   });
-}
-
-class _TestRenderObserver implements TerminalRenderObserver {
-  const _TestRenderObserver();
-
-  @override
-  bool get hasFocus => true;
-
-  @override
-  void addListener(VoidCallback listener) {}
-
-  @override
-  void removeListener(VoidCallback listener) {}
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:libghostty/libghostty.dart';
@@ -28,7 +29,7 @@ import 'terminal_render_pipeline.dart';
 ///   theme: TerminalTheme.dark(),
 ///   metrics: measureCellMetrics(fontFamily: 'monospace', fontSize: 14),
 ///   offset: ViewportOffset.zero(),
-///   renderObserver: controller,
+///   focused: controller.hasFocus,
 /// )
 /// ```
 @internal
@@ -55,11 +56,8 @@ class TerminalRenderer extends LeafRenderObjectWidget {
   /// At `pixels == maxScrollExtent`, the live screen is visible.
   final ViewportOffset offset;
 
-  /// Observable focus state.
-  ///
-  /// Listened to by the render box. Changes trigger a repaint to update
-  /// cursor appearance (filled vs hollow).
-  final TerminalRenderObserver renderObserver;
+  /// Whether the terminal currently has keyboard focus.
+  final bool focused;
 
   /// Whether the cursor blink is currently in the visible phase.
   ///
@@ -88,7 +86,7 @@ class TerminalRenderer extends LeafRenderObjectWidget {
     required this.theme,
     required this.metrics,
     required this.offset,
-    required this.renderObserver,
+    required this.focused,
     required this.renderCache,
     this.blinkVisible = true,
     this.preeditText = '',
@@ -108,7 +106,7 @@ class TerminalRenderer extends LeafRenderObjectWidget {
       blinkVisible: blinkVisible,
       preeditText: preeditText,
       linkSnapshot: linkSnapshot,
-      renderObserver: renderObserver,
+      focused: focused,
     );
   }
 
@@ -142,7 +140,7 @@ class TerminalRenderer extends LeafRenderObjectWidget {
       ..offset = offset
       ..metrics = metrics
       ..onResize = onResize
-      ..renderObserver = renderObserver
+      ..focused = focused
       ..blinkVisible = blinkVisible
       ..preeditText = preeditText
       ..linkSnapshot = linkSnapshot;
@@ -170,12 +168,9 @@ class TerminalRenderer extends LeafRenderObjectWidget {
 class TerminalRenderBox extends RenderBox {
   Terminal _terminal;
   ViewportOffset _offset;
-  TerminalRenderObserver _renderObserver;
   OnResize? _onResize;
   TerminalRenderCache _renderCache;
-  late TerminalAtlasHandle _atlasHandle;
   var _performingLayout = false;
-  var _needsFrameSync = false;
   var _stickToBottom = true;
   var _lastScrollbackRows = 0;
   var _preeditText = '';
@@ -189,7 +184,7 @@ class TerminalRenderBox extends RenderBox {
     required TerminalTheme theme,
     required CellMetrics metrics,
     required this._offset,
-    required this._renderObserver,
+    required bool focused,
     required this._renderCache,
     bool blinkVisible = true,
     this._linkSnapshot = .empty,
@@ -197,18 +192,15 @@ class TerminalRenderBox extends RenderBox {
     this._onResize,
   }) : _paintState = TerminalPaintState(theme, metrics)
          ..blinkVisible = blinkVisible
-         ..cursorFocused = _renderObserver.hasFocus {
-    _atlasHandle = _renderCache.acquireAtlas(
-      .fromTheme(
+         ..cursorFocused = focused {
+    _pipeline = TerminalRenderPipeline(
+      _paintState,
+      renderCache: _renderCache,
+      atlasConfig: .fromTheme(
         theme: theme,
         metrics: metrics,
         devicePixelRatio: _currentDevicePixelRatio,
       ),
-    );
-    final atlas = _atlasHandle.atlas;
-    _pipeline = TerminalRenderPipeline(
-      atlas: atlas,
-      state: _paintState,
       onImageReady: markNeedsPaint,
     );
 
@@ -306,12 +298,11 @@ class TerminalRenderBox extends RenderBox {
 
   set onResize(OnResize? value) => _onResize = value;
 
-  set renderObserver(TerminalRenderObserver value) {
-    if (_renderObserver == value) return;
-    if (attached) _renderObserver.removeListener(_onRenderObserverChanged);
-    _renderObserver = value;
-    if (attached) _renderObserver.addListener(_onRenderObserverChanged);
-    _onRenderObserverChanged();
+  set focused(bool value) {
+    if (_paintState.cursorFocused == value) return;
+    _paintState.cursorFocused = value;
+    _pipeline.refreshCursorGlyph();
+    markNeedsPaint();
   }
 
   set renderCache(TerminalRenderCache value) {
@@ -328,7 +319,7 @@ class TerminalRenderBox extends RenderBox {
     _terminal = value;
     if (attached) _terminal.addListener(_onTerminalChanged);
     _applyTerminalThemeColors();
-    _needsFrameSync = true;
+    _pipeline.markTerminalDirty();
     markNeedsLayout();
   }
 
@@ -347,11 +338,11 @@ class TerminalRenderBox extends RenderBox {
         oldTheme.fontSize != value.fontSize ||
         oldTheme.fontWeight != value.fontWeight ||
         oldTheme.fontFamily != value.fontFamily ||
-        !_listEquals(oldTheme.fontFamilyFallback, value.fontFamilyFallback);
+        !listEquals(oldTheme.fontFamilyFallback, value.fontFamilyFallback);
     _paintState.updateTheme(value);
     _applyTerminalThemeColors();
     _pipeline.markAllRowsDirty();
-    _needsFrameSync = true;
+    _pipeline.markTerminalDirty();
 
     if (fontChanged) {
       markNeedsLayout();
@@ -364,7 +355,6 @@ class TerminalRenderBox extends RenderBox {
   void attach(PipelineOwner owner) {
     super.attach(owner);
     _offset.addListener(_onScroll);
-    _renderObserver.addListener(_onRenderObserverChanged);
     _terminal.addListener(_onTerminalChanged);
     markNeedsLayout();
   }
@@ -384,18 +374,12 @@ class TerminalRenderBox extends RenderBox {
           ifTrue: 'cursor visible',
         ),
       )
-      ..add(
-        DiagnosticsProperty<TerminalRenderObserver?>(
-          'renderObserver',
-          _renderObserver,
-        ),
-      );
+      ..add(FlagProperty('focused', value: _paintState.cursorFocused));
   }
 
   @override
   void detach() {
     _offset.removeListener(_onScroll);
-    _renderObserver.removeListener(_onRenderObserverChanged);
     _terminal.removeListener(_onTerminalChanged);
     super.detach();
   }
@@ -405,7 +389,6 @@ class TerminalRenderBox extends RenderBox {
     _paintState.rows = 0;
     _paintState.cols = 0;
     _pipeline.dispose();
-    _atlasHandle.release();
     super.dispose();
   }
 
@@ -467,10 +450,6 @@ class TerminalRenderBox extends RenderBox {
 
     _syncScrollLayout();
 
-    // Grid changes invalidate every row's sprite slot layout. Atlas
-    // rebinding invalidates atlas references inside the pipeline.
-    if (gridChanged) _pipeline.markAllRowsDirty();
-
     if (gridChanged || atlasReconfigured) _markFrameDirty();
 
     _performingLayout = false;
@@ -495,13 +474,7 @@ class TerminalRenderBox extends RenderBox {
       metrics: _paintState.metrics,
       devicePixelRatio: dpr ?? _currentDevicePixelRatio,
     );
-    if (!force && config == _atlasHandle.config) return false;
-
-    final previousHandle = _atlasHandle;
-    _atlasHandle = _renderCache.acquireAtlas(config);
-    _pipeline.bindAtlas(_atlasHandle.atlas);
-    previousHandle.release();
-    return true;
+    return _pipeline.bindAtlas(_renderCache, config, force: force);
   }
 
   double get _currentDevicePixelRatio {
@@ -513,23 +486,8 @@ class TerminalRenderBox extends RenderBox {
         .devicePixelRatio;
   }
 
-  static bool _listEquals(List<String> a, List<String> b) {
-    if (identical(a, b)) return true;
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
-
   void _markFrameDirty() {
-    _needsFrameSync = true;
-    markNeedsPaint();
-  }
-
-  void _onRenderObserverChanged() {
-    _paintState.cursorFocused = _renderObserver.hasFocus;
-    _pipeline.refreshCursorGlyph();
+    _pipeline.markTerminalDirty();
     markNeedsPaint();
   }
 
@@ -563,7 +521,7 @@ class TerminalRenderBox extends RenderBox {
     if (_paintState.rows == 0 || _performingLayout) return;
 
     if (_terminal.scrollbackRows != _lastScrollbackRows) {
-      _needsFrameSync = true;
+      _pipeline.markTerminalDirty();
       markNeedsLayout();
       return;
     }
@@ -614,11 +572,8 @@ class TerminalRenderBox extends RenderBox {
   void _syncFrameState() {
     if (_paintState.rows == 0) return;
 
-    final terminalDirty = _needsFrameSync;
-    _needsFrameSync = false;
     _pipeline.sync(
       _terminal,
-      terminalDirty: terminalDirty,
       preeditText: _preeditText,
       linkSnapshot: _linkSnapshot,
     );
