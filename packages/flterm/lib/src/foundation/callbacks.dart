@@ -28,7 +28,7 @@ typedef OnResize = void Function(int cols, int rows);
 /// ```
 typedef TerminalMouseEvent = ({
   MouseAction action,
-  MouseButton button,
+  MouseButton? button,
   double pixelX,
   double pixelY,
 });

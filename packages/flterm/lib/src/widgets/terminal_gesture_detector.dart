@@ -4,7 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:libghostty/libghostty.dart'
-    show MouseAction, MouseTracking, Position;
+    show MouseAction, MouseButton, MouseTracking, Position;
 import 'package:meta/meta.dart';
 
 import '../foundation.dart';
@@ -50,6 +50,8 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
   Position? _pressCell;
   var _linkPressActive = false;
   Timer? _autoScrollTimer;
+  final Map<int, MouseButton> _trackedButtons = {};
+  double _wheelRemainder = 0;
 
   TerminalViewBinding get _binding => widget.binding;
 
@@ -62,6 +64,9 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
       onPointerDown: tracked ? _handleTrackedDown : null,
       onPointerMove: tracked ? _handleTrackedMove : null,
       onPointerUp: tracked ? _handleTrackedUp : null,
+      onPointerCancel: tracked ? _handleTrackedCancel : null,
+      onPointerHover: tracked ? _handleTrackedHover : null,
+      onPointerSignal: tracked ? _handleTrackedSignal : null,
       child: RawGestureDetector(
         behavior: HitTestBehavior.opaque,
         gestures: <Type, GestureRecognizerFactory>{
@@ -122,6 +127,7 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
   @override
   void dispose() {
     _autoScrollTimer?.cancel();
+    _trackedButtons.clear();
     super.dispose();
   }
 
@@ -181,7 +187,6 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
   }
 
   void _handleDragUpdate(DragUpdateDetails details) {
-    if (_isMouseTracked(HardwareKeyboard.instance.isShiftPressed)) return;
     if (_drag != null) _updateDrag(details.localPosition);
   }
 
@@ -191,6 +196,10 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
 
   void _handleLongPressStart(LongPressStartDetails details) {
     _binding.requestFocus();
+    if (_isMouseTracked(false)) {
+      _cancelSelectionPress();
+      return;
+    }
     if (!widget.settings.longPressSelection) {
       _cancelSelectionPress();
       return;
@@ -200,6 +209,7 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
       rectangle: widget.settings.longPressSelectionShape == .rectangle,
       beginPress: _pressCell == null,
     );
+    unawaited(Feedback.forLongPress(context));
   }
 
   void _handleLongPressUp() => _endDrag();
@@ -248,21 +258,60 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
   }
 
   void _handleTrackedDown(PointerDownEvent event) {
-    final shift =
-        event.buttons & kSecondaryButton != 0 ||
-        HardwareKeyboard.instance.isShiftPressed;
-    if (!_isMouseTracked(shift)) return;
-    _sendMouseEvent(.press, event.localPosition);
+    if (!_isMouseTracked(HardwareKeyboard.instance.isShiftPressed)) return;
+    final button = _mouseButton(event.buttons);
+    _trackedButtons[event.pointer] = button;
+    _sendMouseEvent(.press, event.localPosition, button: button);
   }
 
   void _handleTrackedMove(PointerMoveEvent event) {
     if (!_isMouseTracked(HardwareKeyboard.instance.isShiftPressed)) return;
-    _sendMouseEvent(.motion, event.localPosition);
+    _sendMouseEvent(
+      .motion,
+      event.localPosition,
+      button: _trackedButtons[event.pointer] ?? _mouseButton(event.buttons),
+    );
   }
 
   void _handleTrackedUp(PointerUpEvent event) {
-    if (!_isMouseTracked(HardwareKeyboard.instance.isShiftPressed)) return;
-    _sendMouseEvent(.release, event.localPosition);
+    final button = _trackedButtons.remove(event.pointer);
+    if (button == null) return;
+    _sendMouseEvent(.release, event.localPosition, button: button);
+  }
+
+  void _handleTrackedCancel(PointerCancelEvent event) {
+    final button = _trackedButtons.remove(event.pointer);
+    if (button == null) return;
+    _sendMouseEvent(.release, event.localPosition, button: button);
+  }
+
+  void _handleTrackedHover(PointerHoverEvent event) {
+    if (event.kind == .touch ||
+        !_isMouseTracked(HardwareKeyboard.instance.isShiftPressed)) {
+      return;
+    }
+    _sendMouseEvent(.motion, event.localPosition, button: null);
+  }
+
+  void _handleTrackedSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent ||
+        event.kind == .touch ||
+        !_isMouseTracked(HardwareKeyboard.instance.isShiftPressed)) {
+      return;
+    }
+    GestureBinding.instance.pointerSignalResolver.register(event, (resolved) {
+      final scroll = resolved as PointerScrollEvent;
+      final cellHeight = widget.metrics.cellHeight;
+      if (cellHeight <= 0) return;
+      _wheelRemainder += scroll.scrollDelta.dy / cellHeight;
+      final lines = _wheelRemainder.truncate();
+      _wheelRemainder -= lines;
+      if (lines == 0) return;
+      final button = lines < 0 ? MouseButton.four : MouseButton.five;
+      for (var i = 0; i < lines.abs(); i++) {
+        _sendMouseEvent(.press, scroll.localPosition, button: button);
+      }
+    });
   }
 
   bool _isBlockModifierPressed() {
@@ -291,10 +340,23 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
     _pressCell = null;
   }
 
-  void _sendMouseEvent(MouseAction action, Offset position) {
+  MouseButton _mouseButton(int buttons) {
+    if (buttons & kSecondaryButton != 0) return .right;
+    if (buttons & kMiddleMouseButton != 0) return .middle;
+    if (buttons & kBackMouseButton != 0) return .four;
+    if (buttons & kForwardMouseButton != 0) return .five;
+    if (buttons & kPrimaryButton != 0) return .left;
+    return .unknown;
+  }
+
+  void _sendMouseEvent(
+    MouseAction action,
+    Offset position, {
+    required MouseButton? button,
+  }) {
     _binding.handleMouseEvent((
       action: action,
-      button: .left,
+      button: button,
       pixelX: position.dx,
       pixelY: position.dy,
     ));
