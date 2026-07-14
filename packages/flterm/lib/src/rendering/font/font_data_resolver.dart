@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'font_data_resolver_io.dart'
@@ -43,10 +42,6 @@ class FontDataResolver {
   };
 
   FontDataResolver._();
-
-  /// Clears the resolution cache.
-  @visibleForTesting
-  static void clearCache() => _cache.clear();
 
   /// Resolves font file bytes for [fontFamily].
   ///

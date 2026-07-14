@@ -11,6 +11,7 @@ import 'package:flterm/src/foundation/terminal_theme.dart';
 import 'package:flterm/src/links/link_snapshot.dart';
 import 'package:flterm/src/rendering/atlas/atlas.dart';
 import 'package:flterm/src/rendering/paint_state.dart';
+import 'package:flterm/src/rendering/terminal_render_cache.dart';
 import 'package:flterm/src/rendering/terminal_render_pipeline.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart';
@@ -42,33 +43,34 @@ void main() {
     }
 
     late Terminal terminal;
-    late Atlas atlas;
+    late TerminalRenderCache renderCache;
     late TerminalPaintState state;
     late TerminalRenderPipeline pipeline;
 
     setUp(() {
       terminal = Terminal(cols: 8, rows: 2);
-      atlas = Atlas(config());
+      renderCache = TerminalRenderCache();
       state = TerminalPaintState(TerminalTheme.dark(), metrics)
         ..cols = 8
         ..rows = 2;
       pipeline = TerminalRenderPipeline(
-        atlas: atlas,
-        state: state,
+        state,
+        renderCache: renderCache,
+        atlasConfig: config(),
         onImageReady: () {},
       )..configureGrid(2, 8);
     });
 
     tearDown(() {
       pipeline.dispose();
-      atlas.dispose();
+      renderCache.dispose();
       terminal.dispose();
     });
 
     test('sync resolves cursor glyph and paints current frame', () {
       writeUtf8(terminal, 'A\x1b[1;1H');
 
-      pipeline.sync(terminal, terminalDirty: true);
+      pipeline.sync(terminal);
 
       expect(state.cursor.visible, isTrue);
       expect(state.cursorAtlasEntry, isNotNull);
@@ -77,13 +79,10 @@ void main() {
 
     test('bindAtlas keeps the frame pipeline configured', () {
       writeUtf8(terminal, 'A\x1b[1;1H');
-      pipeline.sync(terminal, terminalDirty: true);
+      pipeline.sync(terminal);
 
-      final nextAtlas = Atlas(config(fontSize: 16));
-      addTearDown(nextAtlas.dispose);
-
-      pipeline.bindAtlas(nextAtlas);
-      pipeline.sync(terminal, terminalDirty: false);
+      pipeline.bindAtlas(renderCache, config(fontSize: 16));
+      pipeline.sync(terminal);
 
       expect(state.cursorAtlasEntry, isNotNull);
       paint(pipeline);
@@ -91,14 +90,15 @@ void main() {
 
     test('selection changes repaint through terminal dirty state', () {
       writeUtf8(terminal, 'hello');
-      pipeline.sync(terminal, terminalDirty: true);
+      pipeline.sync(terminal);
 
       terminal.selection = Selection.fromRefs(
         start: GridRef.at(terminal, const Position(row: 0, col: 1)),
         end: GridRef.at(terminal, const Position(row: 0, col: 2)),
       );
 
-      pipeline.sync(terminal, terminalDirty: true);
+      pipeline.markTerminalDirty();
+      pipeline.sync(terminal);
 
       paint(pipeline);
     });
@@ -108,7 +108,6 @@ void main() {
 
       pipeline.sync(
         terminal,
-        terminalDirty: true,
         linkSnapshot: LinkSnapshot.highlighted(
           const CellRange(
             start: Position(row: 0, col: 0),

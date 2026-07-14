@@ -24,8 +24,7 @@ import 'terminal_controller_impl.dart';
 /// pty.onData = (bytes) => controller.write(bytes);
 /// controller.sendText('ls -la\n');
 /// ```
-abstract class TerminalController extends ChangeNotifier
-    implements TerminalRenderObserver {
+abstract class TerminalController extends ChangeNotifier {
   /// Called with bytes to send to the backend (PTY, SSH, socket).
   ///
   /// Set this before calling [write]. Fires during [write], [sendKey],
@@ -70,6 +69,9 @@ abstract class TerminalController extends ChangeNotifier
 
   /// Whether the terminal currently has an active text selection.
   bool get hasSelection;
+
+  /// Whether the attached terminal view has keyboard focus.
+  bool get hasFocus;
 
   /// Current soft keyboard state.
   KeyboardState get keyboardState;

@@ -7,5 +7,4 @@ export 'foundation/input_types.dart';
 export 'foundation/platform_map.dart';
 export 'foundation/terminal_config.dart';
 export 'foundation/terminal_gesture_settings.dart';
-export 'foundation/terminal_render_observer.dart';
 export 'foundation/terminal_theme.dart';
