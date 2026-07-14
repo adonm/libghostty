@@ -146,6 +146,18 @@ void main() {
       expect(atlas.emojiImage, isNotNull);
     });
 
+    test('semantics iteration preserves subsequent terminal updates', () {
+      writeUtf8(terminal, 'visible');
+      builder.sync(terminal, terminalDirty: true);
+
+      expect(builder.semanticsText(), contains('visible'));
+
+      writeUtf8(terminal, ' updated');
+      builder.sync(terminal, terminalDirty: true);
+
+      expect(builder.semanticsText(), contains('updated'));
+    });
+
     test('sync emits operator ligatures without adding text atlas entries', () {
       final initialCacheSize = atlas.cacheSize;
       writeUtf8(terminal, '=> !=');

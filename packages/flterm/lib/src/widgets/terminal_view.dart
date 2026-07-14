@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:libghostty/libghostty.dart'
@@ -96,6 +98,15 @@ class TerminalView extends StatefulWidget {
   /// Ctrl+C/V/A/K on Windows.
   final Map<ShortcutActivator, Intent>? shortcuts;
 
+  /// Accessibility label for the terminal semantics node.
+  ///
+  /// Set to null to omit flterm's semantics node when an embedding application
+  /// provides an equivalent accessible terminal surface.
+  final String? semanticsLabel;
+
+  /// Accessibility hint for focusing terminal input.
+  final String? semanticsHint;
+
   /// Raw TTF/OTF font file bytes for exact metric extraction.
   ///
   /// When provided, takes priority over automatic font resolution. The
@@ -117,6 +128,8 @@ class TerminalView extends StatefulWidget {
     this.shortcuts,
     this.scrollPhysics,
     this.scrollController,
+    this.semanticsLabel = 'Terminal',
+    this.semanticsHint = 'Activate to focus terminal input',
     this.autofocus = false,
     this.showKeyboard = true,
     this.padding = const .all(8),
@@ -130,6 +143,8 @@ class TerminalView extends StatefulWidget {
 }
 
 class _TerminalViewState extends State<TerminalView> {
+  static const _semanticsUpdateInterval = Duration(milliseconds: 100);
+
   late FocusNode _focusNode;
   late TerminalTheme _theme;
   late CellMetrics _metrics;
@@ -137,6 +152,7 @@ class _TerminalViewState extends State<TerminalView> {
   late TerminalScrollController _scrollController;
   final _links = LinkInteraction();
   final _rendererKey = GlobalKey();
+  final _semanticsText = ValueNotifier('');
 
   Uint8List? _resolvedFontData;
   var _ownsFocusNode = false;
@@ -147,7 +163,11 @@ class _TerminalViewState extends State<TerminalView> {
   var _visibleRows = 0;
   var _devicePixelRatio = 1.0;
   Timer? _blinkTimer;
+  Timer? _semanticsTimer;
   var _blinkVisible = true;
+  var _semanticsGeneration = 0;
+  String? _pendingSemanticsText;
+  var _semanticsNotificationScheduled = false;
 
   TerminalController get _controller => widget.controller;
 
@@ -192,12 +212,30 @@ class _TerminalViewState extends State<TerminalView> {
   void didUpdateWidget(TerminalView oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    if (widget.semanticsLabel != oldWidget.semanticsLabel) {
+      if (widget.semanticsLabel == null) {
+        _semanticsTimer?.cancel();
+        _semanticsTimer = null;
+        _pendingSemanticsText = null;
+        _semanticsText.value = '';
+      } else {
+        _scheduleSemanticsUpdate();
+      }
+    }
+
     if (widget.controller != oldWidget.controller) {
       oldWidget.controller.removeListener(_onControllerChanged);
+      _binding.terminal.removeListener(_notifySemanticsChanged);
       _binding.detach();
+      _semanticsTimer?.cancel();
+      _semanticsTimer = null;
+      _pendingSemanticsText = null;
+      _semanticsText.value = '';
       _binding = _asBinding(_controller);
+      _binding.terminal.addListener(_notifySemanticsChanged);
       _binding.brightness = _themeBrightness;
       _binding.attach(_focusNode, _scrollController);
+      _scheduleSemanticsUpdate();
       _controller.addListener(_onControllerChanged);
       _links.invalidateContent();
     }
@@ -250,11 +288,17 @@ class _TerminalViewState extends State<TerminalView> {
   @override
   void dispose() {
     _blinkTimer?.cancel();
+    _semanticsTimer?.cancel();
+    SemanticsBinding.instance.removeSemanticsEnabledListener(
+      _handleSemanticsEnabledChanged,
+    );
     _controller.removeListener(_onControllerChanged);
+    _binding.terminal.removeListener(_notifySemanticsChanged);
     _binding.detach();
     if (_ownsFocusNode) _focusNode.dispose();
     _scrollController.removeListener(_onScrollChanged);
     if (_ownsScrollController) _scrollController.dispose();
+    _semanticsText.dispose();
     super.dispose();
   }
 
@@ -262,7 +306,12 @@ class _TerminalViewState extends State<TerminalView> {
   void initState() {
     super.initState();
 
+    SemanticsBinding.instance.addSemanticsEnabledListener(
+      _handleSemanticsEnabledChanged,
+    );
+
     _binding = _asBinding(_controller);
+    _binding.terminal.addListener(_notifySemanticsChanged);
 
     _focusNode = widget.focusNode ?? FocusNode();
     _ownsFocusNode = widget.focusNode == null;
@@ -282,12 +331,13 @@ class _TerminalViewState extends State<TerminalView> {
 
     _binding.brightness = _themeBrightness;
     _binding.attach(_focusNode, _scrollController);
+    _scheduleSemanticsUpdate();
     _controller.addListener(_onControllerChanged);
     _syncLinkInteraction();
   }
 
   Widget _build(BuildContext context, TerminalRenderCache cache) {
-    return GestureDetector(
+    final terminal = GestureDetector(
       behavior: .translucent,
       onTap: _controller.requestFocus,
       child: ColoredBox(
@@ -336,6 +386,12 @@ class _TerminalViewState extends State<TerminalView> {
                         preeditText: _binding.preeditText,
                         blinkVisible: _blinkVisible,
                         linkSnapshot: _links.snapshot(),
+                        semanticsGeneration: _semanticsGeneration,
+                        onSemanticsText:
+                            SemanticsBinding.instance.semanticsEnabled &&
+                                widget.semanticsLabel != null
+                            ? _handleSemanticsText
+                            : null,
                         onResize: _handleResize,
                       ),
                     ),
@@ -347,6 +403,73 @@ class _TerminalViewState extends State<TerminalView> {
         ),
       ),
     );
+    final semanticsLabel = widget.semanticsLabel;
+    if (semanticsLabel == null || !SemanticsBinding.instance.semanticsEnabled) {
+      return terminal;
+    }
+    return ListenableBuilder(
+      listenable: _semanticsText,
+      child: terminal,
+      builder: (context, child) => Semantics(
+        container: true,
+        excludeSemantics: true,
+        label: semanticsLabel,
+        value: _semanticsText.value,
+        hint: widget.semanticsHint,
+        focusable: true,
+        focused: _focusNode.hasFocus,
+        onTap: _controller.requestFocus,
+        onFocus: _controller.requestFocus,
+        child: child,
+      ),
+    );
+  }
+
+  void _handleSemanticsEnabledChanged() {
+    if (!mounted) return;
+    if (SemanticsBinding.instance.semanticsEnabled) {
+      _scheduleSemanticsUpdate();
+    } else {
+      _semanticsTimer?.cancel();
+      _semanticsTimer = null;
+      _pendingSemanticsText = null;
+      _semanticsText.value = '';
+    }
+    setState(() {});
+  }
+
+  void _notifySemanticsChanged() => _scheduleSemanticsUpdate();
+
+  void _scheduleSemanticsUpdate() {
+    if (_semanticsTimer != null ||
+        widget.semanticsLabel == null ||
+        !SemanticsBinding.instance.semanticsEnabled) {
+      return;
+    }
+    _semanticsTimer = Timer(_semanticsUpdateInterval, () {
+      _semanticsTimer = null;
+      if (!mounted ||
+          widget.semanticsLabel == null ||
+          !SemanticsBinding.instance.semanticsEnabled) {
+        return;
+      }
+      setState(() => _semanticsGeneration++);
+    });
+  }
+
+  void _handleSemanticsText(String text) {
+    _pendingSemanticsText = text;
+    if (_semanticsNotificationScheduled) return;
+    _semanticsNotificationScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _semanticsNotificationScheduled = false;
+      final pending = _pendingSemanticsText;
+      _pendingSemanticsText = null;
+      if (!mounted || pending == null || pending == _semanticsText.value) {
+        return;
+      }
+      _semanticsText.value = pending;
+    });
   }
 
   MouseCursor _effectiveMouseCursor() {
@@ -463,6 +586,7 @@ class _TerminalViewState extends State<TerminalView> {
   void _onScrollChanged() {
     _syncBlink();
     if (!_scrollController.hasClients) return;
+    if (_controller.activeScreen == .primary) _scheduleSemanticsUpdate();
     final cellHeight = _metrics.cellHeight;
     if (cellHeight <= 0) return;
     final pixels = _scrollController.position.pixels;

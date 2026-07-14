@@ -200,6 +200,26 @@ class TerminalFrameBuilder {
   /// without a new terminal render state.
   void refreshCursorGlyph() => _cursorBuilder.refreshGlyph();
 
+  String semanticsText() {
+    _rows.reset(_renderState);
+    final output = StringBuffer();
+
+    while (_rows.next()) {
+      _cells.reset(_rows);
+      final line = StringBuffer();
+      while (_cells.next()) {
+        if (_cells.wide == CellWidth.spacerTail) continue;
+        final width = _cells.wide == CellWidth.wide ? 2 : 1;
+        final content = _cells.style.invisible ? '' : _cells.content;
+        line.write(content.isEmpty ? ' ' * width : content);
+      }
+      output.write(line.toString().trimRight());
+      if (!_rows.wrap) output.writeln();
+    }
+
+    return output.toString().trimRight();
+  }
+
   /// Syncs terminal state into paint-ready buffers.
   void sync(
     Terminal terminal, {
