@@ -21,15 +21,15 @@ typedef KittyImageDecoder =
 /// RGBA formats reach this cache; anything else is stored as
 /// [KittyImageUnsupported] so subsequent paints do not retry.
 ///
-/// Re-transmissions under the same id are detected by
-/// [KittyImage.generation], so same-sized replacements cannot reuse stale
-/// decoded images.
+/// Re-transmissions under the same id are detected by libghostty's monotonic
+/// image generation, including byte-level overwrites with unchanged dimensions.
 class KittyImageCache {
   final VoidCallback _onImageReady;
   final KittyImageDecoder _decodeImage;
-
   final Map<int, KittyImageCacheEntry> _entries = {};
-  final Map<int, int> _generations = {};
+  final Map<int, ({int generation, int width, int height})> _fingerprints = {};
+  final Map<int, _KittyDecodeRequest> _activeDecodes = {};
+  final Map<int, _KittyDecodeRequest> _queuedDecodes = {};
 
   /// [onImageReady] fires when a pending decode completes; typically
   /// wired to a render box's `markNeedsPaint`.
@@ -44,7 +44,9 @@ class KittyImageCache {
       if (entry is KittyImageReady) entry.image.dispose();
     }
     _entries.clear();
-    _generations.clear();
+    _fingerprints.clear();
+    _activeDecodes.clear();
+    _queuedDecodes.clear();
   }
 
   /// Releases any cached entries whose id is not in [live].
@@ -52,24 +54,65 @@ class KittyImageCache {
     _entries.removeWhere((id, entry) {
       if (live.contains(id)) return false;
       if (entry is KittyImageReady) entry.image.dispose();
-      _generations.remove(id);
+      _fingerprints.remove(id);
+      _activeDecodes.remove(id);
+      _queuedDecodes.remove(id);
       return true;
     });
   }
 
   /// Returns the entry for [image], starting a decode on first lookup
-  /// or when the image's generation has changed. Never blocks.
+  /// or when its content generation has changed. Never blocks.
   KittyImageCacheEntry lookup(KittyImage image) {
-    final generation = image.generation;
-    final existing = _entries[image.id];
-    if (existing != null && _generations[image.id] == generation) {
+    return _lookup(
+      imageId: image.id,
+      generation: image.generation,
+      width: image.width,
+      height: image.height,
+      rgba: () => _ensureRgba(image),
+    );
+  }
+
+  @visibleForTesting
+  KittyImageCacheEntry lookupRgba({
+    required int imageId,
+    required int generation,
+    required int width,
+    required int height,
+    required Uint8List rgba,
+  }) => _lookup(
+    imageId: imageId,
+    generation: generation,
+    width: width,
+    height: height,
+    rgba: () => rgba,
+  );
+
+  KittyImageCacheEntry _lookup({
+    required int imageId,
+    required int generation,
+    required int width,
+    required int height,
+    required Uint8List? Function() rgba,
+  }) {
+    final fingerprint = (generation: generation, width: width, height: height);
+    final existing = _entries[imageId];
+    final previousFingerprint = _fingerprints[imageId];
+    if (existing != null && previousFingerprint == fingerprint) {
       return existing;
     }
-    if (existing is KittyImageReady) existing.image.dispose();
-    _entries[image.id] = KittyImagePending();
-    _generations[image.id] = generation;
-    _beginDecode(image);
-    return _entries[image.id]!;
+
+    final retainExisting =
+        existing is KittyImageReady &&
+        previousFingerprint?.width == width &&
+        previousFingerprint?.height == height;
+    if (!retainExisting) {
+      if (existing is KittyImageReady) existing.image.dispose();
+      _entries[imageId] = KittyImagePending();
+    }
+    _fingerprints[imageId] = fingerprint;
+    _beginDecode(imageId: imageId, fingerprint: fingerprint, rgba: rgba());
+    return _entries[imageId]!;
   }
 
   /// Returns the cached entry for [imageId], or null if none. Unlike
@@ -78,30 +121,88 @@ class KittyImageCache {
 
   /// Inserts a pre-decoded [image] under [imageId].
   @visibleForTesting
-  void putReady(int imageId, Image image) {
+  void putReady(int imageId, Image image, {int generation = 0}) {
     final existing = _entries[imageId];
     if (existing is KittyImageReady) existing.image.dispose();
     _entries[imageId] = KittyImageReady(image);
-    _generations[imageId] = 0;
+    _fingerprints[imageId] = (
+      generation: generation,
+      width: image.width,
+      height: image.height,
+    );
+    _activeDecodes.remove(imageId);
+    _queuedDecodes.remove(imageId);
   }
 
-  void _beginDecode(KittyImage image) {
-    final imageId = image.id;
-    final generation = _generations[imageId];
-    final rgba = _ensureRgba(image);
+  void _beginDecode({
+    required int imageId,
+    required ({int generation, int width, int height}) fingerprint,
+    required Uint8List? rgba,
+  }) {
     if (rgba == null) {
+      final existing = _entries[imageId];
+      if (existing is KittyImageReady) existing.image.dispose();
       _entries[imageId] = KittyImageUnsupported();
+      _activeDecodes.remove(imageId);
+      _queuedDecodes.remove(imageId);
       return;
     }
-    _decodeImage(rgba, image.width, image.height, .rgba8888, (decoded) {
-      if (_generations[imageId] == generation &&
-          _entries[imageId] is KittyImagePending) {
-        _entries[imageId] = KittyImageReady(decoded);
-        _onImageReady();
-      } else {
-        decoded.dispose();
-      }
-    });
+    final request = _KittyDecodeRequest(
+      imageId: imageId,
+      fingerprint: fingerprint,
+      rgba: rgba,
+    );
+    if (_activeDecodes.containsKey(imageId)) {
+      _queuedDecodes[imageId] = request;
+      return;
+    }
+    _startDecode(request);
+  }
+
+  void _startDecode(_KittyDecodeRequest request) {
+    _activeDecodes[request.imageId] = request;
+    _decodeImage(
+      request.rgba,
+      request.fingerprint.width,
+      request.fingerprint.height,
+      .rgba8888,
+      (decoded) => _finishDecode(request, decoded),
+    );
+  }
+
+  void _finishDecode(_KittyDecodeRequest request, Image decoded) {
+    final imageId = request.imageId;
+    if (!identical(_activeDecodes[imageId], request)) {
+      decoded.dispose();
+      return;
+    }
+    _activeDecodes.remove(imageId);
+
+    final queued = _queuedDecodes.remove(imageId);
+    final desired = _fingerprints[imageId];
+    final isLatest = desired == request.fingerprint;
+    final isUsefulIntermediate =
+        queued != null &&
+        desired == queued.fingerprint &&
+        queued.fingerprint.width == request.fingerprint.width &&
+        queued.fingerprint.height == request.fingerprint.height;
+
+    var published = false;
+    if (isLatest || isUsefulIntermediate) {
+      final existing = _entries[imageId];
+      _entries[imageId] = KittyImageReady(decoded);
+      if (existing is KittyImageReady) existing.image.dispose();
+      published = true;
+    } else {
+      decoded.dispose();
+    }
+
+    if (queued != null &&
+        _fingerprints[imageId] == queued.fingerprint &&
+        _entries.containsKey(imageId)) {
+      _startDecode(queued);
+    }
+    if (published) _onImageReady();
   }
 
   Uint8List? _ensureRgba(KittyImage image) {
@@ -127,6 +228,18 @@ class KittyImageCache {
         return null;
     }
   }
+}
+
+final class _KittyDecodeRequest {
+  final int imageId;
+  final ({int generation, int width, int height}) fingerprint;
+  final Uint8List rgba;
+
+  const _KittyDecodeRequest({
+    required this.imageId,
+    required this.fingerprint,
+    required this.rgba,
+  });
 }
 
 /// Result of a cache lookup for a decoded image.
