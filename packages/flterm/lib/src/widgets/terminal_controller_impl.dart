@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
@@ -28,10 +27,6 @@ class TerminalControllerImpl extends TerminalController
   static final _crBytes = Uint8List.fromList([_cr]);
   static final _formFeedBytes = Uint8List.fromList([_formFeed]);
   static final _clearScrollback = utf8.encode('\x1b[3J');
-  static final _appCursorDown = Uint8List.fromList([0x1b, 0x4f, 0x42]);
-  static final _appCursorUp = Uint8List.fromList([0x1b, 0x4f, 0x41]);
-  static final _cursorDown = Uint8List.fromList([0x1b, 0x5b, 0x42]);
-  static final _cursorUp = Uint8List.fromList([0x1b, 0x5b, 0x41]);
 
   @override
   final Terminal terminal;
@@ -49,7 +44,6 @@ class TerminalControllerImpl extends TerminalController
   KeyboardState _keyboardState = .hidden;
   Mods _virtualMods = const .none();
   var _preeditText = '';
-  var _cursorKeyApplication = false;
   Brightness _brightness = .dark;
   var _cursorBlinking = true;
   var _wasFocused = false;
@@ -407,15 +401,10 @@ class TerminalControllerImpl extends TerminalController
       return;
     }
 
-    final up = _cursorKeyApplication ? _appCursorUp : _cursorUp;
-    final down = _cursorKeyApplication ? _appCursorDown : _cursorDown;
-    final key = lines < 0 ? up : down;
+    final encoded = _encodeKeyPress(lines < 0 ? .arrowUp : .arrowDown);
+    if (encoded.isEmpty) return;
     final count = lines.abs();
-    final bytes = Uint8List(key.length * count);
-    for (var i = 0; i < count; i++) {
-      bytes.setRange(i * key.length, (i + 1) * key.length, key);
-    }
-    _emitOutput(bytes);
+    _emitOutput(utf8.encode(List.filled(count, encoded).join()));
   }
 
   @override
@@ -522,22 +511,7 @@ class TerminalControllerImpl extends TerminalController
 
   @override
   void sendKey(vt.Key key, {Mods mods = const .none()}) {
-    final effectiveMods = mods | _virtualMods;
-    final codepoint = unshiftedCodepointForKey(key);
-    _keyEvent
-      ..key = key
-      ..mods = effectiveMods
-      ..action = .press
-      ..consumedMods = const .none()
-      ..unshiftedCodepoint = codepoint
-      ..utf8 = codepoint > 0 ? String.fromCharCode(codepoint) : null
-      ..composing = false;
-
-    _keyEncoder.sync(terminal);
-    final result = _keyEncoder.encode(_keyEvent);
-    if (result.isEmpty) return;
-    _emitOutput(utf8.encode(result));
-    clearVirtualMods();
+    _emitKeyPress(key, mods: mods | _virtualMods);
   }
 
   @override
@@ -628,16 +602,10 @@ class TerminalControllerImpl extends TerminalController
     _cursorBlinking = _effectiveCursorBlinking();
   }
 
-  int _clampInt(int value, int min, int max) {
-    if (value < min) return min;
-    if (value > max) return max;
-    return value;
-  }
-
   Position _clampViewportPoint(Position position) {
     return Position(
-      row: _clampInt(position.row, 0, _lastRows - 1),
-      col: _clampInt(position.col, 0, _lastCols - 1),
+      row: position.row.clamp(0, _lastRows - 1),
+      col: position.col.clamp(0, _lastCols - 1),
     );
   }
 
@@ -694,6 +662,15 @@ class TerminalControllerImpl extends TerminalController
     Mods mods = const .none(),
     bool clearMods = true,
   }) {
+    final result = _encodeKeyPress(key, mods: mods);
+    if (result.isEmpty) return false;
+
+    _emitOutput(utf8.encode(result));
+    if (clearMods) clearVirtualMods();
+    return true;
+  }
+
+  String _encodeKeyPress(vt.Key key, {Mods mods = const .none()}) {
     final codepoint = unshiftedCodepointForKey(key);
     _keyEvent
       ..key = key
@@ -705,12 +682,7 @@ class TerminalControllerImpl extends TerminalController
       ..composing = false;
 
     _keyEncoder.sync(terminal);
-    final result = _keyEncoder.encode(_keyEvent);
-    if (result.isEmpty) return false;
-
-    _emitOutput(utf8.encode(result));
-    if (clearMods) clearVirtualMods();
-    return true;
+    return _keyEncoder.encode(_keyEvent);
   }
 
   void _emitOutput(Uint8List bytes) => onOutput?.call(bytes);
@@ -869,12 +841,6 @@ class TerminalControllerImpl extends TerminalController
       changed = true;
     }
 
-    final newCursorKeyApp = terminal.modeGet(const .cursorKeys());
-    if (newCursorKeyApp != _cursorKeyApplication) {
-      _cursorKeyApplication = newCursorKeyApp;
-      changed = true;
-    }
-
     final newCursorBlinking = _effectiveCursorBlinking();
     if (newCursorBlinking != _cursorBlinking) {
       _cursorBlinking = newCursorBlinking;
@@ -963,7 +929,7 @@ class TerminalControllerImpl extends TerminalController
     scrollController.jumpTo(clamped);
   }
 
-  Future<void> _updateKeyboardState(KeyboardState newState) async {
+  void _updateKeyboardState(KeyboardState newState) {
     if (newState == _keyboardState) return;
     _keyboardState = newState;
 

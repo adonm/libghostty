@@ -33,18 +33,12 @@ void main() {
     });
 
     group('defaultModes', () {
-      test('contains terminal mode defaults', () {
+      test('only overrides renderer-required libghostty defaults', () {
         const modes = TerminalConfig.defaultModes;
 
-        expect(modes[const TerminalMode.srm()], isTrue);
-        expect(modes[const TerminalMode.autoWrap()], isTrue);
         expect(modes[const TerminalMode.cursorBlinking()], isTrue);
-        expect(modes[const TerminalMode.cursorVisible()], isTrue);
-        expect(modes[const TerminalMode.alternateScroll()], isTrue);
-        expect(modes[const TerminalMode.numlockKeypad()], isTrue);
-        expect(modes[const TerminalMode.altEscPrefix()], isTrue);
         expect(modes[const TerminalMode.graphemeCluster()], isTrue);
-        expect(modes.length, 8);
+        expect(modes.length, 2);
       });
     });
 
