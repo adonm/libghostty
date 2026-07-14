@@ -2,7 +2,6 @@ export 'widgets/terminal_controller.dart';
 export 'widgets/terminal_controller_impl.dart';
 export 'widgets/terminal_gesture_detector.dart';
 export 'widgets/terminal_input_client.dart';
-export 'widgets/terminal_raw_gesture_detector.dart';
 export 'widgets/terminal_scope.dart';
 export 'widgets/terminal_scroll_controller.dart';
 export 'widgets/terminal_shortcut_scope.dart';

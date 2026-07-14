@@ -28,10 +28,10 @@ final class TerminalInputClient with DeltaTextInputClient {
   _CommittedCompositionEdit _committedCompositionEdit = .none;
   var _hadVisiblePreeditText = false;
 
-  VoidCallback? _onNewline;
-  ValueChanged<int>? _onDelete;
-  ValueChanged<String>? _onTextCommitted;
-  ValueChanged<String>? _onPreeditChanged;
+  VoidCallback? onNewline;
+  ValueChanged<int>? onDelete;
+  ValueChanged<String>? onTextCommitted;
+  ValueChanged<String>? onPreeditChanged;
 
   @override
   AutofillScope? get currentAutofillScope => null;
@@ -49,18 +49,6 @@ final class TerminalInputClient with DeltaTextInputClient {
     if (_keyboardAppearance == value) return;
     _keyboardAppearance = value;
     _connection?.updateConfig(_configuration);
-  }
-
-  set onDelete(ValueChanged<int>? callback) => _onDelete = callback;
-
-  set onNewline(VoidCallback? callback) => _onNewline = callback;
-
-  set onPreeditChanged(ValueChanged<String>? callback) {
-    _onPreeditChanged = callback;
-  }
-
-  set onTextCommitted(ValueChanged<String>? callback) {
-    _onTextCommitted = callback;
   }
 
   TextInputConfiguration get _configuration {
@@ -129,7 +117,7 @@ final class TerminalInputClient with DeltaTextInputClient {
       _clearNewlineActionSuppression();
       return;
     }
-    _onNewline?.call();
+    onNewline?.call();
     _suppressNextNewlineDeltaSoon();
   }
 
@@ -252,13 +240,13 @@ final class TerminalInputClient with DeltaTextInputClient {
     var offset = 0;
     for (final match in _newlinePattern.allMatches(text)) {
       final chunk = text.substring(offset, match.start);
-      if (chunk.isNotEmpty) _onTextCommitted?.call(chunk);
-      _onNewline?.call();
+      if (chunk.isNotEmpty) onTextCommitted?.call(chunk);
+      onNewline?.call();
       offset = match.end;
     }
 
     final tail = text.substring(offset);
-    if (tail.isNotEmpty) _onTextCommitted?.call(tail);
+    if (tail.isNotEmpty) onTextCommitted?.call(tail);
     if (singleNewline) _suppressNextNewlineActionSoon();
   }
 
@@ -303,17 +291,17 @@ final class TerminalInputClient with DeltaTextInputClient {
         return;
       }
       final count = delta.deletedRange.end - delta.deletedRange.start;
-      _onDelete?.call(count);
+      onDelete?.call(count);
       _clearCommittedCompositionEdit();
       _resetBuffer();
     }
 
     if (hasVisiblePreeditText) {
       _clearCommittedCompositionEdit();
-      _onPreeditChanged?.call(preeditText);
+      onPreeditChanged?.call(preeditText);
     } else if (_hadVisiblePreeditText) {
       if (!committedFromDelta) _commitEndedCompositionFromValue();
-      _onPreeditChanged?.call('');
+      onPreeditChanged?.call('');
     }
 
     _hadVisiblePreeditText = hasVisiblePreeditText;
@@ -323,14 +311,14 @@ final class TerminalInputClient with DeltaTextInputClient {
     final preeditText = value.terminalComposingText;
     if (preeditText.isNotEmpty) {
       _clearCommittedCompositionEdit();
-      _onPreeditChanged?.call(preeditText);
+      onPreeditChanged?.call(preeditText);
       _hadVisiblePreeditText = true;
       return;
     }
 
     final hadVisiblePreeditText = _hadVisiblePreeditText;
     if (hadVisiblePreeditText) _commitEndedCompositionFromValue();
-    if (hadVisiblePreeditText) _onPreeditChanged?.call('');
+    if (hadVisiblePreeditText) onPreeditChanged?.call('');
     _hadVisiblePreeditText = false;
     if (hadVisiblePreeditText) return;
 
@@ -352,7 +340,7 @@ final class TerminalInputClient with DeltaTextInputClient {
     _clearNewlineActionSuppression();
     _clearCommittedCompositionEdit();
     _hadVisiblePreeditText = false;
-    if (hadVisiblePreeditText) _onPreeditChanged?.call('');
+    if (hadVisiblePreeditText) onPreeditChanged?.call('');
   }
 
   void _suppressNextNewlineActionSoon() {
