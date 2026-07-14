@@ -80,6 +80,12 @@ class TerminalRenderer extends LeafRenderObjectWidget {
   /// Internal render cache used to share compatible atlas state.
   final TerminalRenderCache renderCache;
 
+  /// Monotonically increasing request for an accessible viewport snapshot.
+  final int semanticsGeneration;
+
+  /// Receives accessible text after terminal state has synchronized for paint.
+  final ValueChanged<String>? onSemanticsText;
+
   const TerminalRenderer({
     super.key,
     required this.terminal,
@@ -92,6 +98,8 @@ class TerminalRenderer extends LeafRenderObjectWidget {
     this.preeditText = '',
     this.linkSnapshot = .empty,
     this.onResize,
+    this.semanticsGeneration = 0,
+    this.onSemanticsText,
   });
 
   @override
@@ -107,6 +115,8 @@ class TerminalRenderer extends LeafRenderObjectWidget {
       preeditText: preeditText,
       linkSnapshot: linkSnapshot,
       focused: focused,
+      semanticsGeneration: semanticsGeneration,
+      onSemanticsText: onSemanticsText,
     );
   }
 
@@ -143,7 +153,9 @@ class TerminalRenderer extends LeafRenderObjectWidget {
       ..focused = focused
       ..blinkVisible = blinkVisible
       ..preeditText = preeditText
-      ..linkSnapshot = linkSnapshot;
+      ..linkSnapshot = linkSnapshot
+      ..semanticsGeneration = semanticsGeneration
+      ..onSemanticsText = onSemanticsText;
   }
 }
 
@@ -175,6 +187,9 @@ class TerminalRenderBox extends RenderBox {
   var _lastScrollbackRows = 0;
   var _preeditText = '';
   LinkSnapshot _linkSnapshot;
+  int _semanticsGeneration;
+  int _capturedSemanticsGeneration;
+  ValueChanged<String>? _onSemanticsText;
 
   final TerminalPaintState _paintState;
   late final TerminalRenderPipeline _pipeline;
@@ -190,9 +205,16 @@ class TerminalRenderBox extends RenderBox {
     this._linkSnapshot = .empty,
     this._preeditText = '',
     this._onResize,
+    int semanticsGeneration = 0,
+    ValueChanged<String>? onSemanticsText,
   }) : _paintState = TerminalPaintState(theme, metrics)
          ..blinkVisible = blinkVisible
-         ..cursorFocused = focused {
+         ..cursorFocused = focused,
+       _semanticsGeneration = semanticsGeneration,
+       _capturedSemanticsGeneration = onSemanticsText == null
+           ? semanticsGeneration
+           : semanticsGeneration - 1,
+       _onSemanticsText = onSemanticsText {
     _pipeline = TerminalRenderPipeline(
       _paintState,
       renderCache: _renderCache,
@@ -298,6 +320,21 @@ class TerminalRenderBox extends RenderBox {
 
   set onResize(OnResize? value) => _onResize = value;
 
+  set onSemanticsText(ValueChanged<String>? value) {
+    if (_onSemanticsText == value) return;
+    _onSemanticsText = value;
+    if (value != null) {
+      _capturedSemanticsGeneration = _semanticsGeneration - 1;
+      markNeedsPaint();
+    }
+  }
+
+  set semanticsGeneration(int value) {
+    if (_semanticsGeneration == value) return;
+    _semanticsGeneration = value;
+    if (_onSemanticsText != null) markNeedsPaint();
+  }
+
   set focused(bool value) {
     if (_paintState.cursorFocused == value) return;
     _paintState.cursorFocused = value;
@@ -398,6 +435,11 @@ class TerminalRenderBox extends RenderBox {
   @override
   void paint(PaintingContext context, Offset offset) {
     _syncFrameState();
+    if (_onSemanticsText != null &&
+        _capturedSemanticsGeneration != _semanticsGeneration) {
+      _capturedSemanticsGeneration = _semanticsGeneration;
+      _onSemanticsText!(_pipeline.semanticsText());
+    }
 
     final canvas = context.canvas;
 
