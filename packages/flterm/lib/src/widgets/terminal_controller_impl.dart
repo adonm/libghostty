@@ -35,7 +35,6 @@ class TerminalControllerImpl extends TerminalController
 
   @override
   final Terminal terminal;
-  final _renderState = RenderState();
   final _keyEncoder = KeyEncoder();
   final _mouseEncoder = MouseEncoder();
   late final SelectionGestureDriver _selectionGesture;
@@ -52,6 +51,7 @@ class TerminalControllerImpl extends TerminalController
   var _cursorKeyApplication = false;
   Brightness _brightness = .dark;
   var _cursorBlinking = true;
+  var _mouseButtonPressed = false;
   var _wasFocused = false;
   var _selectionMutationDepth = 0;
 
@@ -78,6 +78,8 @@ class TerminalControllerImpl extends TerminalController
         maxScrollback: config.scrollbackLimit,
       ),
       super.base() {
+    _lastCols = config.cols;
+    _lastRows = config.rows;
     _selectionGesture = SelectionGestureDriver(terminal);
     installDefaultKittyPngDecoder();
     _textInput
@@ -258,7 +260,6 @@ class TerminalControllerImpl extends TerminalController
     _selectionGesture.dispose();
     _keyEncoder.dispose();
     _mouseEncoder.dispose();
-    _renderState.dispose();
     terminal.dispose();
     super.dispose();
   }
@@ -332,16 +333,32 @@ class TerminalControllerImpl extends TerminalController
 
   @override
   void handleMouseEvent(TerminalMouseEvent event) {
+    final button = event.button;
     _mouseEvent
       ..action = event.action
-      ..button = event.button
       ..mods = _currentMods()
       ..setPosition(
         x: event.pixelX * _lastDevicePixelRatio,
         y: event.pixelY * _lastDevicePixelRatio,
       );
+    if (button == null) {
+      _mouseEvent.clearButton();
+    } else {
+      _mouseEvent.button = button;
+    }
+    if (event.action == .press &&
+        button != .four &&
+        button != .five &&
+        button != null) {
+      _mouseButtonPressed = true;
+    }
     _mouseEncoder.sync(terminal);
+    _mouseEncoder.setAnyButtonPressed(pressed: _mouseButtonPressed);
     final result = _mouseEncoder.encode(_mouseEvent);
+    if (event.action == .release) {
+      _mouseButtonPressed = false;
+      _mouseEncoder.setAnyButtonPressed(pressed: false);
+    }
     if (result.isEmpty) return;
     _emitOutput(utf8.encode(result));
   }
@@ -386,10 +403,11 @@ class TerminalControllerImpl extends TerminalController
   }
 
   @override
-  void handleScroll(int lines) {
+  void handleScroll(int lines, {Offset? localPosition}) {
     if (_activeScreen != .alternate || lines == 0) return;
 
     if (_mouseTracking != .none) {
+      if (localPosition == null) return;
       final button = lines < 0 ? MouseButton.four : MouseButton.five;
       final count = lines.abs();
 
@@ -400,7 +418,10 @@ class TerminalControllerImpl extends TerminalController
           ..action = .press
           ..button = button
           ..mods = _currentMods()
-          ..setPosition(x: 0, y: 0);
+          ..setPosition(
+            x: localPosition.dx * _lastDevicePixelRatio,
+            y: localPosition.dy * _lastDevicePixelRatio,
+          );
         final result = _mouseEncoder.encode(_mouseEvent);
         if (result.isNotEmpty) _emitOutput(utf8.encode(result));
       }
@@ -716,10 +737,8 @@ class TerminalControllerImpl extends TerminalController
   void _emitOutput(Uint8List bytes) => onOutput?.call(bytes);
 
   void _ensureGridSize() {
-    if (_lastRows > 0 && _lastCols > 0) return;
-    _renderState.update(terminal);
-    _lastRows = _renderState.rows;
-    _lastCols = _renderState.cols;
+    if (_lastRows <= 0) _lastRows = _config.rows;
+    if (_lastCols <= 0) _lastCols = _config.cols;
   }
 
   bool _extendSelection(LogicalKeyboardKey arrowKey) {
@@ -791,10 +810,10 @@ class TerminalControllerImpl extends TerminalController
   }
 
   TerminalSizeInfo _handleSizeQuery() {
-    _renderState.update(terminal);
+    _ensureGridSize();
     return TerminalSizeInfo(
-      rows: _renderState.rows,
-      columns: _renderState.cols,
+      rows: _lastRows,
+      columns: _lastCols,
       cellWidth: (_lastMetrics.cellWidth * _lastDevicePixelRatio).round(),
       cellHeight: (_lastMetrics.cellHeight * _lastDevicePixelRatio).round(),
     );

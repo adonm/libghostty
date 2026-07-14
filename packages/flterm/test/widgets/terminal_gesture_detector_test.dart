@@ -2,13 +2,15 @@
 library;
 
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/links/link_settings.dart';
 import 'package:flterm/src/widgets.dart';
 import 'package:flterm/src/widgets/link_interaction.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart'
@@ -403,6 +405,18 @@ void main() {
     testWidgets('touch long press starts normal selection by default', (
       tester,
     ) async {
+      final platformCalls = <MethodCall>[];
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+            platformCalls.add(call);
+            return null;
+          });
+      addTearDown(() {
+        debugDefaultTargetPlatformOverride = null;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+      });
       await tester.pumpWidget(buildHandler(controller: controller));
 
       final gesture = await tester.startGesture(const Offset(40, 16));
@@ -410,12 +424,17 @@ void main() {
       await tester.pump(const Duration(milliseconds: 550));
 
       expect(terminalFor(controller).selection, isNull);
+      expect(
+        platformCalls.where((call) => call.method == 'HapticFeedback.vibrate'),
+        hasLength(1),
+      );
 
       await gesture.moveTo(const Offset(80, 32));
       final sel = terminalFor(controller).selection!;
       expect(sel.mode, TerminalSelectionShape.normal);
 
       await gesture.up();
+      debugDefaultTargetPlatformOverride = null;
     });
 
     testWidgets('touch move cancels long press if distance exceeds threshold', (
@@ -839,6 +858,22 @@ void main() {
     });
 
     group('mouse tracking', () {
+      void enableSgrMouse(String mode, {String format = '1006'}) {
+        writeToTerminal(
+          controller,
+          '\x1b[?$mode'
+          'h\x1b[?$format'
+          'h',
+        );
+        bindingFor(controller).handleResize(
+          cols: 80,
+          rows: 24,
+          metrics: defaultMetrics,
+          padding: EdgeInsets.zero,
+          devicePixelRatio: 1,
+        );
+      }
+
       testWidgets('click fires press and release when mode is normal', (
         tester,
       ) async {
@@ -879,6 +914,98 @@ void main() {
         await gesture.up();
 
         expect(events, isEmpty);
+      });
+
+      testWidgets('preserves secondary and middle mouse buttons', (
+        tester,
+      ) async {
+        enableSgrMouse('1000');
+        final events = <Uint8List>[];
+        controller.onOutput = events.add;
+        await tester.pumpWidget(buildHandler(controller: controller));
+
+        final right = await mouseDown(
+          tester,
+          const Offset(24, 16),
+          buttons: kSecondaryButton,
+        );
+        await right.up();
+        final middle = await mouseDown(
+          tester,
+          const Offset(24, 16),
+          buttons: kMiddleMouseButton,
+        );
+        await middle.up();
+
+        expect(utf8.decode(events[0]), '\x1b[<2;4;2M');
+        expect(utf8.decode(events[1]), '\x1b[<2;4;2m');
+        expect(utf8.decode(events[2]), '\x1b[<1;4;2M');
+        expect(utf8.decode(events[3]), '\x1b[<1;4;2m');
+      });
+
+      testWidgets('reports hover motion in any-event mode', (tester) async {
+        enableSgrMouse('1003');
+        expect(bindingFor(controller).mouseTracking, MouseTracking.any);
+        final events = <Uint8List>[];
+        controller.onOutput = events.add;
+        await tester.pumpWidget(buildHandler(controller: controller));
+
+        final mouse = await tester.createGesture(kind: .mouse);
+        await mouse.addPointer(location: const Offset(16, 16));
+        await mouse.moveTo(const Offset(24, 16));
+
+        expect(events, hasLength(1));
+        expect(utf8.decode(events.single), '\x1b[<35;4;2M');
+        await mouse.removePointer();
+      });
+
+      testWidgets('touch emits left-button SGR cell input when tracked', (
+        tester,
+      ) async {
+        enableSgrMouse('1002');
+        final events = <Uint8List>[];
+        controller.onOutput = events.add;
+        await tester.pumpWidget(buildHandler(controller: controller));
+
+        final touch = await tester.startGesture(const Offset(24, 16));
+        await touch.up();
+
+        expect(events, hasLength(2));
+        expect(utf8.decode(events[0]), '\x1b[<0;4;2M');
+        expect(utf8.decode(events[1]), '\x1b[<0;4;2m');
+      });
+
+      testWidgets('touch emits left-button SGR-pixel input in mode 1016', (
+        tester,
+      ) async {
+        enableSgrMouse('1000', format: '1016');
+        final events = <Uint8List>[];
+        controller.onOutput = events.add;
+        await tester.pumpWidget(buildHandler(controller: controller));
+
+        final touch = await tester.startGesture(const Offset(24, 16));
+        await touch.up();
+
+        expect(events, hasLength(2));
+        expect(utf8.decode(events[0]), '\x1b[<0;24;16M');
+        expect(utf8.decode(events[1]), '\x1b[<0;24;16m');
+      });
+
+      testWidgets('wheel reports its pointer position', (tester) async {
+        enableSgrMouse('1000');
+        final events = <Uint8List>[];
+        controller.onOutput = events.add;
+        await tester.pumpWidget(buildHandler(controller: controller));
+
+        await tester.sendEventToBinding(
+          const PointerScrollEvent(
+            position: Offset(24, 16),
+            scrollDelta: Offset(0, 16),
+          ),
+        );
+
+        expect(events, hasLength(1));
+        expect(utf8.decode(events.single), '\x1b[<65;4;2M');
       });
     });
   });

@@ -142,6 +142,7 @@ class _TerminalViewState extends State<TerminalView> {
   var _ownsFocusNode = false;
   var _ownsScrollController = false;
   var _mouseCursorHidden = false;
+  Offset? _lastPointerPosition;
   var _lastAlternatePixels = 0.0;
   var _visibleCols = 0;
   var _visibleRows = 0;
@@ -310,33 +311,39 @@ class _TerminalViewState extends State<TerminalView> {
                 onHover: _handleMouseHover,
                 onExit: _handleMouseExit,
                 cursor: _effectiveMouseCursor(),
-                child: Focus(
-                  focusNode: _focusNode,
-                  autofocus: widget.autofocus,
-                  onFocusChange: _handleFocusChange,
-                  child: TerminalGestureDetector(
-                    links: _links,
-                    metrics: _metrics,
-                    binding: _binding,
-                    visibleRows: _visibleRows,
-                    settings: widget.gestureSettings,
-                    scrollController: _scrollController,
-                    onLinkActivate: widget.linkSettings.onActivate,
-                    child: Scrollable(
-                      controller: _scrollController,
-                      physics: widget.scrollPhysics,
-                      viewportBuilder: (_, offset) => TerminalRenderer(
-                        key: _rendererKey,
-                        theme: _theme,
-                        offset: offset,
-                        metrics: _metrics,
-                        renderObserver: _controller,
-                        terminal: _binding.terminal,
-                        renderCache: cache,
-                        preeditText: _binding.preeditText,
-                        blinkVisible: _blinkVisible,
-                        linkSnapshot: _links.snapshot(),
-                        onResize: _handleResize,
+                child: Listener(
+                  onPointerDown: _recordPointerPosition,
+                  onPointerMove: _recordPointerPosition,
+                  onPointerUp: _recordPointerPosition,
+                  onPointerSignal: _recordPointerPosition,
+                  child: Focus(
+                    focusNode: _focusNode,
+                    autofocus: widget.autofocus,
+                    onFocusChange: _handleFocusChange,
+                    child: TerminalGestureDetector(
+                      links: _links,
+                      metrics: _metrics,
+                      binding: _binding,
+                      visibleRows: _visibleRows,
+                      settings: widget.gestureSettings,
+                      scrollController: _scrollController,
+                      onLinkActivate: widget.linkSettings.onActivate,
+                      child: Scrollable(
+                        controller: _scrollController,
+                        physics: widget.scrollPhysics,
+                        viewportBuilder: (_, offset) => TerminalRenderer(
+                          key: _rendererKey,
+                          theme: _theme,
+                          offset: offset,
+                          metrics: _metrics,
+                          renderObserver: _controller,
+                          terminal: _binding.terminal,
+                          renderCache: cache,
+                          preeditText: _binding.preeditText,
+                          blinkVisible: _blinkVisible,
+                          linkSnapshot: _links.snapshot(),
+                          onResize: _handleResize,
+                        ),
                       ),
                     ),
                   ),
@@ -382,12 +389,14 @@ class _TerminalViewState extends State<TerminalView> {
   }
 
   void _handleMouseExit(PointerExitEvent event) {
+    _lastPointerPosition = null;
     final previous = _links.highlighted;
     _links.cancelHover();
     if (previous != null) setState(() {});
   }
 
   void _handleMouseHover(PointerHoverEvent event) {
+    _lastPointerPosition = event.localPosition;
     final previous = _links.highlighted;
     _links.handleHover(
       localPosition: event.localPosition,
@@ -397,6 +406,10 @@ class _TerminalViewState extends State<TerminalView> {
     if (_mouseCursorHidden || _links.highlighted != previous) {
       setState(() => _mouseCursorHidden = false);
     }
+  }
+
+  void _recordPointerPosition(PointerEvent event) {
+    _lastPointerPosition = event.localPosition;
   }
 
   void _syncHoveredLink() {
@@ -470,7 +483,7 @@ class _TerminalViewState extends State<TerminalView> {
     final lines = (delta / cellHeight).truncate();
     if (lines == 0) return;
     _lastAlternatePixels += lines * cellHeight;
-    _binding.handleScroll(lines);
+    _binding.handleScroll(lines, localPosition: _lastPointerPosition);
     _links.invalidateContent();
     _syncLinkInteraction();
     _updateTextInputGeometry();
