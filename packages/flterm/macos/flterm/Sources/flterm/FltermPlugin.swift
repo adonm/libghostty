@@ -48,6 +48,12 @@ public final class FltermPlugin: NSObject, FlutterPlugin {
         let textWithoutAlt = terminalText(
             event.characters(
                 byApplyingModifiers: event.modifierFlags.subtracting(.option)))
+        let encodedTextWithoutAlt: Any
+        if let textWithoutAlt {
+            encodedTextWithoutAlt = textWithoutAlt
+        } else {
+            encodedTextWithoutAlt = NSNull()
+        }
         channel.sendMessage([
             "platform": "macos",
             "scanCode": Int(event.keyCode),
@@ -57,7 +63,7 @@ public final class FltermPlugin: NSObject, FlutterPlugin {
             "mods": modifierBits(event.modifierFlags),
             "consumedMods": consumedModifierBits(event),
             "unshiftedCodepoint": singleScalar(unmodified),
-            "textWithoutAlt": textWithoutAlt ?? NSNull(),
+            "textWithoutAlt": encodedTextWithoutAlt,
             "deadKey": event.type == .keyDown && isDeadKey(event),
         ])
     }
