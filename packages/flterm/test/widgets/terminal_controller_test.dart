@@ -104,6 +104,18 @@ void main() {
         expect(utf8.decode(output.first), 'a');
       });
 
+      test('encodes shifted and space key output', () {
+        final output = <Uint8List>[];
+        controller.onOutput = output.add;
+
+        controller
+          ..sendKey(Key.a, mods: const Mods.shift())
+          ..sendKey(Key.digit1, mods: const Mods.shift())
+          ..sendKey(Key.space);
+
+        expect(output.map(utf8.decode), ['A', '!', ' ']);
+      });
+
       test('ignores missing output callback', () {
         expect(() => controller.sendKey(Key.a), returnsNormally);
       });

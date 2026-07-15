@@ -9,6 +9,7 @@ import 'package:meta/meta.dart';
 
 import '../foundation.dart';
 import '../rendering/kitty_png_decoder.dart';
+import 'keyboard_event_normalizer.dart';
 import 'selection_gesture_driver.dart';
 import 'terminal_controller.dart';
 import 'terminal_input_client.dart';
@@ -31,11 +32,13 @@ class TerminalControllerImpl extends TerminalController
   @override
   final Terminal terminal;
   final _keyEncoder = KeyEncoder();
+  final _keyboardNormalizer = KeyboardEventNormalizer();
   final _mouseEncoder = MouseEncoder();
   late final SelectionGestureDriver _selectionGesture;
   final vt.KeyEvent _keyEvent;
   final MouseEvent _mouseEvent;
   final TerminalInputClient _textInput;
+  final TerminalKeyEventNormalizer? keyEventNormalizer;
 
   TerminalConfig _config;
   TerminalScreen _activeScreen = .primary;
@@ -60,18 +63,21 @@ class TerminalControllerImpl extends TerminalController
   ScrollController? _scrollController;
   var _lastCols = 0;
   var _lastRows = 0;
+  final _textInputPhysicalKeys = <PhysicalKeyboardKey>{};
 
-  TerminalControllerImpl({TerminalConfig config = const TerminalConfig()})
-    : _config = config,
-      _keyEvent = vt.KeyEvent(),
-      _mouseEvent = MouseEvent(),
-      _textInput = TerminalInputClient(),
-      terminal = Terminal(
-        cols: config.cols,
-        rows: config.rows,
-        maxScrollback: config.scrollbackLimit,
-      ),
-      super.base() {
+  TerminalControllerImpl({
+    TerminalConfig config = const TerminalConfig(),
+    this.keyEventNormalizer,
+  }) : _config = config,
+       _keyEvent = vt.KeyEvent(),
+       _mouseEvent = MouseEvent(),
+       _textInput = TerminalInputClient(),
+       terminal = Terminal(
+         cols: config.cols,
+         rows: config.rows,
+         maxScrollback: config.scrollbackLimit,
+       ),
+       super.base() {
     _lastCols = config.cols;
     _lastRows = config.rows;
     _selectionGesture = SelectionGestureDriver(terminal);
@@ -277,37 +283,56 @@ class TerminalControllerImpl extends TerminalController
 
     if (action == null) return .ignored;
 
-    if (_shouldForwardCompositionKeyToTextInput) {
+    if (action == .release &&
+        _textInputPhysicalKeys.remove(event.physicalKey)) {
       return .skipRemainingHandlers;
     }
 
-    final unshiftedCodepoint = unshiftedCodepointForKey(key);
+    if (_shouldForwardCompositionKeyToTextInput) {
+      if (action == .press || action == .repeat) {
+        _textInputPhysicalKeys.add(event.physicalKey);
+      }
+      return .skipRemainingHandlers;
+    }
+
     final mods = _currentMods();
     final character = _encoderCharacter(event.character);
-    final consumedMods = _consumedModsFor(
-      character,
-      unshiftedCodepoint: unshiftedCodepoint,
+    var normalized = _keyboardNormalizer.normalize(
+      event,
+      key: key,
+      action: action,
       mods: mods,
+      character: character,
+      composing: _hasActiveComposition,
+      optionAsAlt: _config.optionAsAlt,
     );
+    normalized = keyEventNormalizer?.call(event, normalized) ?? normalized;
+    if (normalized.deferToTextInput) {
+      if (action == .press || action == .repeat) {
+        _textInputPhysicalKeys.add(event.physicalKey);
+      }
+      return .skipRemainingHandlers;
+    }
+    if (action == .press) _textInputPhysicalKeys.remove(event.physicalKey);
 
     _keyEvent
-      ..key = key
-      ..mods = mods
-      ..action = action
-      ..utf8 = character
-      ..consumedMods = consumedMods
-      ..unshiftedCodepoint = unshiftedCodepoint
-      ..composing = _hasActiveComposition;
+      ..key = normalized.key
+      ..mods = normalized.mods
+      ..action = normalized.action
+      ..utf8 = _encoderCharacter(normalized.text)
+      ..consumedMods = normalized.consumedMods
+      ..unshiftedCodepoint = normalized.unshiftedCodepoint
+      ..composing = normalized.composing;
 
-    _keyEncoder.sync(terminal);
+    _syncKeyEncoder();
     final result = _keyEncoder.encode(_keyEvent);
     if (result.isEmpty) return _hasActiveComposition ? .handled : .ignored;
 
     if (_shouldRouteKeyThroughTextInput(
-      action: action,
-      character: character,
+      action: normalized.action,
+      character: normalized.text,
       encoded: result,
-      mods: mods,
+      mods: normalized.mods,
     )) {
       _onTextInput();
       return .skipRemainingHandlers;
@@ -315,9 +340,9 @@ class TerminalControllerImpl extends TerminalController
 
     clearVirtualMods();
     final forwardToPlatformIme = _consumeCommittedCompositionEditKey(
-      key,
-      action,
-      mods,
+      normalized.key,
+      normalized.action,
+      normalized.mods,
     );
     _emitOutput(utf8.encode(result));
     _onTextInput();
@@ -645,25 +670,6 @@ class TerminalControllerImpl extends TerminalController
     return _textInput.consumeCommittedCompositionEdit();
   }
 
-  Mods _consumedModsFor(
-    String? character, {
-    required int unshiftedCodepoint,
-    required Mods mods,
-  }) {
-    // Flutter does not expose consumed modifiers, so this fallback only
-    // accounts for Shift producing a different single-codepoint character.
-    if (!mods.hasShift || character == null || unshiftedCodepoint == 0) {
-      return const .none();
-    }
-
-    final codepoints = character.runes.iterator;
-    if (!codepoints.moveNext()) return const .none();
-    final codepoint = codepoints.current;
-    if (codepoints.moveNext()) return const .none();
-    if (codepoint == unshiftedCodepoint) return const .none();
-    return const .shift();
-  }
-
   Mods _currentMods() {
     var mods = _virtualMods;
     final keyboard = HardwareKeyboard.instance;
@@ -671,6 +677,26 @@ class TerminalControllerImpl extends TerminalController
     if (keyboard.isControlPressed) mods = mods | const .ctrl();
     if (keyboard.isAltPressed) mods = mods | const .alt();
     if (keyboard.isMetaPressed) mods = mods | const .superKey();
+    final pressed = keyboard.physicalKeysPressed;
+    if (pressed.contains(PhysicalKeyboardKey.shiftRight)) {
+      mods = mods | const .shiftSide();
+    }
+    if (pressed.contains(PhysicalKeyboardKey.controlRight)) {
+      mods = mods | const .ctrlSide();
+    }
+    if (pressed.contains(PhysicalKeyboardKey.altRight)) {
+      mods = mods | const .altSide();
+    }
+    if (pressed.contains(PhysicalKeyboardKey.metaRight)) {
+      mods = mods | const .superSide();
+    }
+    final locks = keyboard.lockModesEnabled;
+    if (locks.contains(KeyboardLockMode.capsLock)) {
+      mods = mods | const .capsLock();
+    }
+    if (locks.contains(KeyboardLockMode.numLock)) {
+      mods = mods | const .numLock();
+    }
     return mods;
   }
 
@@ -692,18 +718,24 @@ class TerminalControllerImpl extends TerminalController
   }
 
   String _encodeKeyPress(vt.Key key, {Mods mods = const .none()}) {
-    final codepoint = unshiftedCodepointForKey(key);
+    final unshiftedCodepoint = unshiftedCodepointForKey(key);
+    final codepoint = codepointForKey(key, mods);
     _keyEvent
       ..key = key
       ..mods = mods
       ..action = .press
-      ..consumedMods = const .none()
-      ..unshiftedCodepoint = codepoint
+      ..consumedMods = consumedModsForKey(key, mods)
+      ..unshiftedCodepoint = unshiftedCodepoint
       ..utf8 = codepoint > 0 ? String.fromCharCode(codepoint) : null
       ..composing = false;
 
-    _keyEncoder.sync(terminal);
+    _syncKeyEncoder();
     return _keyEncoder.encode(_keyEvent);
+  }
+
+  void _syncKeyEncoder() {
+    _keyEncoder.sync(terminal);
+    _keyEncoder.setOptionAsAlt(_config.optionAsAlt);
   }
 
   void _emitOutput(Uint8List bytes) => onOutput?.call(bytes);

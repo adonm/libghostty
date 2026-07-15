@@ -50,7 +50,15 @@ abstract class TerminalController extends ChangeNotifier {
   ///
   /// The terminal is created immediately with dimensions and scrollback
   /// from [config]. Disposed when the controller is disposed.
-  factory TerminalController({TerminalConfig config}) = TerminalControllerImpl;
+  ///
+  /// [keyEventNormalizer] can enrich or replace the normalized keyboard event
+  /// before terminal protocol encoding. flterm already supplies native layout
+  /// metadata on desktop when its plugin is registered; custom runners can use
+  /// this callback for metadata captured in their own event pipeline.
+  factory TerminalController({
+    TerminalConfig config,
+    TerminalKeyEventNormalizer? keyEventNormalizer,
+  }) = TerminalControllerImpl;
 
   @internal
   TerminalController.base();

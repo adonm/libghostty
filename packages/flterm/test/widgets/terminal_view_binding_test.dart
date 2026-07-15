@@ -7,7 +7,7 @@ import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/widgets/terminal_controller_impl.dart';
 import 'package:flterm/src/widgets/terminal_view_binding.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/widgets.dart' hide Key;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart' hide KeyEvent;
 
@@ -200,6 +200,89 @@ void main() {
     });
 
     group('handleKeyEvent', () {
+      test('applies a custom normalized key event', () {
+        controller.dispose();
+        TerminalKeyboardEvent? fallback;
+        controller = TerminalControllerImpl(
+          keyEventNormalizer: (event, normalized) {
+            fallback = normalized;
+            return normalized.copyWith(
+              key: Key.b,
+              text: 'b',
+              unshiftedCodepoint: 0x62,
+            );
+          },
+        );
+        binding = controller as TerminalViewBinding;
+        final output = <Uint8List>[];
+        controller.onOutput = output.add;
+
+        final result = binding.handleKeyEvent(
+          const KeyDownEvent(
+            physicalKey: PhysicalKeyboardKey.keyA,
+            logicalKey: LogicalKeyboardKey.keyA,
+            character: 'a',
+            timeStamp: Duration.zero,
+          ),
+        );
+
+        expect(result, KeyEventResult.handled);
+        expect(fallback?.key, Key.a);
+        expect(fallback?.text, 'a');
+        expect(fallback?.unshiftedCodepoint, 0x61);
+        expect(utf8.decode(output.single), 'b');
+      });
+
+      test('custom normalizer can defer a key to platform text input', () {
+        controller.dispose();
+        controller = TerminalControllerImpl(
+          keyEventNormalizer: (event, normalized) =>
+              normalized.copyWith(deferToTextInput: true),
+        );
+        binding = controller as TerminalViewBinding;
+        final output = <Uint8List>[];
+        controller.onOutput = output.add;
+
+        final result = binding.handleKeyEvent(
+          const KeyDownEvent(
+            physicalKey: PhysicalKeyboardKey.quote,
+            logicalKey: LogicalKeyboardKey.quoteSingle,
+            timeStamp: Duration.zero,
+          ),
+        );
+
+        expect(result, KeyEventResult.skipRemainingHandlers);
+        expect(output, isEmpty);
+      });
+
+      test('defers the release paired with a text input key', () {
+        controller.dispose();
+        controller = TerminalControllerImpl(
+          keyEventNormalizer: (event, normalized) => event is KeyDownEvent
+              ? normalized.copyWith(deferToTextInput: true)
+              : normalized,
+        );
+        binding = controller as TerminalViewBinding;
+
+        final down = binding.handleKeyEvent(
+          const KeyDownEvent(
+            physicalKey: PhysicalKeyboardKey.quote,
+            logicalKey: LogicalKeyboardKey.quoteSingle,
+            timeStamp: Duration.zero,
+          ),
+        );
+        final up = binding.handleKeyEvent(
+          const KeyUpEvent(
+            physicalKey: PhysicalKeyboardKey.quote,
+            logicalKey: LogicalKeyboardKey.quoteSingle,
+            timeStamp: Duration.zero,
+          ),
+        );
+
+        expect(down, KeyEventResult.skipRemainingHandlers);
+        expect(up, KeyEventResult.skipRemainingHandlers);
+      });
+
       test('returns handled and emits output for printable key', () {
         final output = <Uint8List>[];
         controller.onOutput = output.add;

@@ -14,6 +14,7 @@ void main() {
         expect(config.cursorStyle, CursorShape.block);
         expect(config.cursorBlink, isNull);
         expect(config.glyphProtocol, isFalse);
+        expect(config.optionAsAlt, OptionAsAlt.false$);
         expect(config.apcBufferLimit, TerminalConfig.defaultApcBufferLimit);
         expect(config.scrollToBottom, ScrollToBottom.onKeystroke);
         expect(config.selectionClearOnTyping, isTrue);
@@ -60,12 +61,14 @@ void main() {
           scrollbackLimit: 99999,
           apcBufferLimit: 1024,
           glyphProtocol: true,
+          optionAsAlt: OptionAsAlt.right,
           cursorBlink: false,
         );
 
         expect(updated.scrollbackLimit, 99999);
         expect(updated.apcBufferLimit, 1024);
         expect(updated.glyphProtocol, isTrue);
+        expect(updated.optionAsAlt, OptionAsAlt.right);
         expect(updated.cursorBlink, isFalse);
         expect(updated.cols, config.cols);
       });
@@ -104,6 +107,9 @@ void main() {
 
         const glyphProtocol = TerminalConfig(glyphProtocol: true);
         expect(a, isNot(equals(glyphProtocol)));
+
+        const optionAsAlt = TerminalConfig(optionAsAlt: OptionAsAlt.true$);
+        expect(a, isNot(equals(optionAsAlt)));
       });
 
       test('ignores map order', () {

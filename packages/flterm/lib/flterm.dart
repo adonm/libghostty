@@ -13,8 +13,10 @@ export 'package:libghostty/libghostty.dart'
         FormatterExtra,
         FormatterFormat,
         Key,
+        KeyAction,
         Mods,
         MouseTracking,
+        OptionAsAlt,
         PointTag,
         Position,
         Scrollbar,
@@ -39,6 +41,8 @@ export 'src/foundation/terminal_gesture_settings.dart'
         TerminalGestureSettings,
         TerminalSelectionShape,
         TouchMouseTracking;
+export 'src/foundation/terminal_keyboard_event.dart'
+    show TerminalKeyEventNormalizer, TerminalKeyboardEvent;
 export 'src/foundation/terminal_theme.dart'
     show
         CursorTheme,

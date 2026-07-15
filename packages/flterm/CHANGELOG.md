@@ -8,6 +8,10 @@
   write-only clipboard requests from libghostty to terminal embedders.
 - **Tracked touch policy**: `TerminalGestureSettings.touchMouseTracking` can
   preserve terminal taps while routing touch and stylus drags to scrolling.
+- **Layout-aware keyboard input**: desktop companions provide active-layout
+  unshifted characters, consumed modifiers, lock/side state, and dead-key
+  detection. `TerminalKeyEventNormalizer` supports custom runners, and
+  `TerminalConfig.optionAsAlt` configures macOS Option behavior.
 
 ## 0.0.4
 

@@ -309,6 +309,70 @@ jobs:
         working-directory: packages/flterm
         run: very_good test
 
+  build-flterm-desktop:
+    name: build-flterm-${{ matrix.platform }}
+    needs: [analyze-flterm, changes]
+    if: needs.changes.outputs.flterm == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux
+            runner: ubuntu-latest
+          - platform: macos
+            runner: macos-15
+          - platform: windows
+            runner: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-tags: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.pub-cache
+          key: pub-flterm-desktop-${{ runner.os }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: pub-flterm-desktop-${{ runner.os }}-
+      - name: install Linux build dependencies
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev ninja-build
+      - name: resolve ghostty source
+        id: ghostty
+        run: |
+          COMMIT=$(cat packages/libghostty/ghostty.version)
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: ghostty-cache
+        with:
+          path: ghostty
+          key: ghostty-src-${{ steps.ghostty.outputs.commit }}-${{ hashFiles('packages/libghostty/patches/*.patch') }}
+      - name: download ghostty source
+        if: steps.ghostty-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL "https://github.com/ghostty-org/ghostty/archive/${{ steps.ghostty.outputs.commit }}.tar.gz" -o ghostty.tar.gz
+          mkdir -p ghostty
+          tar xzf ghostty.tar.gz -C ghostty --strip-components=1
+          git -C ghostty init --quiet
+          git -C ghostty apply --unidiff-zero "$GITHUB_WORKSPACE/packages/libghostty/patches/osc52-clipboard-write.patch"
+          rm -rf ghostty/.git ghostty.tar.gz
+      - name: build desktop smoke app
+        run: |
+          SMOKE_DIR="$RUNNER_TEMP/flterm-smoke"
+          flutter create --platforms=${{ matrix.platform }} --project-name=flterm_smoke "$SMOKE_DIR"
+          cd "$SMOKE_DIR"
+          flutter pub add flterm --path "$GITHUB_WORKSPACE/packages/flterm"
+          flutter build ${{ matrix.platform }} --debug
+
   test-ptyx-dart:
     name: test-ptyx-dart-${{ matrix.os }}
     needs: [analyze-ptyx, changes]
@@ -437,6 +501,7 @@ jobs:
       - test-libghostty-native
       - test-libghostty-wasm
       - test-flterm
+      - build-flterm-desktop
       - test-ptyx-dart
       - test-ptyx-rust
     runs-on: ubuntu-latest

@@ -99,6 +99,13 @@ class TerminalConfig {
   /// addition to Kitty graphics.
   final bool glyphProtocol;
 
+  /// Whether macOS Option keys act as terminal Alt modifiers.
+  ///
+  /// By default Option participates in the active keyboard layout. Set a side
+  /// or both sides to Alt when terminal shortcuts should take precedence over
+  /// Option-produced text.
+  final OptionAsAlt optionAsAlt;
+
   /// Initial cursor shape. Terminal programs can override via DECSCUSR.
   final CursorShape cursorStyle;
 
@@ -144,6 +151,7 @@ class TerminalConfig {
     this.rows = 24,
     this.cursorBlink,
     this.glyphProtocol = false,
+    this.optionAsAlt = .false$,
     this.apcBufferLimit = defaultApcBufferLimit,
     this.enquiryResponse = '',
     this.modes = defaultModes,
@@ -170,6 +178,7 @@ class TerminalConfig {
     kittyImageStorageLimit,
     apcBufferLimit,
     glyphProtocol,
+    optionAsAlt,
     cursorStyle,
     cursorBlink,
     .hashAllUnordered(modes.entries.map((e) => .hash(e.key, e.value))),
@@ -189,6 +198,7 @@ class TerminalConfig {
           kittyImageStorageLimit == other.kittyImageStorageLimit &&
           apcBufferLimit == other.apcBufferLimit &&
           glyphProtocol == other.glyphProtocol &&
+          optionAsAlt == other.optionAsAlt &&
           cursorStyle == other.cursorStyle &&
           cursorBlink == other.cursorBlink &&
           mapEquals(modes, other.modes) &&
@@ -205,6 +215,7 @@ class TerminalConfig {
     int? kittyImageStorageLimit,
     int? apcBufferLimit,
     bool? glyphProtocol,
+    OptionAsAlt? optionAsAlt,
     CursorShape? cursorStyle,
     bool? cursorBlink,
     Map<TerminalMode, bool>? modes,
@@ -221,6 +232,7 @@ class TerminalConfig {
           kittyImageStorageLimit ?? this.kittyImageStorageLimit,
       apcBufferLimit: apcBufferLimit ?? this.apcBufferLimit,
       glyphProtocol: glyphProtocol ?? this.glyphProtocol,
+      optionAsAlt: optionAsAlt ?? this.optionAsAlt,
       cursorStyle: cursorStyle ?? this.cursorStyle,
       cursorBlink: cursorBlink ?? this.cursorBlink,
       modes: modes ?? this.modes,
