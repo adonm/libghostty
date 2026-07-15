@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **OSC 52 clipboard writes**: `Terminal.onClipboardWrite` exposes write-only
+  clipboard requests with their raw selector and base64 payload. Clipboard read
+  queries remain disabled.
+
 ## 0.0.11
 
 ### Added

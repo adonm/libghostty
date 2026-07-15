@@ -1,9 +1,52 @@
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+
 /// Environment variable that overrides source resolution with a local checkout.
 const ghosttySrcEnvKey = 'GHOSTTY_SRC';
 
 const _defaultTarballBase = 'https://github.com/ghostty-org/ghostty/archive';
+
+/// Source patches applied to downloaded and cloned Ghostty checkouts.
+List<File> ghosttyPatchFiles(Uri packageRoot) {
+  final directory = Directory.fromUri(packageRoot.resolve('patches/'));
+  if (!directory.existsSync()) return const [];
+  return directory
+      .listSync()
+      .whereType<File>()
+      .where((file) => file.path.endsWith('.patch'))
+      .toList()
+    ..sort((a, b) => a.path.compareTo(b.path));
+}
+
+/// Returns a cache key that changes when the Ghostty pin or patches change.
+String ghosttySourceCacheKey(Uri packageRoot) {
+  final commit = pinnedCommit(packageRoot);
+  final patches = ghosttyPatchFiles(packageRoot);
+  if (patches.isEmpty) return '${commit.substring(0, 12)}-none';
+  final bytes = <int>[];
+  for (final patch in patches) {
+    bytes.addAll(patch.readAsBytesSync());
+  }
+  final patchHash = sha256.convert(bytes).toString().substring(0, 12);
+  return '${commit.substring(0, 12)}-$patchHash';
+}
+
+/// Applies all packaged patches to a freshly acquired Ghostty checkout.
+void applyGhosttyPatches(Directory source, Uri packageRoot) {
+  for (final patch in ghosttyPatchFiles(packageRoot)) {
+    final result = Process.runSync('git', [
+      'apply',
+      '--no-index',
+      patch.path,
+    ], workingDirectory: source.path);
+    if (result.exitCode != 0) {
+      throw Exception(
+        'Failed to apply Ghostty patch ${patch.path}: ${result.stderr}',
+      );
+    }
+  }
+}
 
 /// Downloads a source tarball, extracts it, and caches the result.
 ///
@@ -15,7 +58,7 @@ Future<Directory> downloadSource(
   String? tarballUrl,
 }) async {
   final commit = pinnedCommit(packageRoot);
-  final cacheKey = commit.substring(0, 12);
+  final cacheKey = ghosttySourceCacheKey(packageRoot);
   final cacheDir = Directory.fromUri(
     cacheBase.resolve('ghostty-source-$cacheKey/'),
   );
@@ -53,9 +96,18 @@ Future<Directory> downloadSource(
   ]);
   if (extractResult.exitCode != 0) {
     cacheDir.deleteSync(recursive: true);
+    tarball.deleteSync();
     throw Exception(
       'Failed to extract Ghostty source: ${extractResult.stderr}',
     );
+  }
+
+  try {
+    applyGhosttyPatches(cacheDir, packageRoot);
+  } on Object {
+    cacheDir.deleteSync(recursive: true);
+    tarball.deleteSync();
+    rethrow;
   }
 
   tarball.deleteSync();

@@ -31,6 +31,8 @@ void main() async {
 void _compileWithZig(Directory sourceDir) {
   final result = Process.runSync('zig', [
     'build',
+    '--global-cache-dir',
+    '${sourceDir.path}/.zig-global-cache',
     '-Demit-lib-vt=true',
     '-Dtarget=wasm32-freestanding',
     '-Doptimize=ReleaseSmall',

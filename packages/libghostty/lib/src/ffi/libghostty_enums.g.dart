@@ -2891,7 +2891,13 @@ enum TerminalOption {
   /// to ignore pwd change events.
   ///
   /// Input type: TerminalPwdChangedFn
-  pwdChanged(25);
+  pwdChanged(25),
+
+  /// Callback invoked for OSC 52 clipboard writes. Clipboard read queries are
+  /// ignored. Set to NULL to ignore clipboard writes.
+  ///
+  /// Input type: TerminalClipboardWriteFn
+  clipboardWrite(26);
 
   final int value;
   const TerminalOption(this.value);
@@ -2923,6 +2929,7 @@ enum TerminalOption {
     23 => defaultCursorBlink,
     24 => glyphProtocol,
     25 => pwdChanged,
+    26 => clipboardWrite,
     _ => throw ArgumentError('Unknown value for TerminalOption: $value'),
   };
 }

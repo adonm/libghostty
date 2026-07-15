@@ -1,0 +1,294 @@
+diff --git a/include/ghostty/vt/terminal.h b/include/ghostty/vt/terminal.h
+index b03653129..6a0f0f704 100644
+--- a/include/ghostty/vt/terminal.h
++++ b/include/ghostty/vt/terminal.h
+@@ -75,6 +75,7 @@ extern "C" {
+  * |-----------------------------------------|-----------------------------------|-------------------------------------------|
+  * | `GHOSTTY_TERMINAL_OPT_WRITE_PTY`        | `GhosttyTerminalWritePtyFn`       | Query responses written back to the pty   |
+  * | `GHOSTTY_TERMINAL_OPT_BELL`             | `GhosttyTerminalBellFn`           | BEL character (0x07)                      |
++ * | `GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE`  | `GhosttyTerminalClipboardWriteFn` | Clipboard write via OSC 52                |
+  * | `GHOSTTY_TERMINAL_OPT_TITLE_CHANGED`    | `GhosttyTerminalTitleChangedFn`   | Title change via OSC 0 / OSC 2            |
+  * | `GHOSTTY_TERMINAL_OPT_PWD_CHANGED`      | `GhosttyTerminalPwdChangedFn`     | Pwd change via OSC 7 / OSC 9 / OSC 1337   |
+  * | `GHOSTTY_TERMINAL_OPT_ENQUIRY`          | `GhosttyTerminalEnquiryFn`        | ENQ character (0x05)                      |
+@@ -302,6 +303,28 @@ typedef struct {
+ typedef void (*GhosttyTerminalBellFn)(GhosttyTerminal terminal,
+                                       void* userdata);
+ 
++/**
++ * Callback function type for OSC 52 clipboard writes.
++ *
++ * The payload is the raw base64 data from the OSC sequence. An empty payload
++ * requests clearing the selected clipboard. Clipboard read queries are
++ * ignored and do not invoke this callback. The payload pointer is valid only
++ * for the duration of the callback.
++ *
++ * @param terminal The terminal handle
++ * @param userdata The userdata pointer set via GHOSTTY_TERMINAL_OPT_USERDATA
++ * @param kind OSC 52 clipboard selector (for example 'c' or 'p')
++ * @param data Pointer to the raw base64 payload
++ * @param len Length of the payload in bytes
++ *
++ * @ingroup terminal
++ */
++typedef void (*GhosttyTerminalClipboardWriteFn)(GhosttyTerminal terminal,
++                                                 void* userdata,
++                                                 uint8_t kind,
++                                                 const uint8_t* data,
++                                                 size_t len);
++
+ /**
+  * Callback function type for color scheme queries (CSI ? 996 n).
+  *
+@@ -711,6 +734,14 @@ typedef enum GHOSTTY_ENUM_TYPED {
+    * Input type: GhosttyTerminalPwdChangedFn
+    */
+   GHOSTTY_TERMINAL_OPT_PWD_CHANGED = 25,
++
++  /**
++   * Callback invoked for OSC 52 clipboard writes. Clipboard read queries are
++   * ignored. Set to NULL to ignore clipboard writes.
++   *
++   * Input type: GhosttyTerminalClipboardWriteFn
++   */
++  GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE = 26,
+   GHOSTTY_TERMINAL_OPT_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
+ } GhosttyTerminalOption;
+ 
+diff --git a/src/terminal/c/terminal.zig b/src/terminal/c/terminal.zig
+index a2a75147f..d5124f2a4 100644
+--- a/src/terminal/c/terminal.zig
++++ b/src/terminal/c/terminal.zig
+@@ -47,6 +47,7 @@ const Effects = struct {
+     userdata: ?*anyopaque = null,
+     write_pty: ?WritePtyFn = null,
+     bell: ?BellFn = null,
++    clipboard_write: ?ClipboardWriteFn = null,
+     color_scheme: ?ColorSchemeFn = null,
+     device_attributes_cb: ?DeviceAttributesFn = null,
+     enquiry: ?EnquiryFn = null,
+@@ -68,6 +69,10 @@ const Effects = struct {
+     /// C function pointer type for the bell callback.
+     pub const BellFn = *const fn (Terminal, ?*anyopaque) callconv(lib.calling_conv) void;
+ 
++    /// C function pointer type for OSC 52 clipboard writes. The data is the
++    /// raw base64 payload and is only valid for the duration of the callback.
++    pub const ClipboardWriteFn = *const fn (Terminal, ?*anyopaque, u8, [*]const u8, usize) callconv(lib.calling_conv) void;
++
+     /// C function pointer type for the color_scheme callback.
+     /// Returns true and fills out_scheme if a color scheme is available,
+     /// or returns false to silently ignore the query.
+@@ -138,6 +143,13 @@ const Effects = struct {
+         func(@ptrCast(wrapper), wrapper.effects.userdata);
+     }
+ 
++    fn clipboardWriteTrampoline(handler: *Handler, kind: u8, data: []const u8) void {
++        const stream_ptr: *Stream = @fieldParentPtr("handler", handler);
++        const wrapper: *TerminalWrapper = @fieldParentPtr("stream", stream_ptr);
++        const func = wrapper.effects.clipboard_write orelse return;
++        func(@ptrCast(wrapper), wrapper.effects.userdata, kind, data.ptr, data.len);
++    }
++
+     fn colorSchemeTrampoline(handler: *Handler) ?device_status.ColorScheme {
+         const stream_ptr: *Stream = @fieldParentPtr("handler", handler);
+         const wrapper: *TerminalWrapper = @fieldParentPtr("stream", stream_ptr);
+@@ -289,6 +301,7 @@ fn new_(
+     handler.effects = .{
+         .write_pty = &Effects.writePtyTrampoline,
+         .bell = &Effects.bellTrampoline,
++        .clipboard_write = &Effects.clipboardWriteTrampoline,
+         .color_scheme = &Effects.colorSchemeTrampoline,
+         .device_attributes = &Effects.deviceAttributesTrampoline,
+         .enquiry = &Effects.enquiryTrampoline,
+@@ -343,6 +356,7 @@ pub const Option = enum(c_int) {
+     default_cursor_blink = 23,
+     glyph_protocol = 24,
+     pwd_changed = 25,
++    clipboard_write = 26,
+ 
+     /// Input type expected for setting the option.
+     pub fn InType(comptime self: Option) type {
+@@ -350,6 +364,7 @@ pub const Option = enum(c_int) {
+             .userdata => ?*const anyopaque,
+             .write_pty => ?Effects.WritePtyFn,
+             .bell => ?Effects.BellFn,
++            .clipboard_write => ?Effects.ClipboardWriteFn,
+             .color_scheme => ?Effects.ColorSchemeFn,
+             .device_attributes => ?Effects.DeviceAttributesFn,
+             .enquiry => ?Effects.EnquiryFn,
+@@ -406,6 +421,7 @@ fn setTyped(
+         .userdata => wrapper.effects.userdata = @constCast(value),
+         .write_pty => wrapper.effects.write_pty = value,
+         .bell => wrapper.effects.bell = value,
++        .clipboard_write => wrapper.effects.clipboard_write = value,
+         .color_scheme => wrapper.effects.color_scheme = value,
+         .device_attributes => wrapper.effects.device_attributes_cb = value,
+         .enquiry => wrapper.effects.enquiry = value,
+@@ -2322,6 +2338,66 @@ test "bell without callback is silent" {
+     vt_write(t, "\x07", 1);
+ }
+ 
++test "set clipboard_write callback" {
++    var t: Terminal = null;
++    try testing.expectEqual(Result.success, new(
++        &lib.alloc.test_allocator,
++        &t,
++        .{
++            .cols = 80,
++            .rows = 24,
++            .max_scrollback = 0,
++        },
++    ));
++    defer free(t);
++
++    const S = struct {
++        var count: usize = 0;
++        var kind: u8 = 0;
++        var data: []u8 = &.{};
++        var last_userdata: ?*anyopaque = null;
++
++        fn deinit() void {
++            if (data.len > 0) testing.allocator.free(data);
++            data = &.{};
++        }
++
++        fn clipboardWrite(
++            _: Terminal,
++            userdata: ?*anyopaque,
++            value_kind: u8,
++            ptr: [*]const u8,
++            len: usize,
++        ) callconv(lib.calling_conv) void {
++            if (data.len > 0) testing.allocator.free(data);
++            data = testing.allocator.dupe(u8, ptr[0..len]) catch @panic("OOM");
++            count += 1;
++            kind = value_kind;
++            last_userdata = userdata;
++        }
++    };
++    S.count = 0;
++    S.kind = 0;
++    S.data = &.{};
++    S.last_userdata = null;
++    defer S.deinit();
++
++    var sentinel: u8 = 42;
++    try testing.expectEqual(Result.success, set(t, .userdata, @ptrCast(&sentinel)));
++    try testing.expectEqual(Result.success, set(t, .clipboard_write, @ptrCast(&S.clipboardWrite)));
++
++    const write = "\x1b]52;c;aGVsbG8=\x1b\\";
++    vt_write(t, write, write.len);
++    try testing.expectEqual(@as(usize, 1), S.count);
++    try testing.expectEqual(@as(u8, 'c'), S.kind);
++    try testing.expectEqualStrings("aGVsbG8=", S.data);
++    try testing.expectEqual(@as(?*anyopaque, @ptrCast(&sentinel)), S.last_userdata);
++
++    const query = "\x1b]52;c;?\x1b\\";
++    vt_write(t, query, query.len);
++    try testing.expectEqual(@as(usize, 1), S.count);
++}
++
+ test "set enquiry callback" {
+     var t: Terminal = null;
+     try testing.expectEqual(Result.success, new(
+diff --git a/src/terminal/stream_terminal.zig b/src/terminal/stream_terminal.zig
+index 38d59bcd2..66d94daa9 100644
+--- a/src/terminal/stream_terminal.zig
++++ b/src/terminal/stream_terminal.zig
+@@ -60,6 +60,11 @@ pub const Handler = struct {
+         /// Called when the bell is rung (BEL).
+         bell: ?*const fn (*Handler) void,
+ 
++        /// Called when OSC 52 requests a clipboard write. The data is the raw
++        /// base64 payload and is only valid for the duration of the callback.
++        /// Clipboard read queries are ignored and never reach this callback.
++        clipboard_write: ?*const fn (*Handler, u8, []const u8) void,
++
+         /// Called in response to a color scheme DSR query (CSI ? 996 n).
+         /// Returns the current color scheme. Return null to silently
+         /// ignore the query.
+@@ -101,6 +106,7 @@ pub const Handler = struct {
+         /// effects beyond that.
+         pub const readonly: Effects = .{
+             .bell = null,
++            .clipboard_write = null,
+             .color_scheme = null,
+             .device_attributes = null,
+             .enquiry = null,
+@@ -278,6 +284,7 @@ pub const Handler = struct {
+             .size_report => self.reportSize(value),
+             .window_title => self.windowTitle(value.title),
+             .report_pwd => self.reportPwd(value.url),
++            .clipboard_contents => self.clipboardWrite(value),
+             .xtversion => self.reportXtversion(),
+ 
+             // No supported DCS commands have any terminal-modifying effects,
+@@ -290,7 +297,6 @@ pub const Handler = struct {
+             // Have no terminal-modifying effect
+             .show_desktop_notification,
+             .progress_report,
+-            .clipboard_contents,
+             .title_push,
+             .title_pop,
+             => {},
+@@ -307,6 +313,15 @@ pub const Handler = struct {
+         func(self);
+     }
+ 
++    fn clipboardWrite(
++        self: *Handler,
++        value: Action.ClipboardContents,
++    ) void {
++        if (std.mem.eql(u8, value.data, "?")) return;
++        const func = self.effects.clipboard_write orelse return;
++        func(self, value.kind, value.data);
++    }
++
+     fn reportDeviceAttributes(self: *Handler, req: device_attributes.Req) void {
+         const func = self.effects.device_attributes orelse return;
+         const attrs = func(self);
+@@ -1594,6 +1609,45 @@ test "bell effect callback" {
+     }
+ }
+ 
++test "OSC 52 clipboard write effect" {
++    var t: Terminal = try .init(testing.allocator, .{ .cols = 80, .rows = 24 });
++    defer t.deinit(testing.allocator);
++
++    const S = struct {
++        var count: usize = 0;
++        var kind: u8 = 0;
++        var data: []const u8 = "";
++
++        fn clipboardWrite(_: *Handler, value_kind: u8, value_data: []const u8) void {
++            count += 1;
++            kind = value_kind;
++            data = value_data;
++        }
++    };
++    S.count = 0;
++    S.kind = 0;
++    S.data = "";
++
++    var handler: Handler = .init(&t);
++    handler.effects.clipboard_write = &S.clipboardWrite;
++
++    var s: Stream = .initAlloc(testing.allocator, handler);
++    defer s.deinit();
++
++    s.nextSlice("\x1b]52;c;aGVsbG8=\x1b\\");
++    try testing.expectEqual(@as(usize, 1), S.count);
++    try testing.expectEqual(@as(u8, 'c'), S.kind);
++    try testing.expectEqualStrings("aGVsbG8=", S.data);
++
++    s.nextSlice("\x1b]52;c;?\x1b\\");
++    try testing.expectEqual(@as(usize, 1), S.count);
++
++    s.nextSlice("\x1b]52;p;\x07");
++    try testing.expectEqual(@as(usize, 2), S.count);
++    try testing.expectEqual(@as(u8, 'p'), S.kind);
++    try testing.expectEqualStrings("", S.data);
++}
++
+ test "request mode DECRQM with write_pty callback" {
+     var t: Terminal = try .init(testing.allocator, .{ .cols = 80, .rows = 24 });
+     defer t.deinit(testing.allocator);

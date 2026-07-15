@@ -121,13 +121,14 @@ jobs:
         id: ghostty-cache
         with:
           path: ghostty-src
-          key: ghostty-src-${{ steps.ghostty.outputs.full }}
+          key: ghostty-src-${{ steps.ghostty.outputs.full }}-${{ hashFiles('packages/libghostty/patches/*.patch') }}
       - name: download ghostty source
         if: steps.ghostty-cache.outputs.cache-hit != 'true'
         run: |
           curl -fsSL "https://github.com/ghostty-org/ghostty/archive/${{ steps.ghostty.outputs.full }}.tar.gz" -o ghostty.tar.gz
           mkdir -p ghostty-src
           tar xzf ghostty.tar.gz -C ghostty-src --strip-components=1
+          git -C ghostty-src apply --no-index "$GITHUB_WORKSPACE/packages/libghostty/patches/osc52-clipboard-write.patch"
           rm ghostty.tar.gz
       - name: compile
         working-directory: ghostty-src
@@ -164,13 +165,14 @@ jobs:
         id: ghostty-cache
         with:
           path: ghostty-src
-          key: ghostty-src-${{ steps.ghostty.outputs.full }}
+          key: ghostty-src-${{ steps.ghostty.outputs.full }}-${{ hashFiles('packages/libghostty/patches/*.patch') }}
       - name: download ghostty source
         if: steps.ghostty-cache.outputs.cache-hit != 'true'
         run: |
           curl -fsSL "https://github.com/ghostty-org/ghostty/archive/${{ steps.ghostty.outputs.full }}.tar.gz" -o ghostty.tar.gz
           mkdir -p ghostty-src
           tar xzf ghostty.tar.gz -C ghostty-src --strip-components=1
+          git -C ghostty-src apply --no-index "$GITHUB_WORKSPACE/packages/libghostty/patches/osc52-clipboard-write.patch"
           rm ghostty.tar.gz
       - name: compile wasm
         working-directory: ghostty-src

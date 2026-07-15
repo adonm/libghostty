@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:code_assets/code_assets.dart';
 import 'package:hooks/hooks.dart';
 import 'package:libghostty/src/hook/fix_ios_page_alignment.dart';
+import 'package:libghostty/src/hook/ghostty_source.dart';
 import 'package:libghostty/src/hook/library_provider.dart';
 
 void main(List<String> args) async {
@@ -13,6 +14,9 @@ Future<void> _build(BuildInput input, BuildOutputBuilder output) async {
   if (!input.config.buildCodeAssets) return;
 
   output.dependencies.add(input.packageRoot.resolve('ghostty.version'));
+  for (final patch in ghosttyPatchFiles(input.packageRoot)) {
+    output.dependencies.add(patch.uri);
+  }
 
   final targetOS = input.config.code.targetOS;
   final libFileName = targetOS.dylibFileName('ghostty');

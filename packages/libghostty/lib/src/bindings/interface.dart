@@ -180,6 +180,10 @@ abstract interface class GhosttyBindings {
 
   void terminalSetOnWritePty(int handle, ValueSetter<Uint8List>? callback);
   void terminalSetOnBell(int handle, VoidCallback? callback);
+  void terminalSetOnClipboardWrite(
+    int handle,
+    ValueSetter<ClipboardWrite>? callback,
+  );
   void terminalSetOnTitleChanged(int handle, VoidCallback? callback);
   void terminalSetOnPwdChanged(int handle, VoidCallback? callback);
   void terminalSetOnEnquiry(int handle, ValueGetter<Uint8List>? callback);

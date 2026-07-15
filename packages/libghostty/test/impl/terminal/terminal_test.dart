@@ -294,6 +294,29 @@ void main() {
       });
     });
 
+    group('onClipboardWrite', () {
+      test('fires for OSC 52 writes with the raw selector and payload', () {
+        ClipboardWrite? received;
+        terminal.onClipboardWrite = (value) => received = value;
+
+        terminal.write(
+          Uint8List.fromList('\x1b]52;c;aGVsbG8=\x1b\\'.codeUnits),
+        );
+
+        expect(received?.selector, 'c'.codeUnitAt(0));
+        expect(String.fromCharCodes(received!.payload), 'aGVsbG8=');
+      });
+
+      test('ignores OSC 52 clipboard read queries', () {
+        var count = 0;
+        terminal.onClipboardWrite = (_) => count++;
+
+        terminal.write(Uint8List.fromList('\x1b]52;c;?\x07'.codeUnits));
+
+        expect(count, 0);
+      });
+    });
+
     group('renderState dirty', () {
       test('writing content makes renderState dirty', () {
         renderState.update(terminal);

@@ -183,7 +183,7 @@ jobs:
         id: ghostty-cache
         with:
           path: ghostty
-          key: ghostty-src-${{ steps.ghostty.outputs.commit }}
+          key: ghostty-src-${{ steps.ghostty.outputs.commit }}-${{ hashFiles('packages/libghostty/patches/*.patch') }}
       - name: download ghostty source
         if: steps.ghostty-cache.outputs.cache-hit != 'true'
         shell: bash
@@ -191,6 +191,7 @@ jobs:
           curl -fsSL "https://github.com/ghostty-org/ghostty/archive/${{ steps.ghostty.outputs.commit }}.tar.gz" -o ghostty.tar.gz
           mkdir -p ghostty
           tar xzf ghostty.tar.gz -C ghostty --strip-components=1
+          git -C ghostty apply --no-index "$GITHUB_WORKSPACE/packages/libghostty/patches/osc52-clipboard-write.patch"
           rm ghostty.tar.gz
       - run: flutter pub get
       - run: dart pub global activate very_good_cli
@@ -229,13 +230,14 @@ jobs:
         id: ghostty-cache
         with:
           path: ghostty
-          key: ghostty-src-${{ steps.ghostty.outputs.commit }}
+          key: ghostty-src-${{ steps.ghostty.outputs.commit }}-${{ hashFiles('packages/libghostty/patches/*.patch') }}
       - name: download ghostty source
         if: steps.ghostty-cache.outputs.cache-hit != 'true'
         run: |
           curl -fsSL "https://github.com/ghostty-org/ghostty/archive/${{ steps.ghostty.outputs.commit }}.tar.gz" -o ghostty.tar.gz
           mkdir -p ghostty
           tar xzf ghostty.tar.gz -C ghostty --strip-components=1
+          git -C ghostty apply --no-index "$GITHUB_WORKSPACE/packages/libghostty/patches/osc52-clipboard-write.patch"
           rm ghostty.tar.gz
       - name: isolate from repo git
         run: touch ghostty/.git
@@ -282,7 +284,7 @@ jobs:
         id: ghostty-cache
         with:
           path: ghostty
-          key: ghostty-src-${{ steps.ghostty.outputs.commit }}
+          key: ghostty-src-${{ steps.ghostty.outputs.commit }}-${{ hashFiles('packages/libghostty/patches/*.patch') }}
       - name: download ghostty source
         if: steps.ghostty-cache.outputs.cache-hit != 'true'
         shell: bash
@@ -290,6 +292,7 @@ jobs:
           curl -fsSL "https://github.com/ghostty-org/ghostty/archive/${{ steps.ghostty.outputs.commit }}.tar.gz" -o ghostty.tar.gz
           mkdir -p ghostty
           tar xzf ghostty.tar.gz -C ghostty --strip-components=1
+          git -C ghostty apply --no-index "$GITHUB_WORKSPACE/packages/libghostty/patches/osc52-clipboard-write.patch"
           rm ghostty.tar.gz
       - run: flutter pub get
       - name: install very_good_cli

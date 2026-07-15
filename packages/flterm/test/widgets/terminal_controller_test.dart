@@ -625,6 +625,18 @@ void main() {
       });
     });
 
+    group('clipboard writes', () {
+      test('forwards OSC 52 writes', () {
+        ClipboardWrite? received;
+        controller.onClipboardWrite = (value) => received = value;
+
+        writeTerminalUtf8(controller.terminal, '\x1b]52;c;aGVsbG8=\x1b\\');
+
+        expect(received?.selector, 'c'.codeUnitAt(0));
+        expect(String.fromCharCodes(received!.payload), 'aGVsbG8=');
+      });
+    });
+
     group('pwd', () {
       test('updates via OSC 7 escape sequence', () {
         writeTerminalUtf8(controller.terminal, '\x1b]7;file:///tmp\x07');

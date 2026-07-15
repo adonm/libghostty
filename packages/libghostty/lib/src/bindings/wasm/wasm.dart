@@ -1540,6 +1540,38 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  void terminalSetOnClipboardWrite(
+    int handle,
+    ValueSetter<ClipboardWrite>? callback,
+  ) {
+    final map = _callbacks.putIfAbsent(handle, () => {});
+    const option = TerminalOption.clipboardWrite;
+
+    if (callback == null) {
+      final existing = map.remove(option);
+      if (existing != null) _table.set(existing.$1);
+      _exports.ghostty_terminal_set(handle, option.value, 0);
+      return;
+    }
+
+    final reuseIndex = map[option]?.$1;
+    final index = _registerCallback(
+      ((int terminal, int userdata, int selector, int dataPtr, int len) {
+        try {
+          callback((
+            selector: selector,
+            payload: Uint8List.fromList(_mem.readBytes(dataPtr, len)),
+          ));
+        } on Object catch (_) {}
+      }).toJS,
+      ['i32', 'i32', 'i32', 'i32', 'i32'],
+      reuseIndex: reuseIndex,
+    );
+    map[option] = (index, callback);
+    _exports.ghostty_terminal_set(handle, option.value, index);
+  }
+
+  @override
   void terminalSetOnTitleChanged(int handle, VoidCallback? callback) {
     final map = _callbacks.putIfAbsent(handle, () => {});
     const option = TerminalOption.titleChanged;

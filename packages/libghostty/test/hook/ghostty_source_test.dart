@@ -30,6 +30,51 @@ void main() {
     });
   });
 
+  group('Ghostty patches', () {
+    late Directory tmpDir;
+    late Uri packageRoot;
+
+    setUp(() {
+      tmpDir = Directory.systemTemp.createTempSync('ghostty_patch_test_');
+      packageRoot = Uri.directory('${tmpDir.path}/pkg/');
+      Directory.fromUri(
+        packageRoot.resolve('patches/'),
+      ).createSync(recursive: true);
+      File.fromUri(
+        packageRoot.resolve('ghostty.version'),
+      ).writeAsStringSync('861a9cf537a58a380bc6a0784573b3de3a70415e\n');
+    });
+
+    tearDown(() => tmpDir.deleteSync(recursive: true));
+
+    test('cache key changes with patch content', () {
+      final patch = File.fromUri(packageRoot.resolve('patches/test.patch'));
+      patch.writeAsStringSync('first');
+      final first = ghosttySourceCacheKey(packageRoot);
+
+      patch.writeAsStringSync('second');
+
+      expect(ghosttySourceCacheKey(packageRoot), isNot(first));
+    });
+
+    test('applies packaged patches outside a Git checkout', () {
+      final source = Directory('${tmpDir.path}/source')..createSync();
+      File('${source.path}/value.txt').writeAsStringSync('before\n');
+      File.fromUri(packageRoot.resolve('patches/test.patch')).writeAsStringSync(
+        'diff --git a/value.txt b/value.txt\n'
+        '--- a/value.txt\n'
+        '+++ b/value.txt\n'
+        '@@ -1 +1 @@\n'
+        '-before\n'
+        '+after\n',
+      );
+
+      applyGhosttyPatches(source, packageRoot);
+
+      expect(File('${source.path}/value.txt').readAsStringSync(), 'after\n');
+    });
+  });
+
   group('resolveSource', () {
     late Directory tmpDir;
 
