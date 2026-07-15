@@ -10,6 +10,7 @@ void main() {
         expect(settings.dragSelection, isTrue);
         expect(settings.longPressSelection, isTrue);
         expect(settings.selectAllShortcut, isTrue);
+        expect(settings.touchMouseTracking, TouchMouseTracking.direct);
         expect(settings.blockSelectionModifier, GestureModifier.alt);
         expect(settings.longPressSelectionShape, TerminalSelectionShape.normal);
         expect(settings.lineSelectMode, LineSelectMode.content);
@@ -22,12 +23,14 @@ void main() {
           dragSelection: false,
           longPressSelection: false,
           selectAllShortcut: false,
+          touchMouseTracking: TouchMouseTracking.tapAndScroll,
           blockSelectionModifier: null,
         );
 
         expect(settings.dragSelection, isFalse);
         expect(settings.longPressSelection, isFalse);
         expect(settings.selectAllShortcut, isFalse);
+        expect(settings.touchMouseTracking, TouchMouseTracking.tapAndScroll);
         expect(settings.blockSelectionModifier, isNull);
       });
 
@@ -48,6 +51,9 @@ void main() {
         );
         const differentSelectAll = TerminalGestureSettings(
           selectAllShortcut: false,
+        );
+        const differentTouchTracking = TerminalGestureSettings(
+          touchMouseTracking: TouchMouseTracking.tapAndScroll,
         );
         const differentModifier = TerminalGestureSettings(
           blockSelectionModifier: GestureModifier.meta,
@@ -74,6 +80,7 @@ void main() {
         expect(a, isNot(equals(differentDrag)));
         expect(a, isNot(equals(differentLongPressSelection)));
         expect(a, isNot(equals(differentSelectAll)));
+        expect(a, isNot(equals(differentTouchTracking)));
         expect(a, isNot(equals(differentModifier)));
         expect(a, isNot(equals(differentLongPress)));
         expect(a, isNot(equals(differentLineSelect)));

@@ -19,12 +19,9 @@ enum LineSelectMode {
   full,
 }
 
-/// Controls which terminal selection affordances are enabled and how press
-/// gestures behave.
+/// Controls terminal selection and tracked-pointer gesture behavior.
 ///
-/// Passed to [TerminalView.gestureSettings]. Only affects selection
-/// behavior: mouse tracking (for terminal programs) and focus gestures
-/// work regardless of these settings.
+/// Passed to [TerminalView.gestureSettings].
 ///
 /// ```dart
 /// TerminalView(
@@ -60,6 +57,14 @@ final class TerminalGestureSettings {
   /// Defaults to true. This only controls the shortcut; calling
   /// [TerminalController.selectAll] still selects programmatically.
   final bool selectAllShortcut;
+
+  /// How touch-like pointers interact with terminal mouse tracking.
+  ///
+  /// [TouchMouseTracking.direct] (default) forwards touch down, motion, and up
+  /// events directly to the terminal program. [TouchMouseTracking.tapAndScroll]
+  /// forwards recognized taps as clicks while leaving drags to terminal
+  /// scrolling.
+  final TouchMouseTracking touchMouseTracking;
 
   /// How triple-click line selection determines the end column.
   ///
@@ -103,6 +108,7 @@ final class TerminalGestureSettings {
     this.dragSelection = true,
     this.selectAllShortcut = true,
     this.longPressSelection = true,
+    this.touchMouseTracking = .direct,
     this.lineSelectMode = .content,
     this.blockSelectionModifier = .alt,
     this.selectionBehaviors = .standard,
@@ -121,6 +127,7 @@ final class TerminalGestureSettings {
     dragSelection,
     longPressSelection,
     selectAllShortcut,
+    touchMouseTracking,
     wordBoundaries,
   );
 
@@ -140,7 +147,17 @@ final class TerminalGestureSettings {
           dragSelection == other.dragSelection &&
           longPressSelection == other.longPressSelection &&
           selectAllShortcut == other.selectAllShortcut &&
+          touchMouseTracking == other.touchMouseTracking &&
           wordBoundaries == other.wordBoundaries;
+}
+
+/// How touch-like pointers interact with terminal mouse tracking.
+enum TouchMouseTracking {
+  /// Forwards touch down, motion, and up as terminal mouse events.
+  direct,
+
+  /// Forwards recognized taps as clicks and leaves drags to scrolling.
+  tapAndScroll,
 }
 
 /// Selection shape used for gestures that start without a keyboard modifier.

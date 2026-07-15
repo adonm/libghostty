@@ -1457,6 +1457,9 @@ void main() {
               scrollController: scrollController,
               autofocus: true,
               showKeyboard: false,
+              gestureSettings: const TerminalGestureSettings(
+                touchMouseTracking: TouchMouseTracking.tapAndScroll,
+              ),
               width: 400,
               height: 320,
             ),
@@ -1467,17 +1470,24 @@ void main() {
           output.clear();
 
           final topLeft = tester.getTopLeft(find.byType(TerminalView));
-          final gesture = await tester.startGesture(
+          await tester.dragFrom(
             topLeft + const Offset(120, 240),
+            const Offset(0, -120),
             kind: kind,
           );
-          await gesture.moveTo(topLeft + const Offset(120, 120));
           await tester.pump();
+
+          expect(
+            utf8.decode(
+              Uint8List.fromList(output.expand((bytes) => bytes).toList()),
+            ),
+            isNot(contains('\x1b[<0;')),
+          );
+          expect(controller.hasSelection, isFalse);
           output.clear();
 
           scrollController.jumpTo(scrollController.offset + 160);
           await tester.pump();
-          await gesture.up();
 
           final reports = utf8
               .decode(

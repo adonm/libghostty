@@ -991,6 +991,115 @@ void main() {
         expect(utf8.decode(events[1]), '\x1b[<0;24;16m');
       });
 
+      for (final kind in [
+        PointerDeviceKind.touch,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.invertedStylus,
+      ]) {
+        testWidgets('$kind tap-and-scroll forwards recognized taps only', (
+          tester,
+        ) async {
+          enableSgrMouse('1002');
+          final events = <Uint8List>[];
+          controller.onOutput = events.add;
+          await tester.pumpWidget(
+            buildHandler(
+              controller: controller,
+              gestureSettings: const TerminalGestureSettings(
+                touchMouseTracking: TouchMouseTracking.tapAndScroll,
+              ),
+            ),
+          );
+
+          final pointer = await tester.startGesture(
+            const Offset(24, 16),
+            kind: kind,
+          );
+          expect(events, isEmpty);
+
+          await pointer.up();
+
+          expect(events, hasLength(2));
+          expect(utf8.decode(events[0]), '\x1b[<0;4;2M');
+          expect(utf8.decode(events[1]), '\x1b[<0;4;2m');
+        });
+
+        testWidgets('$kind tap-and-scroll does not forward drags', (
+          tester,
+        ) async {
+          enableSgrMouse('1002');
+          final events = <Uint8List>[];
+          controller.onOutput = events.add;
+          await tester.pumpWidget(
+            buildHandler(
+              controller: controller,
+              gestureSettings: const TerminalGestureSettings(
+                touchMouseTracking: TouchMouseTracking.tapAndScroll,
+              ),
+            ),
+          );
+
+          final pointer = await tester.startGesture(
+            const Offset(24, 16),
+            kind: kind,
+          );
+          await pointer.moveTo(const Offset(24, 80));
+          await pointer.up();
+
+          expect(events, isEmpty);
+        });
+      }
+
+      testWidgets('tap-and-scroll permits tracked touch long-press selection', (
+        tester,
+      ) async {
+        writeToTerminal(controller, 'hello world');
+        enableSgrMouse('1002');
+        final events = <Uint8List>[];
+        controller.onOutput = events.add;
+        await tester.pumpWidget(
+          buildHandler(
+            controller: controller,
+            gestureSettings: const TerminalGestureSettings(
+              touchMouseTracking: TouchMouseTracking.tapAndScroll,
+            ),
+          ),
+        );
+
+        final touch = await tester.startGesture(const Offset(8, 0));
+        await tester.pump(kLongPressTimeout + const Duration(milliseconds: 1));
+        await touch.moveTo(const Offset(40, 0));
+        await touch.up();
+
+        expect(controller.hasSelection, isTrue);
+        expect(events, isEmpty);
+      });
+
+      testWidgets('disabled tracked touch long press remains inert', (
+        tester,
+      ) async {
+        writeToTerminal(controller, 'hello world');
+        enableSgrMouse('1002');
+        final events = <Uint8List>[];
+        controller.onOutput = events.add;
+        await tester.pumpWidget(
+          buildHandler(
+            controller: controller,
+            gestureSettings: const TerminalGestureSettings(
+              longPressSelection: false,
+              touchMouseTracking: TouchMouseTracking.tapAndScroll,
+            ),
+          ),
+        );
+
+        final touch = await tester.startGesture(const Offset(8, 0));
+        await tester.pump(kLongPressTimeout + const Duration(milliseconds: 1));
+        await touch.up();
+
+        expect(controller.hasSelection, isFalse);
+        expect(events, isEmpty);
+      });
+
       testWidgets('wheel reports its pointer position', (tester) async {
         enableSgrMouse('1000');
         final events = <Uint8List>[];

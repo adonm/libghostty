@@ -196,7 +196,8 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
 
   void _handleLongPressStart(LongPressStartDetails details) {
     _binding.requestFocus();
-    if (_isMouseTracked(false)) {
+    if (_isMouseTracked(false) &&
+        widget.settings.touchMouseTracking == TouchMouseTracking.direct) {
       _cancelSelectionPress();
       return;
     }
@@ -241,6 +242,12 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
   }
 
   void _handleTapUp(TapUpDetails details) {
+    if (_defersTrackedPointer(details.kind) &&
+        _isMouseTracked(HardwareKeyboard.instance.isShiftPressed)) {
+      _sendMouseEvent(.press, details.localPosition, button: .left);
+      _sendMouseEvent(.release, details.localPosition, button: .left);
+      return;
+    }
     if (_linkPressActive) {
       _linkPressActive = false;
       final link = widget.links.handleRelease(
@@ -258,6 +265,7 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
   }
 
   void _handleTrackedDown(PointerDownEvent event) {
+    if (_defersTrackedPointer(event.kind)) return;
     if (!_isMouseTracked(HardwareKeyboard.instance.isShiftPressed)) return;
     final button = _mouseButton(event.buttons);
     _trackedButtons[event.pointer] = button;
@@ -265,6 +273,7 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
   }
 
   void _handleTrackedMove(PointerMoveEvent event) {
+    if (_defersTrackedPointer(event.kind)) return;
     if (!_isMouseTracked(HardwareKeyboard.instance.isShiftPressed)) return;
     _sendMouseEvent(
       .motion,
@@ -274,12 +283,14 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
   }
 
   void _handleTrackedUp(PointerUpEvent event) {
+    if (_defersTrackedPointer(event.kind)) return;
     final button = _trackedButtons.remove(event.pointer);
     if (button == null) return;
     _sendMouseEvent(.release, event.localPosition, button: button);
   }
 
   void _handleTrackedCancel(PointerCancelEvent event) {
+    if (_defersTrackedPointer(event.kind)) return;
     final button = _trackedButtons.remove(event.pointer);
     if (button == null) return;
     _sendMouseEvent(.release, event.localPosition, button: button);
@@ -324,6 +335,14 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
       .meta => keyboard.isMetaPressed || mods.hasSuper,
       .shift => keyboard.isShiftPressed || mods.hasShift,
       .control => keyboard.isControlPressed || mods.hasCtrl,
+    };
+  }
+
+  bool _defersTrackedPointer(PointerDeviceKind kind) {
+    if (widget.settings.touchMouseTracking != .tapAndScroll) return false;
+    return switch (kind) {
+      .touch || .stylus || .invertedStylus => true,
+      _ => false,
     };
   }
 

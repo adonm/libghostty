@@ -6,6 +6,8 @@
 
 - **OSC 52 clipboard writes**: `TerminalController.onClipboardWrite` forwards
   write-only clipboard requests from libghostty to terminal embedders.
+- **Tracked touch policy**: `TerminalGestureSettings.touchMouseTracking` can
+  preserve terminal taps while routing touch and stylus drags to scrolling.
 
 ## 0.0.4
 

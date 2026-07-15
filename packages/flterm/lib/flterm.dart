@@ -37,7 +37,8 @@ export 'src/foundation/terminal_gesture_settings.dart'
         GestureModifier,
         LineSelectMode,
         TerminalGestureSettings,
-        TerminalSelectionShape;
+        TerminalSelectionShape,
+        TouchMouseTracking;
 export 'src/foundation/terminal_theme.dart'
     show
         CursorTheme,
