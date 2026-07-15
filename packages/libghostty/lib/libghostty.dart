@@ -7,7 +7,12 @@ library;
 
 export 'src/bindings/bindings.dart' show initializeForWeb;
 export 'src/bindings/types/aliases.dart'
-    show DecodedImage, PngDecoder, TerminalGeometry, X11ColorName;
+    show
+        ClipboardWrite,
+        DecodedImage,
+        PngDecoder,
+        TerminalGeometry,
+        X11ColorName;
 export 'src/bindings/types/types.dart'
     show
         CellColor,

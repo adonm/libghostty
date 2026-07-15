@@ -276,6 +276,14 @@ final class Terminal with Listenable {
   /// Fires synchronously during [write]. Set to null to ignore bell events.
   set onBell(VoidCallback? value) => bindings.terminalSetOnBell(_handle, value);
 
+  /// Registers a callback for OSC 52 clipboard writes.
+  ///
+  /// The callback receives the raw clipboard selector and base64 payload.
+  /// Clipboard read queries are ignored. Fires synchronously during [write].
+  set onClipboardWrite(ValueSetter<ClipboardWrite>? value) {
+    bindings.terminalSetOnClipboardWrite(_handle, value);
+  }
+
   /// Registers a callback for color scheme queries (CSI ? 996 n).
   ///
   /// Return the current [ColorScheme], or null to silently ignore the query.

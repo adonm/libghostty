@@ -33,6 +33,12 @@ typedef ValueGetter<T> = T Function();
 typedef ValueSetter<T> = void Function(T value);
 typedef VoidCallback = void Function();
 
+/// An OSC 52 clipboard write request.
+///
+/// [selector] is the raw one-byte clipboard selector and [payload] is the raw
+/// base64 data. Clipboard read queries are never emitted.
+typedef ClipboardWrite = ({int selector, Uint8List payload});
+
 /// An untracked grid reference value.
 ///
 /// The value follows libghostty's untracked grid-reference lifetime rules and

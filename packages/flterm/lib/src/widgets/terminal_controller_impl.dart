@@ -979,6 +979,7 @@ class TerminalControllerImpl extends TerminalController
   void _wireTerminalCallbacks() {
     terminal.onWritePty = _emitOutput;
     terminal.onBell = () => onBell?.call();
+    terminal.onClipboardWrite = (value) => onClipboardWrite?.call(value);
     terminal.onTitleChanged = () => onTitleChanged?.call();
     terminal.onPwdChanged = _handlePwdChanged;
     terminal.onColorScheme = () => _brightness == .light ? .light : .dark;

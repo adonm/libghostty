@@ -6102,6 +6102,33 @@ typedef TerminalBellFn =
       >
     >;
 
+/// Callback function type for OSC 52 clipboard writes.
+///
+/// The payload is the raw base64 data from the OSC sequence. An empty payload
+/// requests clearing the selected clipboard. Clipboard read queries are
+/// ignored and do not invoke this callback. The payload pointer is valid only
+/// for the duration of the callback.
+///
+/// @param terminal The terminal handle
+/// @param userdata The userdata pointer set via GHOSTTY_TERMINAL_OPT_USERDATA
+/// @param kind OSC 52 clipboard selector (for example 'c' or 'p')
+/// @param data Pointer to the raw base64 payload
+/// @param len Length of the payload in bytes
+///
+/// @ingroup terminal
+typedef TerminalClipboardWriteFn =
+    ffi.Pointer<
+      ffi.NativeFunction<
+        ffi.Void Function(
+          Terminal terminal,
+          ffi.Pointer<ffi.Void> userdata,
+          ffi.Uint8 kind,
+          ffi.Pointer<ffi.Uint8> data,
+          ffi.Size len,
+        )
+      >
+    >;
+
 /// Callback function type for color scheme queries (CSI ? 996 n).
 ///
 /// Called when the terminal receives a color scheme device status report
