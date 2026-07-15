@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -10,6 +11,44 @@ const _patchMarkerName = '.libghostty-patch-key';
 final _semanticVersion = RegExp(
   r'^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$',
 );
+final _sourceCacheLocks = <String, Future<void>>{};
+
+/// Runs [action] while holding the lock for a shared Ghostty source cache.
+Future<T> withGhosttySourceCacheLock<T>(
+  Uri cacheBase,
+  String cacheKey,
+  Future<T> Function() action,
+) async {
+  final lockFile = File.fromUri(
+    cacheBase.resolve('.ghostty-source-$cacheKey.lock'),
+  );
+  lockFile.parent.createSync(recursive: true);
+
+  final previous = _sourceCacheLocks[lockFile.path];
+  final completer = Completer<void>();
+  final current = completer.future;
+  _sourceCacheLocks[lockFile.path] = current;
+  if (previous != null) await previous;
+
+  RandomAccessFile? handle;
+  var locked = false;
+  try {
+    handle = await lockFile.open(mode: FileMode.append);
+    await handle.lock(FileLock.blockingExclusive);
+    locked = true;
+    return await action();
+  } finally {
+    try {
+      if (locked) await handle!.unlock();
+      await handle?.close();
+    } finally {
+      if (identical(_sourceCacheLocks[lockFile.path], current)) {
+        unawaited(_sourceCacheLocks.remove(lockFile.path));
+      }
+      completer.complete();
+    }
+  }
+}
 
 /// Reads the Ghostty application version without consulting Git metadata.
 String ghosttySourceVersion(Directory source) {
@@ -101,68 +140,76 @@ Future<Directory> downloadSource(
 }) async {
   final commit = pinnedCommit(packageRoot);
   final cacheKey = ghosttySourceCacheKey(packageRoot);
+  final resolvedTarballUrl =
+      tarballUrl ?? '$_defaultTarballBase/$commit.tar.gz';
   final cacheDir = Directory.fromUri(
     cacheBase.resolve('ghostty-source-$cacheKey/'),
   );
   final patchMarker = File.fromUri(cacheDir.uri.resolve(_patchMarkerName));
-  if (cacheDir.existsSync()) {
-    if (patchMarker.existsSync() &&
-        patchMarker.readAsStringSync() == cacheKey) {
-      return cacheDir;
-    }
-    cacheDir.deleteSync(recursive: true);
+  if (cacheDir.existsSync() &&
+      patchMarker.existsSync() &&
+      patchMarker.readAsStringSync() == cacheKey) {
+    return cacheDir;
   }
 
-  tarballUrl ??= '$_defaultTarballBase/$commit.tar.gz';
+  return withGhosttySourceCacheLock(cacheBase, cacheKey, () async {
+    if (cacheDir.existsSync()) {
+      if (patchMarker.existsSync() &&
+          patchMarker.readAsStringSync() == cacheKey) {
+        return cacheDir;
+      }
+      cacheDir.deleteSync(recursive: true);
+    }
 
-  final tarball = File.fromUri(cacheBase.resolve('$commit.tar.gz'));
-  tarball.parent.createSync(recursive: true);
+    final tarball = File.fromUri(cacheBase.resolve('$cacheKey.tar.gz'));
+    tarball.parent.createSync(recursive: true);
 
-  final httpClient = HttpClient();
-  try {
-    final request = await httpClient.getUrl(Uri.parse(tarballUrl));
-    final response = await request.close();
-    if (response.statusCode != 200) {
+    final httpClient = HttpClient();
+    try {
+      final request = await httpClient.getUrl(Uri.parse(resolvedTarballUrl));
+      final response = await request.close();
+      if (response.statusCode != 200) {
+        throw Exception(
+          'Failed to download Ghostty source: HTTP ${response.statusCode}. '
+          'Check your network connection or set '
+          '$ghosttySrcEnvKey to a local checkout.',
+        );
+      }
+      final sink = tarball.openWrite();
+      await response.pipe(sink);
+    } finally {
+      httpClient.close();
+    }
+
+    cacheDir.createSync(recursive: true);
+    final extractResult = Process.runSync('tar', [
+      'xzf',
+      tarball.path,
+      '-C',
+      cacheDir.path,
+      '--strip-components=1',
+    ]);
+    if (extractResult.exitCode != 0) {
+      cacheDir.deleteSync(recursive: true);
+      tarball.deleteSync();
       throw Exception(
-        'Failed to download Ghostty source: HTTP ${response.statusCode}. '
-        'Check your network connection or set '
-        '$ghosttySrcEnvKey to a local checkout.',
+        'Failed to extract Ghostty source: ${extractResult.stderr}',
       );
     }
-    final sink = tarball.openWrite();
-    await response.pipe(sink);
-  } finally {
-    httpClient.close();
-  }
 
-  cacheDir.createSync(recursive: true);
-  final extractResult = Process.runSync('tar', [
-    'xzf',
-    tarball.path,
-    '-C',
-    cacheDir.path,
-    '--strip-components=1',
-  ]);
-  if (extractResult.exitCode != 0) {
-    cacheDir.deleteSync(recursive: true);
+    try {
+      applyGhosttyPatches(cacheDir, packageRoot);
+      patchMarker.writeAsStringSync(cacheKey);
+    } on Object {
+      cacheDir.deleteSync(recursive: true);
+      tarball.deleteSync();
+      rethrow;
+    }
+
     tarball.deleteSync();
-    throw Exception(
-      'Failed to extract Ghostty source: ${extractResult.stderr}',
-    );
-  }
 
-  try {
-    applyGhosttyPatches(cacheDir, packageRoot);
-    patchMarker.writeAsStringSync(cacheKey);
-  } on Object {
-    cacheDir.deleteSync(recursive: true);
-    tarball.deleteSync();
-    rethrow;
-  }
-
-  tarball.deleteSync();
-
-  return cacheDir;
+    return cacheDir;
+  });
 }
 
 /// Reads the pinned Ghostty commit from `ghostty.version` at [packageRoot].
