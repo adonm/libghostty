@@ -547,22 +547,7 @@ class TerminalControllerImpl extends TerminalController
 
   @override
   void sendKey(vt.Key key, {Mods mods = const .none()}) {
-    final effectiveMods = mods | _virtualMods;
-    final codepoint = unshiftedCodepointForKey(key);
-    _keyEvent
-      ..key = key
-      ..mods = effectiveMods
-      ..action = .press
-      ..consumedMods = const .none()
-      ..unshiftedCodepoint = codepoint
-      ..utf8 = codepoint > 0 ? String.fromCharCode(codepoint) : null
-      ..composing = false;
-
-    _keyEncoder.sync(terminal);
-    final result = _keyEncoder.encode(_keyEvent);
-    if (result.isEmpty) return;
-    _emitOutput(utf8.encode(result));
-    clearVirtualMods();
+    _emitKeyPress(key, mods: mods | _virtualMods);
   }
 
   @override
