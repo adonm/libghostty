@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Native asset refreshes**: rerunning the build hook replaces an existing
+  output library so source or ABI changes cannot reuse a stale binary.
+- **Source patch isolation**: downloaded Ghostty sources are patched in their
+  own Git boundary and marked before cache reuse.
+- **Embedded tagged builds**: source compilation passes Ghostty's own version
+  explicitly instead of inheriting Git tags from an embedding repository.
+
 ## 0.0.11
 
 ### Added

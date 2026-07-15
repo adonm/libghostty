@@ -9,6 +9,39 @@ import 'package:test/test.dart';
 import 'helpers/test_server.dart';
 
 void main() {
+  group('ghosttySourceVersion', () {
+    late Directory tmpDir;
+
+    setUp(() {
+      tmpDir = Directory.systemTemp.createTempSync('ghostty_version_test_');
+    });
+
+    tearDown(() => tmpDir.deleteSync(recursive: true));
+
+    test('reads the source archive VERSION file', () {
+      File('${tmpDir.path}/VERSION').writeAsStringSync('1.2.3-dev\n');
+
+      expect(ghosttySourceVersion(tmpDir), '1.2.3-dev');
+    });
+
+    test('falls back to build.zig.zon', () {
+      File('${tmpDir.path}/build.zig.zon').writeAsStringSync('''
+.{
+    .name = .ghostty,
+    .version = "1.3.2-dev",
+}
+''');
+
+      expect(ghosttySourceVersion(tmpDir), '1.3.2-dev');
+    });
+
+    test('rejects missing or invalid versions', () {
+      expect(() => ghosttySourceVersion(tmpDir), throwsStateError);
+      File('${tmpDir.path}/VERSION').writeAsStringSync('not-semver');
+      expect(() => ghosttySourceVersion(tmpDir), throwsStateError);
+    });
+  });
+
   group('pinnedCommit', () {
     test('is a 40-character hex string', () {
       final tmpDir = Directory.systemTemp.createTempSync('pinnedCommit_test_');
@@ -27,6 +60,55 @@ void main() {
       addTearDown(() => tmpDir.deleteSync(recursive: true));
 
       expect(() => pinnedCommit(tmpDir.uri), throwsA(isA<StateError>()));
+    });
+  });
+
+  group('Ghostty patches', () {
+    late Directory tmpDir;
+    late Uri packageRoot;
+
+    setUp(() {
+      tmpDir = Directory.systemTemp.createTempSync('ghostty_patch_test_');
+      packageRoot = Uri.directory('${tmpDir.path}/pkg/');
+      Directory.fromUri(
+        packageRoot.resolve('patches/'),
+      ).createSync(recursive: true);
+      File.fromUri(
+        packageRoot.resolve('ghostty.version'),
+      ).writeAsStringSync('861a9cf537a58a380bc6a0784573b3de3a70415e\n');
+    });
+
+    tearDown(() => tmpDir.deleteSync(recursive: true));
+
+    test('cache key changes with patch content', () {
+      final patch = File.fromUri(packageRoot.resolve('patches/test.patch'));
+      patch.writeAsStringSync('first');
+      final first = ghosttySourceCacheKey(packageRoot);
+
+      patch.writeAsStringSync('second');
+
+      expect(ghosttySourceCacheKey(packageRoot), isNot(first));
+    });
+
+    test('applies packaged patches outside a Git checkout', () {
+      Process.runSync('git', [
+        'init',
+        '--quiet',
+      ], workingDirectory: tmpDir.path);
+      final source = Directory('${tmpDir.path}/source')..createSync();
+      File('${source.path}/value.txt').writeAsStringSync('before\n');
+      File.fromUri(packageRoot.resolve('patches/test.patch')).writeAsStringSync(
+        'diff --git a/value.txt b/value.txt\n'
+        '--- a/value.txt\n'
+        '+++ b/value.txt\n'
+        '@@ -1 +1 @@\n'
+        '-before\n'
+        '+after\n',
+      );
+
+      applyGhosttyPatches(source, packageRoot);
+
+      expect(File('${source.path}/value.txt').readAsStringSync(), 'after\n');
     });
   });
 
