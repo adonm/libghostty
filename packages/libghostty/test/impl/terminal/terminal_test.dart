@@ -294,6 +294,149 @@ void main() {
       });
     });
 
+    group('compressionActivity', () {
+      test('changes after terminal activity', () {
+        final initial = terminal.compressionActivity;
+
+        terminal.write(
+          Uint8List.fromList(
+            List.filled(
+              4000,
+              'compressible terminal history\r\n',
+            ).join().codeUnits,
+          ),
+        );
+        final current = terminal.compressionActivity;
+
+        expect(current, isNot(initial));
+      });
+    });
+
+    group('compress', () {
+      test('reports unsupported full compression on Windows', () {
+        final result = terminal.compress(mode: .full);
+
+        expect(result, TerminalCompressionResult.unsupported);
+      }, testOn: 'windows');
+
+      test(
+        'completes full compression on supported targets',
+        () {
+          final result = terminal.compress(mode: .full);
+
+          expect(result, TerminalCompressionResult.complete);
+        },
+        testOn: 'linux || mac-os || android || ios',
+      );
+    });
+
+    group('onClipboardWrite', () {
+      test('delivers decoded clipboard requests', () {
+        ClipboardWrite? received;
+        terminal.onClipboardWrite = (write) {
+          received = write;
+          return .success;
+        };
+
+        terminal.write(
+          Uint8List.fromList('\x1b]52;c;aGVsbG8Ad29ybGQ=\x07'.codeUnits),
+        );
+
+        expect(
+          received,
+          isA<ClipboardWrite>()
+              .having(
+                (write) => write.location,
+                'location',
+                ClipboardLocation.standard,
+              )
+              .having(
+                (write) => write.contents.single.mime,
+                'MIME type',
+                'text/plain',
+              )
+              .having((write) => write.contents.single.data, 'data', [
+                104,
+                101,
+                108,
+                108,
+                111,
+                0,
+                119,
+                111,
+                114,
+                108,
+                100,
+              ]),
+        );
+      });
+
+      test('delivers clear requests without content', () {
+        ClipboardWrite? received;
+        terminal.onClipboardWrite = (write) {
+          received = write;
+          return .success;
+        };
+
+        terminal.write(Uint8List.fromList('\x1b]52;s;\x07'.codeUnits));
+
+        expect(received?.contents, isEmpty);
+      });
+
+      test('ignores clipboard read queries', () {
+        var count = 0;
+        terminal.onClipboardWrite = (_) {
+          count++;
+          return .success;
+        };
+
+        terminal.write(Uint8List.fromList('\x1b]52;c;?\x07'.codeUnits));
+
+        expect(count, 0);
+      });
+
+      test('uses the replacement callback', () {
+        var first = 0;
+        var second = 0;
+        terminal.onClipboardWrite = (_) {
+          first++;
+          return .success;
+        };
+        terminal.onClipboardWrite = (_) {
+          second++;
+          return .success;
+        };
+
+        terminal.write(Uint8List.fromList('\x1b]52;c;aGVsbG8=\x07'.codeUnits));
+
+        expect((first: first, second: second), (first: 0, second: 1));
+      });
+
+      test('stops delivery after callback removal', () {
+        var count = 0;
+        terminal.onClipboardWrite = (_) {
+          count++;
+          return .success;
+        };
+        terminal.onClipboardWrite = null;
+
+        terminal.write(Uint8List.fromList('\x1b]52;c;aGVsbG8=\x07'.codeUnits));
+
+        expect(count, 0);
+      });
+
+      test('contains callback exceptions', () {
+        terminal.onClipboardWrite = (_) => throw StateError('failure');
+
+        expect(
+          () => terminal.write(
+            Uint8List.fromList('\x1b]52;c;aGVsbG8=\x07'.codeUnits),
+          ),
+          returnsNormally,
+        );
+      });
+    });
+
     group('renderState dirty', () {
       test('writing content makes renderState dirty', () {
         renderState.update(terminal);

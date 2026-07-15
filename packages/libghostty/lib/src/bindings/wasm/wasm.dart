@@ -1139,6 +1139,38 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<int> terminalCompressionActivity(int handle) {
+    final outPtr = _allocateBytes(8, alignment: 8);
+    _mem.writeU64(outPtr, 0);
+    final result = _exports.ghostty_terminal_compression_activity(
+      handle,
+      outPtr,
+    );
+    final activity = _mem.readU64(outPtr);
+    _exports.ghostty_wasm_free_u8_array(outPtr, 8);
+    return (.fromValue(result), activity);
+  }
+
+  @override
+  CResult<TerminalCompressionResult> terminalCompress(
+    int handle,
+    TerminalCompressionMode mode,
+  ) {
+    final outPtr = _allocateBytes(_wasmEnumSize, alignment: _wasmEnumSize);
+    _mem.writeU32(outPtr, TerminalCompressionResult.unsupported.value);
+    final result = _exports.ghostty_terminal_compress(
+      handle,
+      mode.value,
+      outPtr,
+    );
+    final compression = TerminalCompressionResult.fromValue(
+      _mem.readU32(outPtr),
+    );
+    _exports.ghostty_wasm_free_u8_array(outPtr, _wasmEnumSize);
+    return (.fromValue(result), compression);
+  }
+
+  @override
   CResult<int> terminalGetCols(int handle) => _terminalGetU16(handle, .cols);
 
   @override
@@ -1533,6 +1565,55 @@ class WasmBindings implements GhosttyBindings {
         } on Object catch (_) {}
       }).toJS,
       ['i32', 'i32'],
+      reuseIndex: reuseIndex,
+    );
+    map[option] = (index, callback);
+    _exports.ghostty_terminal_set(handle, option.value, index);
+  }
+
+  @override
+  void terminalSetOnClipboardWrite(
+    int handle,
+    ClipboardWriteCallback? callback,
+  ) {
+    final map = _callbacks.putIfAbsent(handle, () => {});
+    const option = TerminalOption.clipboardWrite;
+
+    if (callback == null) {
+      final existing = map.remove(option);
+      if (existing != null) _table.set(existing.$1);
+      _exports.ghostty_terminal_set(handle, option.value, 0);
+      return;
+    }
+
+    final reuseIndex = map[option]?.$1;
+    final index = _registerCallback(
+      ((int terminal, int userdata, int writePtr) {
+        try {
+          final contentsPtr = _mem.readPtr(
+            writePtr + _layout.clipboardWriteContents,
+          );
+          final contentsLen = _mem.readU32(
+            writePtr + _layout.clipboardWriteContentsLen,
+          );
+          final contents = <ClipboardContent>[
+            for (var i = 0; i < contentsLen; i++)
+              _readClipboardContent(
+                contentsPtr + i * _layout.clipboardContentSize,
+              ),
+          ];
+          return callback((
+            location: .fromValue(
+              _mem.readU32(writePtr + _layout.clipboardWriteLocation),
+            ),
+            contents: List.unmodifiable(contents),
+          )).value;
+        } on Object catch (_) {
+          return ClipboardWriteResult.ioError.value;
+        }
+      }).toJS,
+      ['i32', 'i32', 'i32'],
+      results: ['i32'],
       reuseIndex: reuseIndex,
     );
     map[option] = (index, callback);
@@ -2184,6 +2265,19 @@ class WasmBindings implements GhosttyBindings {
     if (bufs == null) return;
     final buf = bufs.remove(option);
     if (buf != null) _exports.ghostty_wasm_free_u8_array(buf.$1, buf.$2);
+  }
+
+  ClipboardContent _readClipboardContent(int ptr) {
+    final mime = ptr + _layout.clipboardContentMime;
+    final data = ptr + _layout.clipboardContentData;
+    final mimePtr = _mem.readPtr(mime);
+    final mimeLen = _mem.readU32(mime + _layout.stringLen);
+    final dataPtr = _mem.readPtr(data);
+    final dataLen = _mem.readU32(data + _layout.stringLen);
+    return (
+      mime: utf8.decode(_mem.readBytes(mimePtr, mimeLen)),
+      data: Uint8List.fromList(_mem.readBytes(dataPtr, dataLen)),
+    );
   }
 
   @override

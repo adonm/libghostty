@@ -54,6 +54,7 @@ void main() {
 
     tearDown(() {
       bindings.renderStateFree(renderState);
+      bindings.terminalDisposeCallbacks(terminal);
       bindings.terminalFree(terminal);
     });
 
@@ -73,6 +74,112 @@ void main() {
         expect(bindings.renderStateGetCursorViewportX(renderState).$2, 0);
         expect(bindings.renderStateGetCursorViewportY(renderState).$2, 0);
         expect(bindings.renderStateGetCursorVisible(renderState).$2, isTrue);
+      });
+    });
+
+    group('terminalCompressionActivity', () {
+      test('changes after terminal activity', () {
+        final subject = check(bindings.terminalNew(80, 24, 10_000_000));
+        addTearDown(() => bindings.terminalFree(subject));
+        final initial = check(bindings.terminalCompressionActivity(subject));
+
+        bindings.terminalVtWrite(
+          subject,
+          Uint8List.fromList(
+            List.filled(
+              4000,
+              'compressible terminal history\r\n',
+            ).join().codeUnits,
+          ),
+        );
+        final current = check(bindings.terminalCompressionActivity(subject));
+
+        expect(current, isNot(initial));
+      });
+
+      test('rejects an invalid handle', () {
+        final result = bindings.terminalCompressionActivity(0);
+
+        expect(result, (Result.invalidValue, 0));
+      });
+    });
+
+    group('terminalCompress', () {
+      test('reports unsupported compression', () {
+        final result = bindings.terminalCompress(terminal, .full);
+
+        expect(result, (Result.success, TerminalCompressionResult.unsupported));
+      });
+
+      test('rejects an invalid handle', () {
+        final result = bindings.terminalCompress(0, .incremental);
+
+        expect(result, (
+          Result.invalidValue,
+          TerminalCompressionResult.unsupported,
+        ));
+      });
+    });
+
+    group('terminalSetOnClipboardWrite', () {
+      test('delivers decoded binary content', () {
+        ClipboardWrite? received;
+        bindings.terminalSetOnClipboardWrite(terminal, (write) {
+          received = write;
+          return .success;
+        });
+
+        bindings.terminalVtWrite(
+          terminal,
+          Uint8List.fromList('\x1b]52;c;aGVsbG8Ad29ybGQ=\x07'.codeUnits),
+        );
+
+        expect(
+          received,
+          isA<ClipboardWrite>()
+              .having(
+                (write) => write.location,
+                'location',
+                ClipboardLocation.standard,
+              )
+              .having((write) => write.contents, 'contents', hasLength(1))
+              .having(
+                (write) => write.contents.single.mime,
+                'MIME type',
+                'text/plain',
+              )
+              .having((write) => write.contents.single.data, 'data', [
+                104,
+                101,
+                108,
+                108,
+                111,
+                0,
+                119,
+                111,
+                114,
+                108,
+                100,
+              ]),
+        );
+      });
+
+      test('delivers clear requests without content', () {
+        ClipboardWrite? received;
+        bindings.terminalSetOnClipboardWrite(terminal, (write) {
+          received = write;
+          return .success;
+        });
+
+        bindings.terminalVtWrite(
+          terminal,
+          Uint8List.fromList('\x1b]52;s;\x07'.codeUnits),
+        );
+
+        expect(
+          (location: received?.location, empty: received?.contents.isEmpty),
+          (location: ClipboardLocation.selection, empty: true),
+        );
       });
     });
 
