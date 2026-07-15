@@ -198,7 +198,7 @@ void main() {
     test('sync resolves palette colors from render state colors', () {
       terminal.palette = [
         for (var i = 0; i < 256; i++)
-          i == 1 ? const RgbColor(1, 2, 3) : const RgbColor(0, 0, 0),
+          if (i == 1) const RgbColor(1, 2, 3) else const RgbColor(0, 0, 0),
       ];
       writeUtf8(terminal, '\x1b[31mA');
 
@@ -258,7 +258,7 @@ void main() {
       );
       terminal.palette = [
         for (var i = 0; i < 256; i++)
-          i == 1 ? const RgbColor(1, 2, 3) : const RgbColor(0, 0, 0),
+          if (i == 1) const RgbColor(1, 2, 3) else const RgbColor(0, 0, 0),
       ];
       writeUtf8(terminal, '\x1b[31mA\x1b[1;1H');
 
@@ -270,7 +270,7 @@ void main() {
     test('sync resolves underline colors from render state colors', () {
       terminal.palette = [
         for (var i = 0; i < 256; i++)
-          i == 1 ? const RgbColor(1, 2, 3) : const RgbColor(0, 0, 0),
+          if (i == 1) const RgbColor(1, 2, 3) else const RgbColor(0, 0, 0),
       ];
       writeUtf8(terminal, '\x1b[4;58;5;1mA');
 

@@ -20,7 +20,7 @@ melos:
       run: dart format --output=none --set-exit-if-changed packages
     analyze:
       description: Analyze the shared Pub workspace.
-      run: dart analyze --no-fatal-warnings
+      run: dart analyze
     test:dart:
       description: Test non-Flutter packages with test directories.
       run: dart run melos exec --concurrency=1 --fail-fast --no-flutter --dir-exists=test -- dart test
