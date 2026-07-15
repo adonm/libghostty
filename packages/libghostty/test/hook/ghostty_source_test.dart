@@ -58,6 +58,10 @@ void main() {
     });
 
     test('applies packaged patches outside a Git checkout', () {
+      Process.runSync('git', [
+        'init',
+        '--quiet',
+      ], workingDirectory: tmpDir.path);
       final source = Directory('${tmpDir.path}/source')..createSync();
       File('${source.path}/value.txt').writeAsStringSync('before\n');
       File.fromUri(packageRoot.resolve('patches/test.patch')).writeAsStringSync(

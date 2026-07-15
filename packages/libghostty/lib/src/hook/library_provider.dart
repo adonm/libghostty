@@ -156,8 +156,14 @@ final class CompileFromSource extends LibraryProvider {
     final cacheDir = Directory.fromUri(
       input.outputDirectoryShared.resolve('ghostty-git-$cacheKey/'),
     );
+    final patchMarker = File.fromUri(
+      cacheDir.uri.resolve('.libghostty-patch-key'),
+    );
 
-    if (!cacheDir.existsSync()) {
+    if (!cacheDir.existsSync() ||
+        !patchMarker.existsSync() ||
+        patchMarker.readAsStringSync() != cacheKey) {
+      if (cacheDir.existsSync()) cacheDir.deleteSync(recursive: true);
       cacheDir.createSync(recursive: true);
 
       final result = Process.runSync('git', [
@@ -176,6 +182,7 @@ final class CompileFromSource extends LibraryProvider {
       }
       try {
         applyGhosttyPatches(cacheDir, input.packageRoot);
+        patchMarker.writeAsStringSync(cacheKey);
       } on Object {
         cacheDir.deleteSync(recursive: true);
         rethrow;

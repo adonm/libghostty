@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 const ghosttySrcEnvKey = 'GHOSTTY_SRC';
 
 const _defaultTarballBase = 'https://github.com/ghostty-org/ghostty/archive';
+const _patchMarkerName = '.libghostty-patch-key';
 
 /// Source patches applied to downloaded and cloned Ghostty checkouts.
 List<File> ghosttyPatchFiles(Uri packageRoot) {
@@ -34,16 +35,33 @@ String ghosttySourceCacheKey(Uri packageRoot) {
 
 /// Applies all packaged patches to a freshly acquired Ghostty checkout.
 void applyGhosttyPatches(Directory source, Uri packageRoot) {
-  for (final patch in ghosttyPatchFiles(packageRoot)) {
+  final gitDirectory = Directory.fromUri(source.uri.resolve('.git/'));
+  final isolated = !gitDirectory.existsSync();
+  if (isolated) {
     final result = Process.runSync('git', [
-      'apply',
-      '--no-index',
-      patch.path,
+      'init',
+      '--quiet',
     ], workingDirectory: source.path);
     if (result.exitCode != 0) {
-      throw Exception(
-        'Failed to apply Ghostty patch ${patch.path}: ${result.stderr}',
-      );
+      throw Exception('Failed to isolate Ghostty source: ${result.stderr}');
+    }
+  }
+  try {
+    for (final patch in ghosttyPatchFiles(packageRoot)) {
+      final result = Process.runSync('git', [
+        'apply',
+        patch.path,
+      ], workingDirectory: source.path);
+      if (result.exitCode != 0) {
+        throw Exception(
+          'Failed to apply Ghostty patch ${patch.path}: ${result.stderr}',
+        );
+      }
+    }
+  } finally {
+    if (isolated) {
+      gitDirectory.deleteSync(recursive: true);
+      gitDirectory.createSync();
     }
   }
 }
@@ -62,7 +80,14 @@ Future<Directory> downloadSource(
   final cacheDir = Directory.fromUri(
     cacheBase.resolve('ghostty-source-$cacheKey/'),
   );
-  if (cacheDir.existsSync()) return cacheDir;
+  final patchMarker = File.fromUri(cacheDir.uri.resolve(_patchMarkerName));
+  if (cacheDir.existsSync()) {
+    if (patchMarker.existsSync() &&
+        patchMarker.readAsStringSync() == cacheKey) {
+      return cacheDir;
+    }
+    cacheDir.deleteSync(recursive: true);
+  }
 
   tarballUrl ??= '$_defaultTarballBase/$commit.tar.gz';
 
@@ -104,6 +129,7 @@ Future<Directory> downloadSource(
 
   try {
     applyGhosttyPatches(cacheDir, packageRoot);
+    patchMarker.writeAsStringSync(cacheKey);
   } on Object {
     cacheDir.deleteSync(recursive: true);
     tarball.deleteSync();
