@@ -23,7 +23,7 @@ melos:
       run: dart analyze --no-fatal-warnings
     test:dart:
       description: Test non-Flutter packages with test directories.
-      run: dart run melos exec --fail-fast --no-flutter --dir-exists=test -- dart test
+      run: dart run melos exec --concurrency=1 --fail-fast --no-flutter --dir-exists=test -- dart test
     test:flutter:
       description: Test Flutter packages with test directories.
       run: dart run melos exec --fail-fast --flutter --dir-exists=test -- flutter test
