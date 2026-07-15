@@ -13,6 +13,11 @@
   detection. `TerminalKeyEventNormalizer` supports custom runners, and
   `TerminalConfig.optionAsAlt` configures macOS Option behavior.
 
+### Fixed
+
+- **macOS keyboard metadata**: nullable Option-free text is encoded with an
+  explicitly typed standard-codec null value so release builds compile.
+
 ## 0.0.4
 
 ### Breaking
