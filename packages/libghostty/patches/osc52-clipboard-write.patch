@@ -1,0 +1,192 @@
+diff --git a/include/ghostty/vt/terminal.h b/include/ghostty/vt/terminal.h
+index b03653129..6a0f0f704 100644
+--- a/include/ghostty/vt/terminal.h
++++ b/include/ghostty/vt/terminal.h
+@@ -77,0 +78 @@ extern "C" {
++ * | `GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE`  | `GhosttyTerminalClipboardWriteFn` | Clipboard write via OSC 52                |
+@@ -304,0 +306,22 @@ typedef void (*GhosttyTerminalBellFn)(GhosttyTerminal terminal,
++/**
++ * Callback function type for OSC 52 clipboard writes.
++ *
++ * The payload is the raw base64 data from the OSC sequence. An empty payload
++ * requests clearing the selected clipboard. Clipboard read queries are
++ * ignored and do not invoke this callback. The payload pointer is valid only
++ * for the duration of the callback.
++ *
++ * @param terminal The terminal handle
++ * @param userdata The userdata pointer set via GHOSTTY_TERMINAL_OPT_USERDATA
++ * @param kind OSC 52 clipboard selector (for example 'c' or 'p')
++ * @param data Pointer to the raw base64 payload
++ * @param len Length of the payload in bytes
++ *
++ * @ingroup terminal
++ */
++typedef void (*GhosttyTerminalClipboardWriteFn)(GhosttyTerminal terminal,
++                                                 void* userdata,
++                                                 uint8_t kind,
++                                                 const uint8_t* data,
++                                                 size_t len);
++
+@@ -713,0 +737,8 @@ typedef enum GHOSTTY_ENUM_TYPED {
++
++  /**
++   * Callback invoked for OSC 52 clipboard writes. Clipboard read queries are
++   * ignored. Set to NULL to ignore clipboard writes.
++   *
++   * Input type: GhosttyTerminalClipboardWriteFn
++   */
++  GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE = 26,
+diff --git a/src/terminal/c/terminal.zig b/src/terminal/c/terminal.zig
+index a2a75147f..d5124f2a4 100644
+--- a/src/terminal/c/terminal.zig
++++ b/src/terminal/c/terminal.zig
+@@ -49,0 +50 @@ const Effects = struct {
++    clipboard_write: ?ClipboardWriteFn = null,
+@@ -70,0 +72,4 @@ const Effects = struct {
++    /// C function pointer type for OSC 52 clipboard writes. The data is the
++    /// raw base64 payload and is only valid for the duration of the callback.
++    pub const ClipboardWriteFn = *const fn (Terminal, ?*anyopaque, u8, [*]const u8, usize) callconv(lib.calling_conv) void;
++
+@@ -140,0 +146,7 @@ const Effects = struct {
++    fn clipboardWriteTrampoline(handler: *Handler, kind: u8, data: []const u8) void {
++        const stream_ptr: *Stream = @fieldParentPtr("handler", handler);
++        const wrapper: *TerminalWrapper = @fieldParentPtr("stream", stream_ptr);
++        const func = wrapper.effects.clipboard_write orelse return;
++        func(@ptrCast(wrapper), wrapper.effects.userdata, kind, data.ptr, data.len);
++    }
++
+@@ -291,0 +304 @@ fn new_(
++        .clipboard_write = &Effects.clipboardWriteTrampoline,
+@@ -345,0 +359 @@ pub const Option = enum(c_int) {
++    clipboard_write = 26,
+@@ -352,0 +367 @@ pub const Option = enum(c_int) {
++            .clipboard_write => ?Effects.ClipboardWriteFn,
+@@ -408,0 +424 @@ fn setTyped(
++        .clipboard_write => wrapper.effects.clipboard_write = value,
+@@ -2324,0 +2341,60 @@ test "bell without callback is silent" {
++test "set clipboard_write callback" {
++    var t: Terminal = null;
++    try testing.expectEqual(Result.success, new(
++        &lib.alloc.test_allocator,
++        &t,
++        .{
++            .cols = 80,
++            .rows = 24,
++            .max_scrollback = 0,
++        },
++    ));
++    defer free(t);
++
++    const S = struct {
++        var count: usize = 0;
++        var kind: u8 = 0;
++        var data: []u8 = &.{};
++        var last_userdata: ?*anyopaque = null;
++
++        fn deinit() void {
++            if (data.len > 0) testing.allocator.free(data);
++            data = &.{};
++        }
++
++        fn clipboardWrite(
++            _: Terminal,
++            userdata: ?*anyopaque,
++            value_kind: u8,
++            ptr: [*]const u8,
++            len: usize,
++        ) callconv(lib.calling_conv) void {
++            if (data.len > 0) testing.allocator.free(data);
++            data = testing.allocator.dupe(u8, ptr[0..len]) catch @panic("OOM");
++            count += 1;
++            kind = value_kind;
++            last_userdata = userdata;
++        }
++    };
++    S.count = 0;
++    S.kind = 0;
++    S.data = &.{};
++    S.last_userdata = null;
++    defer S.deinit();
++
++    var sentinel: u8 = 42;
++    try testing.expectEqual(Result.success, set(t, .userdata, @ptrCast(&sentinel)));
++    try testing.expectEqual(Result.success, set(t, .clipboard_write, @ptrCast(&S.clipboardWrite)));
++
++    const write = "\x1b]52;c;aGVsbG8=\x1b\\";
++    vt_write(t, write, write.len);
++    try testing.expectEqual(@as(usize, 1), S.count);
++    try testing.expectEqual(@as(u8, 'c'), S.kind);
++    try testing.expectEqualStrings("aGVsbG8=", S.data);
++    try testing.expectEqual(@as(?*anyopaque, @ptrCast(&sentinel)), S.last_userdata);
++
++    const query = "\x1b]52;c;?\x1b\\";
++    vt_write(t, query, query.len);
++    try testing.expectEqual(@as(usize, 1), S.count);
++}
++
+diff --git a/src/terminal/stream_terminal.zig b/src/terminal/stream_terminal.zig
+index 38d59bcd2..66d94daa9 100644
+--- a/src/terminal/stream_terminal.zig
++++ b/src/terminal/stream_terminal.zig
+@@ -62,0 +63,5 @@ pub const Handler = struct {
++        /// Called when OSC 52 requests a clipboard write. The data is the raw
++        /// base64 payload and is only valid for the duration of the callback.
++        /// Clipboard read queries are ignored and never reach this callback.
++        clipboard_write: ?*const fn (*Handler, u8, []const u8) void,
++
+@@ -103,0 +109 @@ pub const Handler = struct {
++            .clipboard_write = null,
+@@ -280,0 +287 @@ pub const Handler = struct {
++            .clipboard_contents => self.clipboardWrite(value),
+@@ -293 +299,0 @@ pub const Handler = struct {
+-            .clipboard_contents,
+@@ -309,0 +316,9 @@ pub const Handler = struct {
++    fn clipboardWrite(
++        self: *Handler,
++        value: Action.ClipboardContents,
++    ) void {
++        if (std.mem.eql(u8, value.data, "?")) return;
++        const func = self.effects.clipboard_write orelse return;
++        func(self, value.kind, value.data);
++    }
++
+@@ -1596,0 +1612,39 @@ test "bell effect callback" {
++test "OSC 52 clipboard write effect" {
++    var t: Terminal = try .init(testing.allocator, .{ .cols = 80, .rows = 24 });
++    defer t.deinit(testing.allocator);
++
++    const S = struct {
++        var count: usize = 0;
++        var kind: u8 = 0;
++        var data: []const u8 = "";
++
++        fn clipboardWrite(_: *Handler, value_kind: u8, value_data: []const u8) void {
++            count += 1;
++            kind = value_kind;
++            data = value_data;
++        }
++    };
++    S.count = 0;
++    S.kind = 0;
++    S.data = "";
++
++    var handler: Handler = .init(&t);
++    handler.effects.clipboard_write = &S.clipboardWrite;
++
++    var s: Stream = .initAlloc(testing.allocator, handler);
++    defer s.deinit();
++
++    s.nextSlice("\x1b]52;c;aGVsbG8=\x1b\\");
++    try testing.expectEqual(@as(usize, 1), S.count);
++    try testing.expectEqual(@as(u8, 'c'), S.kind);
++    try testing.expectEqualStrings("aGVsbG8=", S.data);
++
++    s.nextSlice("\x1b]52;c;?\x1b\\");
++    try testing.expectEqual(@as(usize, 1), S.count);
++
++    s.nextSlice("\x1b]52;p;\x07");
++    try testing.expectEqual(@as(usize, 2), S.count);
++    try testing.expectEqual(@as(u8, 'p'), S.kind);
++    try testing.expectEqualStrings("", S.data);
++}
++

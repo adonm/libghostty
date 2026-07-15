@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **OSC 52 clipboard writes**: `TerminalController.onClipboardWrite` forwards
+  write-only clipboard requests from libghostty to terminal embedders.
+
 ## 0.0.4
 
 ### Breaking

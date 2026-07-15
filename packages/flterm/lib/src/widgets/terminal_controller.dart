@@ -35,6 +35,9 @@ abstract class TerminalController extends ChangeNotifier
   /// Called when the terminal receives a BEL character (0x07).
   VoidCallback? onBell;
 
+  /// Called when the terminal receives an OSC 52 clipboard write request.
+  ValueChanged<ClipboardWrite>? onClipboardWrite;
+
   /// Called when the terminal title changes. Read [title] for the value.
   VoidCallback? onTitleChanged;
 
