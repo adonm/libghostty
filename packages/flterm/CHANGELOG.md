@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Layout-aware keyboard input**: desktop companions provide active-layout
+  unshifted characters, consumed modifiers, lock/side state, and dead-key
+  detection. `TerminalKeyEventNormalizer` supports custom runners, and
+  `TerminalConfig.optionAsAlt` configures macOS Option behavior.
+
 ## 0.0.4
 
 ### Breaking

@@ -89,6 +89,45 @@ controller.paste('hello');
 controller.clear();
 ```
 
+## Keyboard input
+
+flterm keeps platform key translation separate from terminal protocol
+encoding. On Linux, macOS, and Windows, a native companion enriches Flutter's
+physical key event with the active layout's unshifted codepoint, consumed
+modifiers, lock and modifier-side state, and dead-key information. Dead keys
+and IME preedit stay on Flutter's text-input path; committed input is sent to
+the terminal separately.
+
+On mobile and web, Flutter does not expose all of that native metadata. flterm
+uses the produced character, pressed and locked keys, previously observed
+unmodified characters, and a physical-key fallback. Basic input and terminal
+shortcuts still work, but consumed modifiers and layout translation can be
+less precise than on desktop.
+
+Custom runners can replace or enrich the normalized event at the controller
+boundary:
+
+```dart
+final controller = TerminalController(
+  keyEventNormalizer: (flutterEvent, fallback) {
+    return fallback.copyWith(
+      // Metadata captured before the runner normalizes its native event.
+      unshiftedCodepoint: nativeUnshiftedCodepoint(flutterEvent),
+      consumedMods: nativeConsumedMods(flutterEvent),
+    );
+  },
+);
+```
+
+On macOS, Option participates in keyboard layout translation by default. It
+can instead act as terminal Alt on either or both sides:
+
+```dart
+final controller = TerminalController(
+  config: const TerminalConfig(optionAsAlt: OptionAsAlt.true$),
+);
+```
+
 Links are configured on the view. Built-in detection covers OSC 8
 metadata, text URLs, and file paths.
 
