@@ -23,10 +23,9 @@ Future<void> _build(BuildInput input, BuildOutputBuilder output) async {
   final installDir = input.outputDirectory;
   final libFile = File.fromUri(installDir.resolve('lib/$libFileName'));
 
-  if (!libFile.existsSync()) {
-    final provider = LibraryProvider.resolve(input);
-    await provider.provide(libFile);
-  }
+  if (libFile.existsSync()) libFile.deleteSync();
+  final provider = LibraryProvider.resolve(input);
+  await provider.provide(libFile);
 
   if (!libFile.existsSync()) {
     throw Exception(

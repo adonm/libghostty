@@ -8,6 +8,11 @@
   clipboard requests with their raw selector and base64 payload. Clipboard read
   queries remain disabled.
 
+### Fixed
+
+- **Native asset refreshes**: rerunning the build hook replaces an existing
+  output library so source or ABI changes cannot reuse a stale binary.
+
 ## 0.0.11
 
 ### Added
