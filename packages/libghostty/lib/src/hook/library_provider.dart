@@ -161,49 +161,36 @@ final class CompileFromSource extends LibraryProvider {
       cacheDir.uri.resolve('.libghostty-patch-key'),
     );
 
-    if (cacheDir.existsSync() &&
-        patchMarker.existsSync() &&
-        patchMarker.readAsStringSync() == cacheKey) {
-      return cacheDir;
+    if (!cacheDir.existsSync() ||
+        !patchMarker.existsSync() ||
+        patchMarker.readAsStringSync() != cacheKey) {
+      if (cacheDir.existsSync()) cacheDir.deleteSync(recursive: true);
+      cacheDir.createSync(recursive: true);
+
+      final result = Process.runSync('git', [
+        'clone',
+        '--depth',
+        '1',
+        '--branch',
+        commit,
+        'https://github.com/ghostty-org/ghostty.git',
+        '.',
+      ], workingDirectory: cacheDir.path);
+
+      if (result.exitCode != 0) {
+        cacheDir.deleteSync(recursive: true);
+        throw Exception('Git clone failed: ${result.stderr}');
+      }
+      try {
+        applyGhosttyPatches(cacheDir, input.packageRoot);
+        patchMarker.writeAsStringSync(cacheKey);
+      } on Object {
+        cacheDir.deleteSync(recursive: true);
+        rethrow;
+      }
     }
 
-    return withGhosttySourceCacheLock(
-      input.outputDirectoryShared,
-      'git-$cacheKey',
-      () async {
-        if (cacheDir.existsSync() &&
-            patchMarker.existsSync() &&
-            patchMarker.readAsStringSync() == cacheKey) {
-          return cacheDir;
-        }
-        if (cacheDir.existsSync()) cacheDir.deleteSync(recursive: true);
-        cacheDir.createSync(recursive: true);
-
-        final result = Process.runSync('git', [
-          'clone',
-          '--depth',
-          '1',
-          '--branch',
-          commit,
-          'https://github.com/ghostty-org/ghostty.git',
-          '.',
-        ], workingDirectory: cacheDir.path);
-
-        if (result.exitCode != 0) {
-          cacheDir.deleteSync(recursive: true);
-          throw Exception('Git clone failed: ${result.stderr}');
-        }
-        try {
-          applyGhosttyPatches(cacheDir, input.packageRoot);
-          patchMarker.writeAsStringSync(cacheKey);
-        } on Object {
-          cacheDir.deleteSync(recursive: true);
-          rethrow;
-        }
-
-        return cacheDir;
-      },
-    );
+    return cacheDir;
   }
 
   Future<Directory> _resolveSource() async {
