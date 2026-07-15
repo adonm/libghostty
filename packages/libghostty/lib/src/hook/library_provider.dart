@@ -106,7 +106,9 @@ final class CompileFromSource extends LibraryProvider {
       '-p',
       Directory.fromUri(installDir).path,
       '--release=fast',
-      if (os == .windows) ...['--global-cache-dir', _zigCacheDir(sourceDir)],
+      '-Dversion-string=${ghosttySourceVersion(sourceDir)}',
+      '--global-cache-dir',
+      _zigCacheDir(sourceDir),
       if (os != .current || arch != .current) '-Dtarget=$zig',
       if (ios == .iPhoneSimulator && arch == .arm64) '-Dcpu=apple_a17',
     ];
@@ -134,7 +136,7 @@ final class CompileFromSource extends LibraryProvider {
   String _zigCacheDir(Directory sourceDir) {
     final envDir = Platform.environment['ZIG_GLOBAL_CACHE_DIR'];
     if (envDir != null && envDir.isNotEmpty) return envDir;
-    return '${sourceDir.path}${Platform.pathSeparator}.zig-cache';
+    return '${sourceDir.path}${Platform.pathSeparator}.zig-global-cache';
   }
 
   Future<Directory> _downloadTarball() async {
@@ -151,11 +153,18 @@ final class CompileFromSource extends LibraryProvider {
 
   Future<Directory> _gitClone() async {
     final commit = pinnedCommit(input.packageRoot);
+    final cacheKey = ghosttySourceCacheKey(input.packageRoot);
     final cacheDir = Directory.fromUri(
-      input.outputDirectoryShared.resolve('ghostty-git-$commit/'),
+      input.outputDirectoryShared.resolve('ghostty-git-$cacheKey/'),
+    );
+    final patchMarker = File.fromUri(
+      cacheDir.uri.resolve('.libghostty-patch-key'),
     );
 
-    if (!cacheDir.existsSync()) {
+    if (!cacheDir.existsSync() ||
+        !patchMarker.existsSync() ||
+        patchMarker.readAsStringSync() != cacheKey) {
+      if (cacheDir.existsSync()) cacheDir.deleteSync(recursive: true);
       cacheDir.createSync(recursive: true);
 
       final result = Process.runSync('git', [
@@ -171,6 +180,13 @@ final class CompileFromSource extends LibraryProvider {
       if (result.exitCode != 0) {
         cacheDir.deleteSync(recursive: true);
         throw Exception('Git clone failed: ${result.stderr}');
+      }
+      try {
+        applyGhosttyPatches(cacheDir, input.packageRoot);
+        patchMarker.writeAsStringSync(cacheKey);
+      } on Object {
+        cacheDir.deleteSync(recursive: true);
+        rethrow;
       }
     }
 

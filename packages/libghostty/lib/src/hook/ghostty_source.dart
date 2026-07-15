@@ -1,9 +1,94 @@
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+
 /// Environment variable that overrides source resolution with a local checkout.
 const ghosttySrcEnvKey = 'GHOSTTY_SRC';
 
 const _defaultTarballBase = 'https://github.com/ghostty-org/ghostty/archive';
+const _patchMarkerName = '.libghostty-patch-key';
+final _semanticVersion = RegExp(
+  r'^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$',
+);
+
+/// Reads the Ghostty application version without consulting Git metadata.
+String ghosttySourceVersion(Directory source) {
+  final versionFile = File.fromUri(source.uri.resolve('VERSION'));
+  final String? version;
+  if (versionFile.existsSync()) {
+    version = versionFile.readAsStringSync().trim();
+  } else {
+    final zonFile = File.fromUri(source.uri.resolve('build.zig.zon'));
+    final zon = zonFile.existsSync() ? zonFile.readAsStringSync() : '';
+    version = RegExp(
+      r'^\s*\.version\s*=\s*"([^"]+)"\s*,',
+      multiLine: true,
+    ).firstMatch(zon)?.group(1);
+  }
+  if (version == null || !_semanticVersion.hasMatch(version)) {
+    throw StateError('Cannot determine Ghostty version from ${source.path}');
+  }
+  return version;
+}
+
+/// Source patches applied to downloaded and cloned Ghostty checkouts.
+List<File> ghosttyPatchFiles(Uri packageRoot) {
+  final directory = Directory.fromUri(packageRoot.resolve('patches/'));
+  if (!directory.existsSync()) return const [];
+  return directory
+      .listSync()
+      .whereType<File>()
+      .where((file) => file.path.endsWith('.patch'))
+      .toList()
+    ..sort((a, b) => a.path.compareTo(b.path));
+}
+
+/// Returns a cache key that changes when the Ghostty pin or patches change.
+String ghosttySourceCacheKey(Uri packageRoot) {
+  final commit = pinnedCommit(packageRoot);
+  final patches = ghosttyPatchFiles(packageRoot);
+  if (patches.isEmpty) return '${commit.substring(0, 12)}-none';
+  final bytes = <int>[];
+  for (final patch in patches) {
+    bytes.addAll(patch.readAsBytesSync());
+  }
+  final patchHash = sha256.convert(bytes).toString().substring(0, 12);
+  return '${commit.substring(0, 12)}-$patchHash';
+}
+
+/// Applies all packaged patches to a freshly acquired Ghostty checkout.
+void applyGhosttyPatches(Directory source, Uri packageRoot) {
+  final gitDirectory = Directory.fromUri(source.uri.resolve('.git/'));
+  final isolated = !gitDirectory.existsSync();
+  if (isolated) {
+    final result = Process.runSync('git', [
+      'init',
+      '--quiet',
+    ], workingDirectory: source.path);
+    if (result.exitCode != 0) {
+      throw Exception('Failed to isolate Ghostty source: ${result.stderr}');
+    }
+  }
+  try {
+    for (final patch in ghosttyPatchFiles(packageRoot)) {
+      final result = Process.runSync('git', [
+        'apply',
+        '--unidiff-zero',
+        patch.path,
+      ], workingDirectory: source.path);
+      if (result.exitCode != 0) {
+        throw Exception(
+          'Failed to apply Ghostty patch ${patch.path}: ${result.stderr}',
+        );
+      }
+    }
+  } finally {
+    if (isolated) {
+      gitDirectory.deleteSync(recursive: true);
+      gitDirectory.createSync();
+    }
+  }
+}
 
 /// Downloads a source tarball, extracts it, and caches the result.
 ///
@@ -15,11 +100,18 @@ Future<Directory> downloadSource(
   String? tarballUrl,
 }) async {
   final commit = pinnedCommit(packageRoot);
-  final cacheKey = commit.substring(0, 12);
+  final cacheKey = ghosttySourceCacheKey(packageRoot);
   final cacheDir = Directory.fromUri(
     cacheBase.resolve('ghostty-source-$cacheKey/'),
   );
-  if (cacheDir.existsSync()) return cacheDir;
+  final patchMarker = File.fromUri(cacheDir.uri.resolve(_patchMarkerName));
+  if (cacheDir.existsSync()) {
+    if (patchMarker.existsSync() &&
+        patchMarker.readAsStringSync() == cacheKey) {
+      return cacheDir;
+    }
+    cacheDir.deleteSync(recursive: true);
+  }
 
   tarballUrl ??= '$_defaultTarballBase/$commit.tar.gz';
 
@@ -53,9 +145,19 @@ Future<Directory> downloadSource(
   ]);
   if (extractResult.exitCode != 0) {
     cacheDir.deleteSync(recursive: true);
+    tarball.deleteSync();
     throw Exception(
       'Failed to extract Ghostty source: ${extractResult.stderr}',
     );
+  }
+
+  try {
+    applyGhosttyPatches(cacheDir, packageRoot);
+    patchMarker.writeAsStringSync(cacheKey);
+  } on Object {
+    cacheDir.deleteSync(recursive: true);
+    tarball.deleteSync();
+    rethrow;
   }
 
   tarball.deleteSync();
