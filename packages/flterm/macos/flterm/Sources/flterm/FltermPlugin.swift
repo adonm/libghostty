@@ -99,7 +99,7 @@ public final class FltermPlugin: NSObject, FlutterPlugin {
         let layout = UnsafeRawPointer(bytes)
             .assumingMemoryBound(to: UCKeyboardLayout.self)
         var deadKeyState: UInt32 = 0
-        var length: UniCharCount = 0
+        var length = 0
         var characters = [UniChar](repeating: 0, count: 4)
         let modifiers = UInt32(
             (event.modifierFlags.rawValue >> 16) & 0xFF)
@@ -112,7 +112,7 @@ public final class FltermPlugin: NSObject, FlutterPlugin {
                 UInt32(LMGetKbdType()),
                 OptionBits(0),
                 &deadKeyState,
-                UniCharCount(buffer.count),
+                buffer.count,
                 &length,
                 buffer.baseAddress!)
         }
