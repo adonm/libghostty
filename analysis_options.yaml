@@ -39,6 +39,13 @@ analyzer:
     - "**/*.mocks.dart"
     - "**/l10n/app_localizations*.dart"
     - "**/generated/**"
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
 
 linter:
   rules:

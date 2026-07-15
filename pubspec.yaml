@@ -10,6 +10,30 @@ workspace:
   - packages/flterm/example
   - packages/ptyx
 
+dev_dependencies:
+  melos: 7.8.1
+
+melos:
+  scripts:
+    format:check:
+      description: Check Dart formatting across the workspace.
+      run: dart format --output=none --set-exit-if-changed packages
+    analyze:
+      description: Analyze the shared Pub workspace.
+      run: dart analyze --no-fatal-warnings
+    test:dart:
+      description: Test non-Flutter packages with test directories.
+      run: dart run melos exec --fail-fast --no-flutter --dir-exists=test -- dart test
+    test:flutter:
+      description: Test Flutter packages with test directories.
+      run: dart run melos exec --fail-fast --flutter --dir-exists=test -- flutter test
+    publish:dry-run:
+      description: Validate every publishable package.
+      run: dart run melos exec --fail-fast --no-private -- dart pub publish --dry-run
+    check:
+      description: Run formatting, analysis, and package tests.
+      run: dart run melos run format:check && dart run melos run analyze && dart run melos run test:dart && dart run melos run test:flutter
+
 hooks:
   user_defines:
     libghostty:

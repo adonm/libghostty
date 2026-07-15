@@ -45,6 +45,18 @@ ptyOutputStream.listen(controller.write);
 TerminalView(controller: controller);
 ```
 
+## Development
+
+The repository is a Pub Workspace. Bootstrap its pinned Melos tool and shared
+dependency resolution, then run the aggregate checks from the repository root:
+
+```sh
+flutter pub get
+dart run melos run check
+```
+
+Package-specific native, WASM, and platform smoke builds remain in CI.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

@@ -4,4 +4,5 @@
 *.iml
 build/
 pubspec.lock
+!/pubspec.lock
 packages/ptyx/native/target/
