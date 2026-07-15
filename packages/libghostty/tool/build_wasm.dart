@@ -34,6 +34,7 @@ void _compileWithZig(Directory sourceDir) {
     '--global-cache-dir',
     '${sourceDir.path}/.zig-global-cache',
     '-Demit-lib-vt=true',
+    '-Dversion-string=${ghosttySourceVersion(sourceDir)}',
     '-Dtarget=wasm32-freestanding',
     '-Doptimize=ReleaseSmall',
   ], workingDirectory: sourceDir.path);

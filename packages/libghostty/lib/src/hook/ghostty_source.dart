@@ -7,6 +7,29 @@ const ghosttySrcEnvKey = 'GHOSTTY_SRC';
 
 const _defaultTarballBase = 'https://github.com/ghostty-org/ghostty/archive';
 const _patchMarkerName = '.libghostty-patch-key';
+final _semanticVersion = RegExp(
+  r'^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$',
+);
+
+/// Reads the Ghostty application version without consulting Git metadata.
+String ghosttySourceVersion(Directory source) {
+  final versionFile = File.fromUri(source.uri.resolve('VERSION'));
+  final String? version;
+  if (versionFile.existsSync()) {
+    version = versionFile.readAsStringSync().trim();
+  } else {
+    final zonFile = File.fromUri(source.uri.resolve('build.zig.zon'));
+    final zon = zonFile.existsSync() ? zonFile.readAsStringSync() : '';
+    version = RegExp(
+      r'^\s*\.version\s*=\s*"([^"]+)"\s*,',
+      multiLine: true,
+    ).firstMatch(zon)?.group(1);
+  }
+  if (version == null || !_semanticVersion.hasMatch(version)) {
+    throw StateError('Cannot determine Ghostty version from ${source.path}');
+  }
+  return version;
+}
 
 /// Source patches applied to downloaded and cloned Ghostty checkouts.
 List<File> ghosttyPatchFiles(Uri packageRoot) {

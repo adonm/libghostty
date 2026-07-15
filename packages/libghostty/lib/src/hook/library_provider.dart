@@ -106,6 +106,7 @@ final class CompileFromSource extends LibraryProvider {
       '-p',
       Directory.fromUri(installDir).path,
       '--release=fast',
+      '-Dversion-string=${ghosttySourceVersion(sourceDir)}',
       '--global-cache-dir',
       _zigCacheDir(sourceDir),
       if (os != .current || arch != .current) '-Dtarget=$zig',
