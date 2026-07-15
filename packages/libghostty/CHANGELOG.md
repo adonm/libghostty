@@ -16,6 +16,8 @@
   own Git boundary and marked before cache reuse.
 - **Embedded tagged builds**: source compilation passes Ghostty's own version
   explicitly instead of inheriting Git tags from an embedding repository.
+- **Windows source builds**: each native-asset output uses an isolated local
+  Zig cache and retries the transient generated-helper scanner race.
 
 ## 0.0.11
 

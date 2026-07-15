@@ -41,6 +41,24 @@ void main() {
         expect(libraryExtension(OS.android), 'so');
       });
     });
+
+    group('isTransientWindowsZigFailure', () {
+      test('recognizes the generated helper scanner race', () {
+        expect(
+          isTransientWindowsZigFailure(
+            'failed to spawn uucode_build_tables.exe: FileNotFound',
+          ),
+          isTrue,
+        );
+      });
+
+      test('rejects unrelated Zig failures', () {
+        expect(
+          isTransientWindowsZigFailure('src/main.zig:1:1: error: invalid'),
+          isFalse,
+        );
+      });
+    });
   });
 }
 
