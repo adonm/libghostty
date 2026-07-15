@@ -14,8 +14,6 @@
   output library so source or ABI changes cannot reuse a stale binary.
 - **Source patch isolation**: downloaded Ghostty sources are patched in their
   own Git boundary and marked before cache reuse.
-- **Concurrent source builds**: native-asset hooks serialize shared Ghostty
-  source cache population across isolates and processes.
 - **Embedded tagged builds**: source compilation passes Ghostty's own version
   explicitly instead of inheriting Git tags from an embedding repository.
 

@@ -253,39 +253,6 @@ void main() {
       );
     });
 
-    test('serializes concurrent cache population', () async {
-      final contentDir = Directory('${tmpDir.path}/content')..createSync();
-      File('${contentDir.path}/marker.txt').writeAsStringSync('ready');
-
-      final tarball = File('${tmpDir.path}/test.tar.gz');
-      Process.runSync('tar', ['czf', tarball.path, '-C', contentDir.path, '.']);
-
-      final serverDir = Directory('${tmpDir.path}/server')..createSync();
-      tarball.copySync('${serverDir.path}/source.tar.gz');
-
-      final server = await TestServer.start(serverDir);
-      addTearDown(server.close);
-
-      final cacheBase = Uri.directory('${tmpDir.path}/cache/');
-      final tarballUrl = '${server.baseUrl}/source.tar.gz';
-      final results = await Future.wait([
-        downloadSource(
-          cacheBase,
-          packageRoot: packageRoot,
-          tarballUrl: tarballUrl,
-        ),
-        downloadSource(
-          cacheBase,
-          packageRoot: packageRoot,
-          tarballUrl: tarballUrl,
-        ),
-      ]);
-
-      expect(results[1].path, results[0].path);
-      expect(File('${results[0].path}/marker.txt').readAsStringSync(), 'ready');
-      expect(server.requestCount, 1);
-    });
-
     test('throws on HTTP error with actionable message', () async {
       final serverDir = Directory('${tmpDir.path}/empty_server')..createSync();
       final server = await TestServer.start(serverDir);
@@ -355,9 +322,7 @@ void main() {
       );
 
       final commit = pinnedCommit(packageRoot);
-      final tarballInCache = File.fromUri(
-        cacheBase.resolve('${commit.substring(0, 12)}-none.tar.gz'),
-      );
+      final tarballInCache = File.fromUri(cacheBase.resolve('$commit.tar.gz'));
       expect(tarballInCache.existsSync(), isFalse);
     });
   });
