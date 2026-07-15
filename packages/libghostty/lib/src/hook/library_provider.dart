@@ -15,6 +15,10 @@ String libraryExtension(OS os) => switch (os) {
   _ => 'so',
 };
 
+/// Whether Zig hit the transient Windows scanner race for a generated helper.
+bool isTransientWindowsZigFailure(String stderr) =>
+    stderr.contains('uucode_build_tables') && stderr.contains('FileNotFound');
+
 /// Environment variable for local Ghostty source path.
 const ghosttySrcEnvKey = 'GHOSTTY_SRC';
 
@@ -98,6 +102,7 @@ final class CompileFromSource extends LibraryProvider {
     final ios = os == OS.iOS ? input.config.code.iOS.targetSdk : null;
 
     final installDir = target.parent.parent.uri;
+    final localCacheDir = Directory.fromUri(installDir.resolve('.zig-cache/'));
     final zig = zigTarget(os, arch, iOSSdk: ios);
 
     final zigArgs = [
@@ -107,24 +112,32 @@ final class CompileFromSource extends LibraryProvider {
       Directory.fromUri(installDir).path,
       '--release=fast',
       '-Dversion-string=${ghosttySourceVersion(sourceDir)}',
+      '--cache-dir',
+      localCacheDir.path,
       '--global-cache-dir',
       _zigCacheDir(sourceDir),
       if (os != .current || arch != .current) '-Dtarget=$zig',
       if (ios == .iPhoneSimulator && arch == .arm64) '-Dcpu=apple_a17',
     ];
 
-    final result = Process.runSync(
-      'zig',
-      zigArgs,
-      workingDirectory: sourceDir.path,
-    );
-
-    if (result.exitCode != 0) {
-      throw Exception(
-        'Zig compilation failed (exit code ${result.exitCode}):\n'
-        'stdout: ${result.stdout}\n'
-        'stderr: ${result.stderr}',
+    late ProcessResult result;
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      result = Process.runSync(
+        'zig',
+        zigArgs,
+        workingDirectory: sourceDir.path,
       );
+      if (result.exitCode == 0) break;
+      if (os != .windows ||
+          !isTransientWindowsZigFailure(result.stderr.toString()) ||
+          attempt == 3) {
+        throw Exception(
+          'Zig compilation failed (exit code ${result.exitCode}):\n'
+          'stdout: ${result.stdout}\n'
+          'stderr: ${result.stderr}',
+        );
+      }
+      sleep(Duration(seconds: attempt * 2));
     }
 
     final srcDir = os == .windows ? 'bin' : 'lib';
