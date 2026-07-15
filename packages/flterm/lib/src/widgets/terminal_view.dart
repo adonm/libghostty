@@ -81,8 +81,8 @@ class TerminalView extends StatefulWidget {
 
   /// Scroll physics for scrollback navigation.
   ///
-  /// Disabled automatically when the terminal program requests mouse
-  /// tracking, so gestures are forwarded as mouse events instead.
+  /// With [TouchMouseTracking.tapAndScroll], touch-like drags continue to use
+  /// these physics while a terminal program requests mouse tracking.
   final ScrollPhysics? scrollPhysics;
 
   /// Scroll controller for programmatic scrollback access.

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Tracked touch policy**: `TerminalGestureSettings.touchMouseTracking` can
+  preserve terminal taps while routing touch and stylus drags to scrolling.
+
 ## 0.0.4
 
 ### Breaking
