@@ -11,6 +11,8 @@
 
 ### Fixed
 
+- **Linux GTK4 keyboard metadata**: the native companion uses GTK4 event
+  controllers while retaining the GTK3 signal path for existing runners.
 - **macOS keyboard metadata**: nullable Option-free text is encoded with an
   explicitly typed standard-codec null value so release builds compile.
 
