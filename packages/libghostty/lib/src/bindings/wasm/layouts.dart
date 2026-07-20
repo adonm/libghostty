@@ -10,6 +10,17 @@ class Layouts {
   late final int bufferCap;
   late final int bufferLen;
 
+  // GhosttyClipboardContent
+  late final int clipboardContentSize;
+  late final int clipboardContentMime;
+  late final int clipboardContentData;
+
+  // GhosttyClipboardWrite
+  late final int clipboardWriteSize;
+  late final int clipboardWriteLocation;
+  late final int clipboardWriteContents;
+  late final int clipboardWriteContentsLen;
+
   // GhosttyColorRgb
   late final int colorRgbSize;
   late final int colorRgbG;
@@ -221,7 +232,18 @@ class Layouts {
     bufferCap = 4;
     bufferLen = 8;
 
-    var struct = _Struct(types, 'GhosttyColorRgb');
+    var struct = _Struct(types, 'GhosttyClipboardContent');
+    clipboardContentSize = struct.size;
+    clipboardContentMime = struct['mime'];
+    clipboardContentData = struct['data'];
+
+    struct = _Struct(types, 'GhosttyClipboardWrite');
+    clipboardWriteSize = struct.size;
+    clipboardWriteLocation = struct['location'];
+    clipboardWriteContents = struct['contents'];
+    clipboardWriteContentsLen = struct['contents_len'];
+
+    struct = _Struct(types, 'GhosttyColorRgb');
     colorRgbSize = struct.size;
     colorRgbG = struct['g'];
     colorRgbB = struct['b'];

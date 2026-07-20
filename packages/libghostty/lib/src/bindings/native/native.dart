@@ -6,13 +6,22 @@ import 'package:ffi/ffi.dart';
 
 import '../../ffi/libghostty.g.dart'
     as native
-    show MouseEncoderSize, SgrAttribute, String, Style;
+    show ClipboardWrite, MouseEncoderSize, SgrAttribute, String, Style;
 import '../../ffi/libghostty.g.dart'
-    hide MouseEncoderSize, SgrAttribute, String, Style;
+    hide
+        ClipboardContent,
+        ClipboardWrite,
+        MouseEncoderSize,
+        SgrAttribute,
+        String,
+        Style;
 import '../../ffi/libghostty_enums.g.dart';
 import '../interface.dart';
 
 typedef _StringBuffer = ({Pointer<native.String> str, Pointer<Uint8> data});
+
+// NativeCallable requires a compile-time constant exceptional return.
+const _clipboardWriteExceptionResult = 5;
 
 final GhosttyBindings bindings = NativeBindings();
 
@@ -954,6 +963,30 @@ class NativeBindings implements GhosttyBindings {
       }
       ghostty_terminal_scroll_viewport(Pointer.fromAddress(handle), sv.ref);
     });
+  }
+
+  @override
+  CResult<int> terminalCompressionActivity(int handle) {
+    _outU64.value = 0;
+    final result = ghostty_terminal_compression_activity(
+      Pointer.fromAddress(handle),
+      _outU64,
+    );
+    return (result, _outU64.value);
+  }
+
+  @override
+  CResult<TerminalCompressionResult> terminalCompress(
+    int handle,
+    TerminalCompressionMode mode,
+  ) {
+    _outU32.value = TerminalCompressionResult.unsupported.value;
+    final result = ghostty_terminal_compress(
+      Pointer.fromAddress(handle),
+      mode,
+      _outU32.cast(),
+    );
+    return (result, .fromValue(_outU32.value));
   }
 
   @override
@@ -3476,6 +3509,66 @@ class NativeBindings implements GhosttyBindings {
     ghostty_terminal_set(
       Pointer.fromAddress(handle),
       TerminalOption.bell,
+      callable.nativeFunction.cast(),
+    );
+  }
+
+  @override
+  void terminalSetOnClipboardWrite(
+    int handle,
+    ClipboardWriteCallback? callback,
+  ) {
+    final map = _callables.putIfAbsent(handle, () => {});
+    const option = TerminalOption.clipboardWrite;
+    map[option]?.close();
+
+    if (callback == null) {
+      map.remove(option);
+      ghostty_terminal_set(Pointer.fromAddress(handle), option, nullptr);
+      return;
+    }
+
+    final callable =
+        NativeCallable<
+          UnsignedInt Function(
+            Terminal,
+            Pointer<Void>,
+            Pointer<native.ClipboardWrite>,
+          )
+        >.isolateLocal((
+          Terminal terminal,
+          Pointer<Void> userdata,
+          Pointer<native.ClipboardWrite> write,
+        ) {
+          try {
+            final request = write.ref;
+            final contents = <ClipboardContent>[
+              for (var i = 0; i < request.contents_len; i++)
+                (
+                  mime: utf8.decode(
+                    request.contents[i].mime.ptr.asTypedList(
+                      request.contents[i].mime.len,
+                    ),
+                  ),
+                  data: Uint8List.fromList(
+                    request.contents[i].data.ptr.asTypedList(
+                      request.contents[i].data.len,
+                    ),
+                  ),
+                ),
+            ];
+            return callback((
+              location: request.location,
+              contents: List.unmodifiable(contents),
+            )).value;
+          } on Object catch (_) {
+            return ClipboardWriteResult.ioError.value;
+          }
+        }, exceptionalReturn: _clipboardWriteExceptionResult);
+    map[option] = callable;
+    ghostty_terminal_set(
+      Pointer.fromAddress(handle),
+      option,
       callable.nativeFunction.cast(),
     );
   }

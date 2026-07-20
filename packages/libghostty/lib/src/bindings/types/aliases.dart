@@ -33,6 +33,29 @@ typedef ValueGetter<T> = T Function();
 typedef ValueSetter<T> = void Function(T value);
 typedef VoidCallback = void Function();
 
+/// One binary-safe representation in an atomic clipboard write.
+///
+/// [mime] identifies the representation and [data] contains its decoded
+/// bytes. The bytes are owned by Dart and remain valid after the callback
+/// returns.
+typedef ClipboardContent = ({String mime, Uint8List data});
+
+/// A protocol-neutral request to replace or clear clipboard contents.
+///
+/// Every entry in [contents] represents the same logical value and should be
+/// committed atomically. An empty list requests that [location] be cleared.
+typedef ClipboardWrite = ({
+  ClipboardLocation location,
+  List<ClipboardContent> contents,
+});
+
+/// Handles an atomic clipboard write requested by terminal content.
+///
+/// The return value reports the outcome of committing the complete request.
+/// Protocols without acknowledgements may ignore it.
+typedef ClipboardWriteCallback =
+    ClipboardWriteResult Function(ClipboardWrite write);
+
 /// An untracked grid reference value.
 ///
 /// The value follows libghostty's untracked grid-reference lifetime rules and

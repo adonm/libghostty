@@ -253,6 +253,72 @@ enum CellWide {
   };
 }
 
+/// Clipboard destination for a clipboard write.
+///
+/// Protocol-specific destination identifiers are normalized to these values
+/// before the clipboard write callback is invoked.
+///
+/// @ingroup terminal
+enum ClipboardLocation {
+  /// The standard system clipboard.
+  standard(0),
+
+  /// The selection clipboard.
+  selection(1),
+
+  /// The primary selection clipboard.
+  primary(2);
+
+  final int value;
+  const ClipboardLocation(this.value);
+
+  static ClipboardLocation fromValue(int value) => switch (value) {
+    0 => standard,
+    1 => selection,
+    2 => primary,
+    _ => throw ArgumentError('Unknown value for ClipboardLocation: $value'),
+  };
+}
+
+/// Result of a clipboard write callback.
+///
+/// Protocols without write acknowledgements, including OSC 52 and iTerm2
+/// OSC 1337 Copy, ignore this result.
+///
+/// @ingroup terminal
+enum ClipboardWriteResult {
+  /// The clipboard write completed successfully.
+  success(0),
+
+  /// The clipboard write was denied by policy or the user.
+  denied(1),
+
+  /// The destination or one or more representations are unsupported.
+  unsupported(2),
+
+  /// The clipboard is temporarily unavailable.
+  busy(3),
+
+  /// One or more representations contain invalid data.
+  invalidData(4),
+
+  /// The clipboard write failed due to an I/O error.
+  ioError(5);
+
+  final int value;
+  const ClipboardWriteResult(this.value);
+
+  static ClipboardWriteResult fromValue(int value) => switch (value) {
+    0 => success,
+    1 => denied,
+    2 => unsupported,
+    3 => busy,
+    4 => invalidData,
+    5 => ioError,
+    _ => throw ArgumentError('Unknown value for ClipboardWriteResult: $value'),
+  };
+}
+
 /// Color scheme reported in response to a CSI ? 996 n query.
 ///
 /// @ingroup terminal
@@ -2377,6 +2443,54 @@ enum SysOption {
   };
 }
 
+/// Amount of compression work to perform before returning.
+///
+/// @ingroup terminal
+enum TerminalCompressionMode {
+  /// Perform one bounded compression step suitable for idle scheduling.
+  incremental(0),
+
+  /// Synchronously inspect every currently eligible page.
+  full(1);
+
+  final int value;
+  const TerminalCompressionMode(this.value);
+
+  static TerminalCompressionMode fromValue(int value) => switch (value) {
+    0 => incremental,
+    1 => full,
+    _ => throw ArgumentError(
+      'Unknown value for TerminalCompressionMode: $value',
+    ),
+  };
+}
+
+/// Scheduling result from terminal compression.
+///
+/// @ingroup terminal
+enum TerminalCompressionResult {
+  /// Retained-mapping reclamation is unavailable on this target.
+  unsupported(0),
+
+  /// More incremental compression work remains.
+  pending(1),
+
+  /// The pass has no continuation to schedule.
+  complete(2);
+
+  final int value;
+  const TerminalCompressionResult(this.value);
+
+  static TerminalCompressionResult fromValue(int value) => switch (value) {
+    0 => unsupported,
+    1 => pending,
+    2 => complete,
+    _ => throw ArgumentError(
+      'Unknown value for TerminalCompressionResult: $value',
+    ),
+  };
+}
+
 /// Visual style of the terminal cursor.
 ///
 /// @ingroup terminal
@@ -2891,7 +3005,16 @@ enum TerminalOption {
   /// to ignore pwd change events.
   ///
   /// Input type: TerminalPwdChangedFn
-  pwdChanged(25);
+  pwdChanged(25),
+
+  /// Callback invoked when the running program performs a clipboard write.
+  /// OSC 52 and iTerm2 OSC 1337 Copy writes are normalized to an atomic set
+  /// of decoded MIME representations. Set to NULL to ignore clipboard writes.
+  /// Clipboard read requests are always ignored; see
+  /// TerminalClipboardWriteFn.
+  ///
+  /// Input type: TerminalClipboardWriteFn
+  clipboardWrite(26);
 
   final int value;
   const TerminalOption(this.value);
@@ -2923,6 +3046,7 @@ enum TerminalOption {
     23 => defaultCursorBlink,
     24 => glyphProtocol,
     25 => pwdChanged,
+    26 => clipboardWrite,
     _ => throw ArgumentError('Unknown value for TerminalOption: $value'),
   };
 }

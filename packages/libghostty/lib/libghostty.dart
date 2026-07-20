@@ -7,7 +7,14 @@ library;
 
 export 'src/bindings/bindings.dart' show initializeForWeb;
 export 'src/bindings/types/aliases.dart'
-    show DecodedImage, PngDecoder, TerminalGeometry, X11ColorName;
+    show
+        ClipboardContent,
+        ClipboardWrite,
+        ClipboardWriteCallback,
+        DecodedImage,
+        PngDecoder,
+        TerminalGeometry,
+        X11ColorName;
 export 'src/bindings/types/types.dart'
     show
         CellColor,
@@ -40,6 +47,8 @@ export 'src/bindings/types/types.dart'
         UnderlineStyle;
 export 'src/ffi/libghostty_enums.g.dart'
     show
+        ClipboardLocation,
+        ClipboardWriteResult,
         ColorScheme,
         FocusEvent,
         FormatterFormat,
@@ -62,6 +71,8 @@ export 'src/ffi/libghostty_enums.g.dart'
         SgrAttributeTag,
         SizeReportStyle,
         SysLogLevel,
+        TerminalCompressionMode,
+        TerminalCompressionResult,
         TerminalScreen;
 export 'src/impl/build_info.dart' show LibGhosttyBuildInfo;
 export 'src/impl/color.dart'

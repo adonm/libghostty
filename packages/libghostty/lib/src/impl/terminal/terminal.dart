@@ -103,6 +103,22 @@ final class Terminal with Listenable {
     _finalizer.attach(this, _handle, detach: this);
   }
 
+  /// Opaque token that changes when scrollback compression may have new work.
+  ///
+  /// Terminal operations such as writes, resizing, and viewport movement may
+  /// change the token. Cache it and restart an idle delay whenever it changes.
+  /// Only equality comparisons are meaningful, and compression itself does not
+  /// change the token.
+  ///
+  /// ```dart
+  /// final previous = terminal.compressionActivity;
+  /// terminal.write(data);
+  /// if (terminal.compressionActivity != previous) scheduleCompression();
+  /// ```
+  int get compressionActivity {
+    return check(bindings.terminalCompressionActivity(_handle));
+  }
+
   /// The active screen buffer (primary or alternate).
   ///
   /// Programs switch screens via DEC private mode 1049 (e.g. when entering
@@ -275,6 +291,24 @@ final class Terminal with Listenable {
   ///
   /// Fires synchronously during [write]. Set to null to ignore bell events.
   set onBell(VoidCallback? value) => bindings.terminalSetOnBell(_handle, value);
+
+  /// Registers a callback for clipboard writes requested by terminal content.
+  ///
+  /// OSC 52 and iTerm2 Copy requests are decoded into protocol-neutral,
+  /// binary-safe [ClipboardWrite] values. Return the result of committing the
+  /// complete request. Fires synchronously during [write]. Set to null to
+  /// ignore clipboard writes.
+  ///
+  /// ```dart
+  /// terminal.onClipboardWrite = (request) {
+  ///   if (!trustedSession) return .denied;
+  ///   clipboard.replace(request);
+  ///   return .success;
+  /// };
+  /// ```
+  set onClipboardWrite(ClipboardWriteCallback? value) {
+    bindings.terminalSetOnClipboardWrite(_handle, value);
+  }
 
   /// Registers a callback for color scheme queries (CSI ? 996 n).
   ///
@@ -467,6 +501,30 @@ final class Terminal with Listenable {
     if (code == .noValue) return null;
     checkCode(code);
     return text;
+  }
+
+  /// Compresses eligible scrollback storage without changing terminal data.
+  ///
+  /// Incremental mode performs bounded work. Call it again while the result is
+  /// [TerminalCompressionResult.pending] and [compressionActivity] has not
+  /// changed. Full mode scans all currently eligible pages synchronously and
+  /// can stall on large histories. Unsupported targets return
+  /// [TerminalCompressionResult.unsupported].
+  ///
+  /// ```dart
+  /// void compressOnce() {
+  ///   final activity = terminal.compressionActivity;
+  ///   final result = terminal.compress();
+  ///   if (result == TerminalCompressionResult.pending &&
+  ///       terminal.compressionActivity == activity) {
+  ///     scheduleIdle(compressOnce);
+  ///   }
+  /// }
+  /// ```
+  TerminalCompressionResult compress({
+    TerminalCompressionMode mode = .incremental,
+  }) {
+    return check(bindings.terminalCompress(_handle, mode));
   }
 
   /// Queries whether the given terminal [mode] is currently enabled.

@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show VoidCallback, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:libghostty/libghostty.dart' as vt;
@@ -10,6 +11,7 @@ import 'package:meta/meta.dart';
 
 import '../foundation.dart';
 import '../rendering/kitty_png_decoder.dart';
+import 'compression_scheduler.dart';
 import 'selection_gesture_driver.dart';
 import 'terminal_controller.dart';
 import 'terminal_input_client.dart';
@@ -42,12 +44,14 @@ class TerminalControllerImpl extends TerminalController
   final vt.KeyEvent _keyEvent;
   final MouseEvent _mouseEvent;
   final TerminalInputClient _textInput;
+  late final CompressionScheduler _compressionScheduler;
 
   TerminalConfig _config;
   TerminalScreen _activeScreen = .primary;
   MouseTracking _mouseTracking = .none;
   KeyboardState _keyboardState = .hidden;
   Mods _virtualMods = const .none();
+  ClipboardWriteCallback? _onClipboardWrite;
   var _preeditText = '';
   var _cursorKeyApplication = false;
   Brightness _brightness = .dark;
@@ -67,18 +71,25 @@ class TerminalControllerImpl extends TerminalController
   var _lastCols = 0;
   var _lastRows = 0;
 
-  TerminalControllerImpl({TerminalConfig config = const TerminalConfig()})
-    : _config = config,
-      _keyEvent = vt.KeyEvent(),
-      _mouseEvent = MouseEvent(),
-      _textInput = TerminalInputClient(),
-      terminal = Terminal(
-        cols: config.cols,
-        rows: config.rows,
-        maxScrollback: config.scrollbackLimit,
-      ),
-      super.base() {
+  TerminalControllerImpl({
+    TerminalConfig config = const TerminalConfig(),
+    @visibleForTesting void Function(VoidCallback)? scheduleCompressionIdle,
+  }) : _config = config,
+       _keyEvent = vt.KeyEvent(),
+       _mouseEvent = MouseEvent(),
+       _textInput = TerminalInputClient(),
+       terminal = Terminal(
+         cols: config.cols,
+         rows: config.rows,
+         maxScrollback: config.scrollbackLimit,
+       ),
+       super.base() {
     _selectionGesture = SelectionGestureDriver(terminal);
+    _compressionScheduler = CompressionScheduler(
+      readActivity: () => terminal.compressionActivity,
+      compress: terminal.compress,
+      scheduleIdle: scheduleCompressionIdle,
+    );
     installDefaultKittyPngDecoder();
     _textInput
       ..onTextCommitted = _handleTextCommitted
@@ -139,6 +150,13 @@ class TerminalControllerImpl extends TerminalController
   MouseTracking get mouseTracking => _mouseTracking;
 
   @override
+  set onClipboardWrite(ClipboardWriteCallback? value) {
+    if (identical(_onClipboardWrite, value)) return;
+    _onClipboardWrite = value;
+    terminal.onClipboardWrite = value;
+  }
+
+  @override
   String get preeditText => _preeditText;
 
   @override
@@ -189,6 +207,7 @@ class TerminalControllerImpl extends TerminalController
       }
     }
     _scrollController = scrollController;
+    if (scrollController.hasClients) _compressionScheduler.schedule();
   }
 
   @override
@@ -237,6 +256,7 @@ class TerminalControllerImpl extends TerminalController
 
   @override
   void detach() {
+    _compressionScheduler.cancel();
     _focusNode?.removeListener(_onFocusChanged);
     _focusNode = null;
     _wasFocused = false;
@@ -251,6 +271,7 @@ class TerminalControllerImpl extends TerminalController
 
   @override
   void dispose() {
+    _compressionScheduler.dispose();
     terminal.removeListener(_onTerminalChanged);
     detach();
     _keyEvent.dispose();
@@ -449,6 +470,13 @@ class TerminalControllerImpl extends TerminalController
   }
 
   @override
+  void handleViewportChanged() {
+    if (_scrollController?.hasClients ?? false) {
+      _compressionScheduler.notifyActivity();
+    }
+  }
+
+  @override
   void hideKeyboard() => _updateKeyboardState(.hidden);
 
   @override
@@ -473,7 +501,9 @@ class TerminalControllerImpl extends TerminalController
   @override
   void scrollToBottom() {
     if (_activeScreen == .alternate) return;
+    final previousOffset = terminal.scrollbar.offset;
     terminal.scrollToBottom();
+    if (terminal.scrollbar.offset != previousOffset) handleViewportChanged();
     final controller = _scrollController;
     if (controller != null && controller.hasClients) {
       final max = controller.position.maxScrollExtent;
@@ -484,7 +514,9 @@ class TerminalControllerImpl extends TerminalController
   @override
   void scrollToTop() {
     if (_activeScreen == .alternate) return;
+    final previousOffset = terminal.scrollbar.offset;
     terminal.scrollToTop();
+    if (terminal.scrollbar.offset != previousOffset) handleViewportChanged();
     final controller = _scrollController;
     if (controller != null && controller.hasClients) controller.jumpTo(0);
   }
@@ -854,6 +886,9 @@ class TerminalControllerImpl extends TerminalController
   }
 
   void _onTerminalChanged() {
+    if (_scrollController?.hasClients ?? false) {
+      _compressionScheduler.notifyActivity();
+    }
     var changed = false;
 
     final newMouseTracking = terminal.mouseTracking;

@@ -3,10 +3,13 @@ library;
 
 import 'dart:convert';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/widgets/terminal_controller_impl.dart';
 import 'package:flterm/src/widgets/terminal_view_binding.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart'
+    show FocusNode, ScrollController, ScrollPosition;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart' hide KeyEvent;
 
@@ -81,6 +84,116 @@ void main() {
 
       test('ignores missing output callback', () {
         expect(() => controller.sendKey(Key.a), returnsNormally);
+      });
+    });
+
+    group('onClipboardWrite', () {
+      test('forwards binary clipboard requests', () {
+        ClipboardWrite? received;
+        controller.onClipboardWrite = (write) {
+          received = write;
+          return .success;
+        };
+
+        writeControllerUtf8(controller, '\x1b]52;c;aGVsbG8Ad29ybGQ=\x07');
+
+        expect(
+          received,
+          isA<ClipboardWrite>()
+              .having(
+                (write) => write.location,
+                'location',
+                ClipboardLocation.standard,
+              )
+              .having(
+                (write) => write.contents.single.mime,
+                'MIME type',
+                'text/plain',
+              )
+              .having((write) => write.contents.single.data, 'data', [
+                104,
+                101,
+                108,
+                108,
+                111,
+                0,
+                119,
+                111,
+                114,
+                108,
+                100,
+              ]),
+        );
+      });
+
+      test('ignores clipboard requests without a handler', () {
+        expect(
+          () => writeControllerUtf8(controller, '\x1b]52;c;aGVsbG8=\x07'),
+          returnsNormally,
+        );
+      });
+
+      test('delivers clear requests without content', () {
+        ClipboardWrite? received;
+        controller.onClipboardWrite = (write) {
+          received = write;
+          return .success;
+        };
+
+        writeControllerUtf8(controller, '\x1b]52;s;\x07');
+
+        expect(received?.contents, isEmpty);
+      });
+
+      test('ignores clipboard read queries', () {
+        var count = 0;
+        controller.onClipboardWrite = (_) {
+          count++;
+          return .success;
+        };
+
+        writeControllerUtf8(controller, '\x1b]52;c;?\x07');
+
+        expect(count, 0);
+      });
+
+      test('uses the replacement callback', () {
+        var first = 0;
+        var second = 0;
+        controller.onClipboardWrite = (_) {
+          first++;
+          return .success;
+        };
+        controller.onClipboardWrite = (_) {
+          second++;
+          return .success;
+        };
+
+        writeControllerUtf8(controller, '\x1b]52;c;aGVsbG8=\x07');
+
+        expect((first: first, second: second), (first: 0, second: 1));
+      });
+
+      test('stops delivery after callback removal', () {
+        var count = 0;
+        controller.onClipboardWrite = (_) {
+          count++;
+          return .success;
+        };
+        controller.onClipboardWrite = null;
+
+        writeControllerUtf8(controller, '\x1b]52;c;aGVsbG8=\x07');
+
+        expect(count, 0);
+      });
+
+      test('contains callback exceptions', () {
+        controller.onClipboardWrite = (_) => throw StateError('failure');
+
+        expect(
+          () => writeControllerUtf8(controller, '\x1b]52;c;aGVsbG8=\x07'),
+          returnsNormally,
+        );
       });
     });
 
@@ -203,6 +316,163 @@ void main() {
           expect(custom.terminal.scrollbar.offset, offset);
         },
       );
+    });
+
+    group('scrollback compression', () {
+      _CompressionScrollController replaceControllerWithCompressionQueue(
+        _CompressionIdleQueue idle, {
+        bool viewportAttached = true,
+      }) {
+        controller.dispose();
+        controller = TerminalControllerImpl(
+          scheduleCompressionIdle: idle.schedule,
+        );
+        final focusNode = FocusNode();
+        final scrollController = _CompressionScrollController(
+          isAttached: viewportAttached,
+        );
+        addTearDown(focusNode.dispose);
+        addTearDown(scrollController.dispose);
+        controller.attach(focusNode, scrollController);
+        return scrollController;
+      }
+
+      void createScrollback() {
+        controller.write(
+          Uint8List.fromList(
+            List.filled(
+              4000,
+              'compressible terminal history\r\n',
+            ).join().codeUnits,
+          ),
+        );
+      }
+
+      test('schedules compression after terminal activity', () {
+        fakeAsync((async) {
+          final idle = _CompressionIdleQueue();
+          replaceControllerWithCompressionQueue(idle);
+
+          createScrollback();
+          async.elapse(const Duration(milliseconds: 250));
+
+          expect(idle.length, 1);
+        });
+      });
+
+      test('postpones compression throughout active-screen writes', () {
+        fakeAsync((async) {
+          final idle = _CompressionIdleQueue();
+          replaceControllerWithCompressionQueue(idle);
+          createScrollback();
+          async.elapse(const Duration(milliseconds: 200));
+
+          controller.write(Uint8List.fromList('frame one'.codeUnits));
+          async.elapse(const Duration(milliseconds: 200));
+          controller.write(Uint8List.fromList('frame two'.codeUnits));
+          async.elapse(const Duration(milliseconds: 249));
+
+          expect(idle.length, 0);
+        });
+      });
+
+      test('postpones compression after scrolling to the top', () {
+        fakeAsync((async) {
+          final idle = _CompressionIdleQueue();
+          replaceControllerWithCompressionQueue(idle);
+          createScrollback();
+          async.elapse(const Duration(milliseconds: 200));
+
+          controller.scrollToTop();
+          async.elapse(const Duration(milliseconds: 50));
+
+          expect(idle.length, 0);
+        });
+      });
+
+      test('postpones compression after scrolling to the bottom', () {
+        fakeAsync((async) {
+          final idle = _CompressionIdleQueue();
+          replaceControllerWithCompressionQueue(idle);
+          createScrollback();
+          controller.scrollToTop();
+          async.elapse(const Duration(milliseconds: 200));
+
+          controller.scrollToBottom();
+          async.elapse(const Duration(milliseconds: 50));
+
+          expect(idle.length, 0);
+        });
+      });
+
+      test('cancels pending compression when detached', () {
+        fakeAsync((async) {
+          final idle = _CompressionIdleQueue();
+          replaceControllerWithCompressionQueue(idle);
+          createScrollback();
+
+          controller.detach();
+          async.elapse(const Duration(milliseconds: 250));
+
+          expect(idle.length, 0);
+        });
+      });
+
+      test('ignores terminal activity while detached', () {
+        fakeAsync((async) {
+          final idle = _CompressionIdleQueue();
+          replaceControllerWithCompressionQueue(idle);
+          controller.detach();
+
+          createScrollback();
+          async.elapse(const Duration(milliseconds: 250));
+
+          expect(idle.length, 0);
+        });
+      });
+
+      testWidgets('waits for the viewport to attach', (tester) async {
+        final idle = _CompressionIdleQueue();
+        replaceControllerWithCompressionQueue(idle, viewportAttached: false);
+
+        await tester.pump(const Duration(milliseconds: 250));
+
+        expect(idle.length, 0);
+      });
+
+      testWidgets('schedules compression after the viewport attaches', (
+        tester,
+      ) async {
+        final idle = _CompressionIdleQueue();
+        final scrollController = replaceControllerWithCompressionQueue(
+          idle,
+          viewportAttached: false,
+        );
+
+        scrollController.isAttached = true;
+        createScrollback();
+        await tester.pump(const Duration(milliseconds: 250));
+
+        expect(idle.length, 1);
+      });
+
+      test('schedules compression when reattached', () {
+        fakeAsync((async) {
+          final idle = _CompressionIdleQueue();
+          replaceControllerWithCompressionQueue(idle);
+          createScrollback();
+          controller.detach();
+          final focusNode = FocusNode();
+          final scrollController = _CompressionScrollController();
+          addTearDown(focusNode.dispose);
+          addTearDown(scrollController.dispose);
+
+          controller.attach(focusNode, scrollController);
+          async.elapse(const Duration(milliseconds: 250));
+
+          expect(idle.length, 1);
+        });
+      });
     });
 
     group('selectAll', () {
@@ -734,4 +1004,36 @@ void main() {
       });
     });
   });
+}
+
+final class _CompressionIdleQueue {
+  final List<VoidCallback> _callbacks = [];
+
+  int get length => _callbacks.length;
+
+  void schedule(VoidCallback callback) => _callbacks.add(callback);
+}
+
+final class _CompressionScrollController extends ScrollController {
+  final ScrollPosition _position = _CompressionScrollPosition();
+  bool isAttached;
+
+  _CompressionScrollController({this.isAttached = true});
+
+  @override
+  bool get hasClients => isAttached;
+
+  @override
+  ScrollPosition get position => _position;
+
+  @override
+  void jumpTo(double value) {}
+}
+
+final class _CompressionScrollPosition implements ScrollPosition {
+  @override
+  double get maxScrollExtent => 0;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

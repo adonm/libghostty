@@ -2297,6 +2297,58 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// option is not recognized
   external int ghostty_sys_set(int option, Pointer value);
 
+  /// Compress eligible terminal scrollback.
+  ///
+  /// Incremental mode performs bounded work suitable for an idle callback. A
+  /// pending result means the application should invoke another step while the
+  /// terminal remains idle. A complete result means no continuation is needed
+  /// until ghostty_terminal_compression_activity() changes. Full mode performs
+  /// one synchronous scan and can stall on large scrollback buffers.
+  ///
+  /// Compression is opportunistic. Complete means the pass has finished, not
+  /// that every page was compressed: pages may be unprofitable or encounter an
+  /// allocation or reclamation failure. Compression changes only the terminal's
+  /// storage representation and never its logical contents or scrollback limit.
+  /// Accessing compressed history restores it transparently.
+  ///
+  /// This function is not thread-safe with other operations on the same
+  /// terminal. The caller must serialize it with writes, rendering, searches,
+  /// and other terminal access.
+  ///
+  /// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param mode The amount of compression work to perform
+  /// @param[out] out_result Receives the compression scheduling result
+  /// @return GHOSTTY_SUCCESS on success, or GHOSTTY_INVALID_VALUE if an argument
+  /// or mode is invalid
+  ///
+  /// @ingroup terminal
+  external int ghostty_terminal_compress(
+    int terminal,
+    int mode,
+    Pointer out_result,
+  );
+
+  /// Return the current compression activity token.
+  ///
+  /// The token is opaque and only equality comparisons are meaningful. An
+  /// embedding application should cache it and restart its compression idle
+  /// delay whenever the value changes. The value may wrap and changes in either
+  /// direction have the same meaning.
+  ///
+  /// This function only observes terminal state. It does not perform or schedule
+  /// compression.
+  ///
+  /// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param[out] out_activity Receives the current activity token
+  /// @return GHOSTTY_SUCCESS on success, or GHOSTTY_INVALID_VALUE if an argument
+  /// is NULL
+  ///
+  /// @ingroup terminal
+  external int ghostty_terminal_compression_activity(
+    int terminal,
+    Pointer out_activity,
+  );
+
   /// Free a terminal instance.
   ///
   /// Releases all resources associated with the terminal. After this call,

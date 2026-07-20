@@ -3591,6 +3591,80 @@ external int _ghostty_sys_set(int option, ffi.Pointer<ffi.Void> value);
 Result ghostty_sys_set(SysOption option, ffi.Pointer<ffi.Void> value) =>
     Result.fromValue(_ghostty_sys_set(option.value, value));
 
+/// Compress eligible terminal scrollback.
+///
+/// Incremental mode performs bounded work suitable for an idle callback. A
+/// pending result means the application should invoke another step while the
+/// terminal remains idle. A complete result means no continuation is needed
+/// until ghostty_terminal_compression_activity() changes. Full mode performs
+/// one synchronous scan and can stall on large scrollback buffers.
+///
+/// Compression is opportunistic. Complete means the pass has finished, not
+/// that every page was compressed: pages may be unprofitable or encounter an
+/// allocation or reclamation failure. Compression changes only the terminal's
+/// storage representation and never its logical contents or scrollback limit.
+/// Accessing compressed history restores it transparently.
+///
+/// This function is not thread-safe with other operations on the same
+/// terminal. The caller must serialize it with writes, rendering, searches,
+/// and other terminal access.
+///
+/// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @param mode The amount of compression work to perform
+/// @param[out] out_result Receives the compression scheduling result
+/// @return GHOSTTY_SUCCESS on success, or GHOSTTY_INVALID_VALUE if an argument
+/// or mode is invalid
+///
+/// @ingroup terminal
+@ffi.Native<
+  ffi.Int Function(Terminal, ffi.UnsignedInt, ffi.Pointer<ffi.UnsignedInt>)
+>(symbol: 'ghostty_terminal_compress', isLeaf: true)
+external int _ghostty_terminal_compress(
+  Terminal terminal,
+  int mode,
+  ffi.Pointer<ffi.UnsignedInt> out_result,
+);
+
+Result ghostty_terminal_compress(
+  Terminal terminal,
+  TerminalCompressionMode mode,
+  ffi.Pointer<ffi.UnsignedInt> out_result,
+) => Result.fromValue(
+  _ghostty_terminal_compress(terminal, mode.value, out_result),
+);
+
+/// Return the current compression activity token.
+///
+/// The token is opaque and only equality comparisons are meaningful. An
+/// embedding application should cache it and restart its compression idle
+/// delay whenever the value changes. The value may wrap and changes in either
+/// direction have the same meaning.
+///
+/// This function only observes terminal state. It does not perform or schedule
+/// compression.
+///
+/// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @param[out] out_activity Receives the current activity token
+/// @return GHOSTTY_SUCCESS on success, or GHOSTTY_INVALID_VALUE if an argument
+/// is NULL
+///
+/// @ingroup terminal
+@ffi.Native<ffi.Int Function(Terminal, ffi.Pointer<ffi.Uint64>)>(
+  symbol: 'ghostty_terminal_compression_activity',
+  isLeaf: true,
+)
+external int _ghostty_terminal_compression_activity(
+  Terminal terminal,
+  ffi.Pointer<ffi.Uint64> out_activity,
+);
+
+Result ghostty_terminal_compression_activity(
+  Terminal terminal,
+  ffi.Pointer<ffi.Uint64> out_activity,
+) => Result.fromValue(
+  _ghostty_terminal_compression_activity(terminal, out_activity),
+);
+
 /// Free a terminal instance.
 ///
 /// Releases all resources associated with the terminal. After this call,
@@ -5029,6 +5103,55 @@ final class Buffer extends ffi.Struct {
 typedef Cell = ffi.Uint64;
 typedef DartCell = int;
 
+/// One MIME representation in a clipboard write.
+///
+/// Both strings are borrowed and valid only for the duration of the callback.
+/// The data is binary-safe and has already been decoded from any protocol-level
+/// encoding. A zero-length data string is an explicit empty representation; it
+/// does not clear the clipboard.
+///
+/// This struct has a frozen layout and will not gain fields in future versions.
+///
+/// @ingroup terminal
+final class ClipboardContent extends ffi.Struct {
+  /// MIME type of the representation.
+  external String mime;
+
+  /// Decoded, binary-safe representation data.
+  external String data;
+}
+
+/// A semantic, atomic clipboard write.
+///
+/// This is a sized struct. The callback must only access fields present in the
+/// size reported by `size`. The request, contents array, MIME strings, and
+/// data strings are all borrowed and valid only for the callback duration.
+///
+/// All entries in `contents` are representations of the same logical value
+/// and must be committed atomically. A `contents_len` of zero requests that
+/// the destination be cleared. This is distinct from a content entry whose data
+/// has zero length.
+///
+/// @ingroup terminal
+final class ClipboardWrite extends ffi.Struct {
+  /// Size of this struct in bytes.
+  @ffi.Size()
+  external int size;
+
+  /// Clipboard destination.
+  @ffi.UnsignedInt()
+  external int locationAsInt;
+
+  ClipboardLocation get location => ClipboardLocation.fromValue(locationAsInt);
+
+  /// Borrowed array of MIME representations.
+  external ffi.Pointer<ClipboardContent> contents;
+
+  /// Number of entries in contents; zero means clear the destination.
+  @ffi.Size()
+  external int contents_len;
+}
+
 /// A borrowed list of Unicode scalar values.
 ///
 /// Values are encoded as uint32_t scalar values. The memory is not owned by this
@@ -6099,6 +6222,32 @@ typedef TerminalBellFn =
     ffi.Pointer<
       ffi.NativeFunction<
         ffi.Void Function(Terminal terminal, ffi.Pointer<ffi.Void> userdata)
+      >
+    >;
+
+/// Callback function type for clipboard_write.
+///
+/// Called synchronously for a complete logical clipboard write. Protocol
+/// details such as OSC 52 selectors, base64 encoding, multipart chunks,
+/// aliases, and terminators are normalized before this callback is invoked.
+/// OSC 52 and iTerm2 OSC 1337 Copy writes therefore use the same callback
+/// shape. OSC 52 clipboard read requests ("?") are always ignored and never
+/// forwarded to this callback.
+///
+/// @param terminal The terminal handle
+/// @param userdata The userdata pointer set via GHOSTTY_TERMINAL_OPT_USERDATA
+/// @param write Borrowed atomic clipboard write request
+/// @return The result of attempting the clipboard write
+///
+/// @ingroup terminal
+typedef TerminalClipboardWriteFn =
+    ffi.Pointer<
+      ffi.NativeFunction<
+        ffi.UnsignedInt Function(
+          Terminal terminal,
+          ffi.Pointer<ffi.Void> userdata,
+          ffi.Pointer<ClipboardWrite> write,
+        )
       >
     >;
 
