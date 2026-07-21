@@ -33,6 +33,11 @@ Terminal emulator with screen state, scrollback, cursor, styles, modes, and
 VT stream processing. Register effect callbacks for PTY writes, bell, title
 changes, and more.
 
+Effects run synchronously during `write` and callback-emitting `resize` calls.
+If one or more effects throw, that call finishes processing, notifies its
+listeners, and then rethrows its first failure with the original stack. Catch
+the initiating call when the host needs to recover.
+
 ```dart
 import 'dart:typed_data';
 import 'package:libghostty/libghostty.dart';

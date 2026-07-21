@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Terminal callback errors**: `Terminal.write()` and callback-emitting
+  `Terminal.resize()` rethrow the first effect error after processing completes.
+
 ## 0.0.11
 
 ### Added

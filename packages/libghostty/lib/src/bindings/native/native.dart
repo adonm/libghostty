@@ -139,10 +139,32 @@ const _renderStateSummaryKeys = <RenderStateData>[.cols, .rows, .dirty];
 class NativeBindings implements GhosttyBindings {
   final _utf8Ptrs = <int, Pointer<Char>>{};
   final _callables = <int, Map<TerminalOption, NativeCallable>>{};
+  ({Object error, StackTrace stackTrace})? _callbackError;
   final _stringBuffers = <int, Map<TerminalOption, _StringBuffer>>{};
 
   NativeCallable? _sysLogCallable;
   NativeCallable? _sysDecodePngCallable;
+
+  void _captureCallbackError(Object error, StackTrace stackTrace) {
+    _callbackError ??= (error: error, stackTrace: stackTrace);
+  }
+
+  T _runNestedCallbackOperation<T>(T Function() operation) {
+    final previousFailure = _callbackError!;
+    _callbackError = null;
+    late final T result;
+    late final ({Object error, StackTrace stackTrace})? failure;
+    try {
+      result = operation();
+    } finally {
+      failure = _callbackError;
+      _callbackError = previousFailure;
+    }
+    if (failure != null) {
+      Error.throwWithStackTrace(failure.error, failure.stackTrace);
+    }
+    return result;
+  }
 
   final _outU8 = calloc<Uint8>();
   final _outU16 = calloc<Uint16>();
@@ -915,11 +937,42 @@ class NativeBindings implements GhosttyBindings {
   @override
   void terminalVtWrite(int handle, Uint8List data) {
     if (data.isEmpty) return;
+    if (_callables.isEmpty) {
+      using((arena) {
+        final ptr = arena<Uint8>(data.length);
+        ptr.asTypedList(data.length).setAll(0, data);
+        ghostty_terminal_vt_write(
+          Pointer.fromAddress(handle),
+          ptr,
+          data.length,
+        );
+      });
+      return;
+    }
+    if (_callbackError != null) {
+      _runNestedCallbackOperation<void>(() {
+        using((arena) {
+          final ptr = arena<Uint8>(data.length);
+          ptr.asTypedList(data.length).setAll(0, data);
+          ghostty_terminal_vt_write(
+            Pointer.fromAddress(handle),
+            ptr,
+            data.length,
+          );
+        });
+      });
+      return;
+    }
     using((arena) {
       final ptr = arena<Uint8>(data.length);
       ptr.asTypedList(data.length).setAll(0, data);
       ghostty_terminal_vt_write(Pointer.fromAddress(handle), ptr, data.length);
     });
+    final failure = _callbackError;
+    if (failure != null) {
+      _callbackError = null;
+      Error.throwWithStackTrace(failure.error, failure.stackTrace);
+    }
   }
 
   @override
@@ -930,13 +983,39 @@ class NativeBindings implements GhosttyBindings {
     int cellWidthPx,
     int cellHeightPx,
   ) {
-    return ghostty_terminal_resize(
+    if (_callables.isEmpty) {
+      return ghostty_terminal_resize(
+        Pointer.fromAddress(handle),
+        cols,
+        rows,
+        cellWidthPx,
+        cellHeightPx,
+      );
+    }
+    if (_callbackError != null) {
+      return _runNestedCallbackOperation(
+        () => ghostty_terminal_resize(
+          Pointer.fromAddress(handle),
+          cols,
+          rows,
+          cellWidthPx,
+          cellHeightPx,
+        ),
+      );
+    }
+    final result = ghostty_terminal_resize(
       Pointer.fromAddress(handle),
       cols,
       rows,
       cellWidthPx,
       cellHeightPx,
     );
+    final failure = _callbackError;
+    if (failure != null) {
+      _callbackError = null;
+      Error.throwWithStackTrace(failure.error, failure.stackTrace);
+    }
+    return result;
   }
 
   @override
@@ -3471,7 +3550,9 @@ class NativeBindings implements GhosttyBindings {
         ) {
           try {
             callback(Uint8List.fromList(data.asTypedList(len)));
-          } on Object catch (_) {}
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
+          }
         });
     map[TerminalOption.writePty] = callable;
     ghostty_terminal_set(
@@ -3503,7 +3584,9 @@ class NativeBindings implements GhosttyBindings {
         ) {
           try {
             callback();
-          } on Object catch (_) {}
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
+          }
         });
     map[TerminalOption.bell] = callable;
     ghostty_terminal_set(
@@ -3561,7 +3644,8 @@ class NativeBindings implements GhosttyBindings {
               location: request.location,
               contents: List.unmodifiable(contents),
             )).value;
-          } on Object catch (_) {
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
             return ClipboardWriteResult.ioError.value;
           }
         }, exceptionalReturn: _clipboardWriteExceptionResult);
@@ -3595,7 +3679,9 @@ class NativeBindings implements GhosttyBindings {
         ) {
           try {
             callback();
-          } on Object catch (_) {}
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
+          }
         });
     map[TerminalOption.titleChanged] = callable;
     ghostty_terminal_set(
@@ -3627,7 +3713,9 @@ class NativeBindings implements GhosttyBindings {
         ) {
           try {
             callback();
-          } on Object catch (_) {}
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
+          }
         });
     map[TerminalOption.pwdChanged] = callable;
     ghostty_terminal_set(
@@ -3674,7 +3762,8 @@ class NativeBindings implements GhosttyBindings {
             strPtr.ref.ptr = dataPtr;
             strPtr.ref.len = bytes.length;
             return strPtr.ref;
-          } on Object catch (_) {
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
             strPtr.ref.ptr = nullptr;
             strPtr.ref.len = 0;
             return strPtr.ref;
@@ -3726,7 +3815,8 @@ class NativeBindings implements GhosttyBindings {
             strPtr.ref.ptr = dataPtr;
             strPtr.ref.len = bytes.length;
             return strPtr.ref;
-          } on Object catch (_) {
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
             strPtr.ref.ptr = nullptr;
             strPtr.ref.len = 0;
             return strPtr.ref;
@@ -3771,7 +3861,8 @@ class NativeBindings implements GhosttyBindings {
             if (result == null) return false;
             outScheme.value = result.value;
             return true;
-          } on Object catch (_) {
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
             return false;
           }
         }, exceptionalReturn: false);
@@ -3814,7 +3905,8 @@ class NativeBindings implements GhosttyBindings {
             outSize.ref.cell_width = result.cellWidth;
             outSize.ref.cell_height = result.cellHeight;
             return true;
-          } on Object catch (_) {
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
             return false;
           }
         }, exceptionalReturn: false);
@@ -3871,7 +3963,8 @@ class NativeBindings implements GhosttyBindings {
                 result.secondary.romCartridge;
             outAttrs.ref.tertiary.unit_id = result.tertiary.unitId;
             return true;
-          } on Object catch (_) {
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
             return false;
           }
         }, exceptionalReturn: false);

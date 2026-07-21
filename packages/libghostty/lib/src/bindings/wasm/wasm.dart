@@ -177,6 +177,7 @@ class WasmBindings implements GhosttyBindings {
   final GhosttyExports _exports;
   final _utf8Ptrs = <int, (int ptr, int len)>{};
   final _callbacks = <int, Map<TerminalOption, (int index, Function fn)>>{};
+  ({Object error, StackTrace stackTrace})? _callbackError;
   final _stringBufs = <int, Map<TerminalOption, (int ptr, int len)>>{};
   final _cellGetMultiArguments = List<JSAny?>.filled(5, null);
   final _rowGetMultiArguments = List<JSAny?>.filled(5, null);
@@ -199,6 +200,27 @@ class WasmBindings implements GhosttyBindings {
   late final int _cellMultiOut;
   late int _formatBuffer;
   late int _formatBufferCapacity;
+
+  void _captureCallbackError(Object error, StackTrace stackTrace) {
+    _callbackError ??= (error: error, stackTrace: stackTrace);
+  }
+
+  T _runNestedCallbackOperation<T>(T Function() operation) {
+    final previousFailure = _callbackError!;
+    _callbackError = null;
+    late final T result;
+    late final ({Object error, StackTrace stackTrace})? failure;
+    try {
+      result = operation();
+    } finally {
+      failure = _callbackError;
+      _callbackError = previousFailure;
+    }
+    if (failure != null) {
+      Error.throwWithStackTrace(failure.error, failure.stackTrace);
+    }
+    return result;
+  }
 
   WasmBindings._(JSObject exports)
     : _exports = GhosttyExports(exports),
@@ -1090,8 +1112,25 @@ class WasmBindings implements GhosttyBindings {
     if (data.isEmpty) return;
     final ptr = _exports.ghostty_wasm_alloc_u8_array(data.length);
     _mem.writeBytes(ptr, data);
+    if (_callbacks.isEmpty) {
+      _exports.ghostty_terminal_vt_write(handle, ptr, data.length);
+      _exports.ghostty_wasm_free_u8_array(ptr, data.length);
+      return;
+    }
+    if (_callbackError != null) {
+      _runNestedCallbackOperation<void>(() {
+        _exports.ghostty_terminal_vt_write(handle, ptr, data.length);
+        _exports.ghostty_wasm_free_u8_array(ptr, data.length);
+      });
+      return;
+    }
     _exports.ghostty_terminal_vt_write(handle, ptr, data.length);
     _exports.ghostty_wasm_free_u8_array(ptr, data.length);
+    final failure = _callbackError;
+    if (failure != null) {
+      _callbackError = null;
+      Error.throwWithStackTrace(failure.error, failure.stackTrace);
+    }
   }
 
   @override
@@ -1102,7 +1141,31 @@ class WasmBindings implements GhosttyBindings {
     int cellWidthPx,
     int cellHeightPx,
   ) {
-    return .fromValue(
+    if (_callbacks.isEmpty) {
+      return .fromValue(
+        _exports.ghostty_terminal_resize(
+          handle,
+          cols,
+          rows,
+          cellWidthPx,
+          cellHeightPx,
+        ),
+      );
+    }
+    if (_callbackError != null) {
+      return _runNestedCallbackOperation(
+        () => Result.fromValue(
+          _exports.ghostty_terminal_resize(
+            handle,
+            cols,
+            rows,
+            cellWidthPx,
+            cellHeightPx,
+          ),
+        ),
+      );
+    }
+    final result = Result.fromValue(
       _exports.ghostty_terminal_resize(
         handle,
         cols,
@@ -1111,6 +1174,12 @@ class WasmBindings implements GhosttyBindings {
         cellHeightPx,
       ),
     );
+    final failure = _callbackError;
+    if (failure != null) {
+      _callbackError = null;
+      Error.throwWithStackTrace(failure.error, failure.stackTrace);
+    }
+    return result;
   }
 
   @override
@@ -1536,7 +1605,9 @@ class WasmBindings implements GhosttyBindings {
       ((int terminal, int userdata, int dataPtr, int len) {
         try {
           callback(Uint8List.fromList(_mem.readBytes(dataPtr, len)));
-        } on Object catch (_) {}
+        } on Object catch (error, stackTrace) {
+          _captureCallbackError(error, stackTrace);
+        }
       }).toJS,
       ['i32', 'i32', 'i32', 'i32'],
       reuseIndex: reuseIndex,
@@ -1562,7 +1633,9 @@ class WasmBindings implements GhosttyBindings {
       ((int terminal, int userdata) {
         try {
           callback();
-        } on Object catch (_) {}
+        } on Object catch (error, stackTrace) {
+          _captureCallbackError(error, stackTrace);
+        }
       }).toJS,
       ['i32', 'i32'],
       reuseIndex: reuseIndex,
@@ -1608,7 +1681,8 @@ class WasmBindings implements GhosttyBindings {
             ),
             contents: List.unmodifiable(contents),
           )).value;
-        } on Object catch (_) {
+        } on Object catch (error, stackTrace) {
+          _captureCallbackError(error, stackTrace);
           return ClipboardWriteResult.ioError.value;
         }
       }).toJS,
@@ -1637,7 +1711,9 @@ class WasmBindings implements GhosttyBindings {
       ((int terminal, int userdata) {
         try {
           callback();
-        } on Object catch (_) {}
+        } on Object catch (error, stackTrace) {
+          _captureCallbackError(error, stackTrace);
+        }
       }).toJS,
       ['i32', 'i32'],
       reuseIndex: reuseIndex,
@@ -1663,7 +1739,9 @@ class WasmBindings implements GhosttyBindings {
       ((int terminal, int userdata) {
         try {
           callback();
-        } on Object catch (_) {}
+        } on Object catch (error, stackTrace) {
+          _captureCallbackError(error, stackTrace);
+        }
       }).toJS,
       ['i32', 'i32'],
       reuseIndex: reuseIndex,
@@ -1700,7 +1778,8 @@ class WasmBindings implements GhosttyBindings {
           bufMap[option] = (ptr, data.length);
           _mem.writeU32(sretPtr, ptr);
           _mem.writeU32(sretPtr + _layout.stringLen, data.length);
-        } on Object catch (_) {
+        } on Object catch (error, stackTrace) {
+          _captureCallbackError(error, stackTrace);
           _mem.writeU32(sretPtr, 0);
           _mem.writeU32(sretPtr + _layout.stringLen, 0);
         }
@@ -1741,7 +1820,8 @@ class WasmBindings implements GhosttyBindings {
           bufMap[option] = (ptr, bytes.length);
           _mem.writeU32(sretPtr, ptr);
           _mem.writeU32(sretPtr + _layout.stringLen, bytes.length);
-        } on Object catch (_) {
+        } on Object catch (error, stackTrace) {
+          _captureCallbackError(error, stackTrace);
           _mem.writeU32(sretPtr, 0);
           _mem.writeU32(sretPtr + _layout.stringLen, 0);
         }
@@ -1776,7 +1856,8 @@ class WasmBindings implements GhosttyBindings {
           if (result == null) return 0;
           _mem.writeU32(outPtr, result.value);
           return 1;
-        } on Object catch (_) {
+        } on Object catch (error, stackTrace) {
+          _captureCallbackError(error, stackTrace);
           return 0;
         }
       }).toJS,
@@ -1814,7 +1895,8 @@ class WasmBindings implements GhosttyBindings {
             result.cellHeight,
           );
           return 1;
-        } on Object catch (_) {
+        } on Object catch (error, stackTrace) {
+          _captureCallbackError(error, stackTrace);
           return 0;
         }
       }).toJS,
@@ -1875,7 +1957,8 @@ class WasmBindings implements GhosttyBindings {
             result.tertiary.unitId,
           );
           return 1;
-        } on Object catch (_) {
+        } on Object catch (error, stackTrace) {
+          _captureCallbackError(error, stackTrace);
           return 0;
         }
       }).toJS,
