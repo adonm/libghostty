@@ -187,12 +187,13 @@ void main() {
         expect(count, 0);
       });
 
-      test('contains callback exceptions', () {
-        controller.onClipboardWrite = (_) => throw StateError('failure');
+      test('rethrows callback exceptions', () {
+        final error = StateError('clipboard failed');
+        controller.onClipboardWrite = (_) => throw error;
 
         expect(
           () => writeControllerUtf8(controller, '\x1b]52;c;aGVsbG8=\x07'),
-          returnsNormally,
+          throwsA(same(error)),
         );
       });
     });

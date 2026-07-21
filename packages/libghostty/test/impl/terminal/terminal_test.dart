@@ -35,6 +35,19 @@ void main() {
       });
     });
 
+    group('dispose', () {
+      test('succeeds after a callback error', () {
+        final error = StateError('bell failed');
+        terminal.onBell = () => throw error;
+        expect(
+          () => terminal.write(Uint8List.fromList([0x07])),
+          throwsA(same(error)),
+        );
+
+        expect(terminal.dispose, returnsNormally);
+      });
+    });
+
     group('geometry', () {
       test('returns cell and pixel dimensions', () {
         terminal.resize(cols: 40, rows: 10, cellWidthPx: 8, cellHeightPx: 16);
@@ -46,6 +59,205 @@ void main() {
     });
 
     group('write', () {
+      Object captureError(void Function() operation) {
+        try {
+          operation();
+        } on Object catch (error) {
+          return error;
+        }
+        fail('Expected operation to throw');
+      }
+
+      test('notifies listeners before rethrowing callback errors', () {
+        final error = StateError('bell failed');
+        var notifications = 0;
+        terminal.onBell = () => throw error;
+        terminal.addListener(() => notifications++);
+
+        expect(
+          () => terminal.write(Uint8List.fromList([0x07])),
+          throwsA(same(error)),
+        );
+
+        expect(notifications, 1);
+      });
+
+      test('rethrows PTY output callback errors', () {
+        final error = StateError('output failed');
+        terminal.onWritePty = (_) => throw error;
+
+        expect(
+          () => terminal.write(Uint8List.fromList('\x1b[5n'.codeUnits)),
+          throwsA(same(error)),
+        );
+      });
+
+      test('rethrows title change callback errors', () {
+        final error = StateError('title failed');
+        terminal.onTitleChanged = () => throw error;
+
+        expect(
+          () =>
+              terminal.write(Uint8List.fromList('\x1b]0;Title\x07'.codeUnits)),
+          throwsA(same(error)),
+        );
+      });
+
+      test('rethrows working directory callback errors', () {
+        final error = StateError('pwd failed');
+        terminal.onPwdChanged = () => throw error;
+
+        expect(
+          () => terminal.write(
+            Uint8List.fromList('\x1b]7;file:///tmp\x07'.codeUnits),
+          ),
+          throwsA(same(error)),
+        );
+      });
+
+      test('rethrows enquiry callback errors', () {
+        final error = StateError('enquiry failed');
+        terminal.onEnquiry = () => throw error;
+
+        expect(
+          () => terminal.write(Uint8List.fromList([0x05])),
+          throwsA(same(error)),
+        );
+      });
+
+      test('rethrows version query callback errors', () {
+        final error = StateError('version failed');
+        terminal.onXtversion = () => throw error;
+
+        expect(
+          () => terminal.write(Uint8List.fromList('\x1b[>q'.codeUnits)),
+          throwsA(same(error)),
+        );
+      });
+
+      test('rethrows color scheme callback errors', () {
+        final error = StateError('color scheme failed');
+        terminal.onColorScheme = () => throw error;
+
+        expect(
+          () => terminal.write(Uint8List.fromList('\x1b[?996n'.codeUnits)),
+          throwsA(same(error)),
+        );
+      });
+
+      test('rethrows size query callback errors', () {
+        final error = StateError('size failed');
+        terminal.onSize = () => throw error;
+
+        expect(
+          () => terminal.write(Uint8List.fromList('\x1b[18t'.codeUnits)),
+          throwsA(same(error)),
+        );
+      });
+
+      test('rethrows device attributes callback errors', () {
+        final error = StateError('device attributes failed');
+        terminal.onDeviceAttributes = () => throw error;
+
+        expect(
+          () => terminal.write(Uint8List.fromList('\x1b[c'.codeUnits)),
+          throwsA(same(error)),
+        );
+      });
+
+      test('rethrows failures for each operation across terminals', () {
+        final inner = Terminal(cols: 80, rows: 24);
+        addTearDown(inner.dispose);
+        final outerError = StateError('outer failure');
+        final innerError = StateError('inner failure');
+        Object? nestedError;
+        terminal.onBell = () => throw outerError;
+        terminal.onTitleChanged = () {
+          nestedError = captureError(() => inner.resize(cols: 100, rows: 40));
+        };
+        inner.onWritePty = (_) => throw innerError;
+        inner.modeSet(const TerminalMode.inBandResize(), value: true);
+
+        final outerThrown = captureError(
+          () => terminal.write(
+            Uint8List.fromList('\x07\x1b]0;nested\x1b\\'.codeUnits),
+          ),
+        );
+
+        expect(
+          (outer: outerThrown, inner: nestedError),
+          (outer: outerError, inner: innerError),
+        );
+      });
+
+      test('rethrows failures for each operation on the same terminal', () {
+        final outerError = StateError('outer failure');
+        final innerError = StateError('inner failure');
+        Object? nestedError;
+        terminal.onBell = () => throw outerError;
+        terminal.onTitleChanged = () {
+          nestedError = captureError(
+            () => terminal.resize(cols: 100, rows: 40),
+          );
+        };
+        terminal.onWritePty = (_) => throw innerError;
+        terminal.modeSet(const TerminalMode.inBandResize(), value: true);
+
+        final outerThrown = captureError(
+          () => terminal.write(
+            Uint8List.fromList('\x07\x1b]0;nested\x1b\\'.codeUnits),
+          ),
+        );
+
+        expect(
+          (outer: outerThrown, inner: nestedError),
+          (outer: outerError, inner: innerError),
+        );
+      });
+
+      test('rethrows the first of multiple callback errors', () {
+        final first = StateError('first failure');
+        final second = StateError('second failure');
+        final errors = [first, second].iterator;
+        terminal.onBell = () {
+          errors.moveNext();
+          throw errors.current;
+        };
+
+        expect(
+          () => terminal.write(Uint8List.fromList([0x07, 0x07])),
+          throwsA(same(first)),
+        );
+
+        expect(errors.moveNext(), isFalse);
+      });
+
+      test('finishes terminal mutation before rethrowing', () {
+        final error = StateError('bell failed');
+        terminal.onBell = () => throw error;
+
+        expect(
+          () => terminal.write(Uint8List.fromList('A\x07B'.codeUnits)),
+          throwsA(same(error)),
+        );
+
+        expect(readRowText(terminal, 0), startsWith('AB'));
+      });
+
+      test('keeps the terminal usable after a callback error', () {
+        final error = StateError('bell failed');
+        terminal.onBell = () => throw error;
+        expect(
+          () => terminal.write(Uint8List.fromList([0x07])),
+          throwsA(same(error)),
+        );
+
+        terminal.onBell = null;
+        terminal.write(Uint8List.fromList('ready'.codeUnits));
+
+        expect(readRowText(terminal, 0), startsWith('ready'));
+      });
+
       test('updates screen cells', () {
         terminal.write(Uint8List.fromList('Hello'.codeUnits));
         final h = readCellAt(terminal, 0, 0);
@@ -425,14 +637,15 @@ void main() {
         expect(count, 0);
       });
 
-      test('contains callback exceptions', () {
-        terminal.onClipboardWrite = (_) => throw StateError('failure');
+      test('rethrows callback exceptions', () {
+        final error = StateError('clipboard failed');
+        terminal.onClipboardWrite = (_) => throw error;
 
         expect(
           () => terminal.write(
             Uint8List.fromList('\x1b]52;c;aGVsbG8=\x07'.codeUnits),
           ),
-          returnsNormally,
+          throwsA(same(error)),
         );
       });
     });
@@ -478,6 +691,35 @@ void main() {
         renderState.update(terminal);
         expect(renderState.cols, 120);
         expect(renderState.rows, 40);
+      });
+
+      test('rethrows output callback errors', () {
+        final error = StateError('resize output failed');
+        terminal.onWritePty = (_) => throw error;
+        terminal.modeSet(const TerminalMode.inBandResize(), value: true);
+
+        expect(
+          () => terminal.resize(cols: 100, rows: 40),
+          throwsA(same(error)),
+        );
+      });
+
+      test('updates dimensions before rethrowing output callback errors', () {
+        final error = StateError('resize output failed');
+        terminal.onWritePty = (_) => throw error;
+        terminal.modeSet(const TerminalMode.inBandResize(), value: true);
+
+        expect(
+          () => terminal.resize(cols: 100, rows: 40),
+          throwsA(same(error)),
+        );
+
+        expect(terminal.geometry, (
+          cols: 100,
+          rows: 40,
+          widthPx: 0,
+          heightPx: 0,
+        ));
       });
 
       test('emits in-band size report when mode 2048 is enabled', () {
@@ -736,6 +978,18 @@ void main() {
         terminal.write(Uint8List.fromList('\x1b[H'.codeUnits));
         renderState.update(terminal);
         expect(isRowDirty(renderState, 0), isFalse);
+      });
+    });
+
+    group('onWritePty', () {
+      test('retains response bytes after terminal disposal', () {
+        Uint8List? output;
+        terminal.onWritePty = (data) => output = data;
+        terminal.write(Uint8List.fromList('\x1b[5n'.codeUnits));
+
+        terminal.dispose();
+
+        expect(output, [0x1b, 0x5b, 0x30, 0x6e]);
       });
     });
 

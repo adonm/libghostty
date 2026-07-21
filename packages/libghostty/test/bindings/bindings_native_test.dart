@@ -47,6 +47,40 @@ void main() {
     });
 
     group('terminalVtWrite', () {
+      StackTrace captureStackTrace(void Function() operation) {
+        try {
+          operation();
+        } on Object catch (_, stackTrace) {
+          return stackTrace;
+        }
+        fail('Expected operation to throw');
+      }
+
+      test('rethrows callback errors', () {
+        final error = StateError('bell failed');
+        bindings.terminalSetOnBell(terminal, () => throw error);
+
+        expect(
+          () => bindings.terminalVtWrite(terminal, Uint8List.fromList([0x07])),
+          throwsA(same(error)),
+        );
+      });
+
+      test('preserves callback error stack traces', () {
+        final error = StateError('bell failed');
+        final callbackStackTrace = StackTrace.current;
+        bindings.terminalSetOnBell(
+          terminal,
+          () => Error.throwWithStackTrace(error, callbackStackTrace),
+        );
+
+        final stackTrace = captureStackTrace(
+          () => bindings.terminalVtWrite(terminal, Uint8List.fromList([0x07])),
+        );
+
+        expect(stackTrace.toString(), callbackStackTrace.toString());
+      });
+
       test('updates row iterator cells', () {
         bindings.terminalVtWrite(
           terminal,

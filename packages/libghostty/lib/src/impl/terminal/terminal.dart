@@ -47,13 +47,17 @@ part 'tracked_grid_ref.dart';
 ///
 /// ## Effects
 ///
-/// Effects are callbacks invoked synchronously during [write] in response to
-/// VT sequences. Register them by assigning the callback setters ([onWritePty],
-/// [onBell], [onTitleChanged], etc.). Set to null to disable.
+/// Effects are callbacks invoked synchronously by terminal operations. Most
+/// respond to VT sequences during [write], while [onWritePty] can also fire
+/// during a callback-emitting [resize]. Register them by assigning the callback
+/// setters ([onWritePty], [onBell], [onTitleChanged], etc.). Set to null to
+/// disable.
 ///
-/// All callbacks fire synchronously during [write]. Callers **must not** call
-/// [write] from within a callback (no reentrancy), and callbacks should avoid
-/// blocking or expensive operations since they block further I/O processing.
+/// Callbacks run synchronously. Callers **must not** call [write] from within a
+/// callback (no reentrancy), and callbacks should avoid blocking or expensive
+/// operations since they block further I/O processing. Callback exceptions do
+/// not interrupt terminal processing. After the initiating operation finishes,
+/// the first exception is rethrown with its original stack trace.
 ///
 /// ## Color Theme
 ///
@@ -361,9 +365,9 @@ final class Terminal with Listenable {
   /// Registers a callback for PTY write-back data.
   ///
   /// Invoked when the terminal needs to send data back to the PTY, for
-  /// example in response to device status reports or mode queries. The data
-  /// is only valid for the duration of the callback; copy it if needed.
-  /// Fires synchronously during [write].
+  /// example in response to device status reports or mode queries. The data is
+  /// owned by Dart and remains valid after the callback returns. Fires
+  /// synchronously during [write].
   set onWritePty(ValueSetter<Uint8List>? value) {
     bindings.terminalSetOnWritePty(_handle, value);
   }
@@ -555,15 +559,31 @@ final class Terminal with Listenable {
   ///
   /// Throws [InvalidValueException] if [cols] or [rows] is zero.
   /// Throws [OutOfMemoryException] if reflow allocation fails.
+  /// If an effect callback throws, the resize completes and listeners are
+  /// notified before the exception is rethrown.
   void resize({
     required int cols,
     required int rows,
     int cellWidthPx = 0,
     int cellHeightPx = 0,
   }) {
-    checkCode(
-      bindings.terminalResize(_handle, cols, rows, cellWidthPx, cellHeightPx),
-    );
+    late final Result result;
+    try {
+      result = bindings.terminalResize(
+        _handle,
+        cols,
+        rows,
+        cellWidthPx,
+        cellHeightPx,
+      );
+    } on Object catch (error, stackTrace) {
+      try {
+        notifyListeners();
+      } finally {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+    }
+    checkCode(result);
     notifyListeners();
   }
 
@@ -720,10 +740,11 @@ final class Terminal with Listenable {
 
   /// Feeds raw VT-encoded bytes into the terminal for processing.
   ///
-  /// Never fails: malformed input is logged internally but does not corrupt
-  /// state or throw. All registered callbacks fire synchronously during this
-  /// call. Callers **must not** call [write] from within a callback (no
-  /// reentrancy).
+  /// Malformed input is logged internally but does not corrupt state or throw.
+  /// All registered callbacks fire synchronously during this call. Callers
+  /// **must not** call [write] from within a callback (no reentrancy). If one
+  /// or more callbacks throw, processing finishes and listeners are notified
+  /// before the first exception is rethrown with its original stack trace.
   ///
   /// Sequences requiring output (device status reports, mode queries) are
   /// silently ignored unless [onWritePty] is registered. Notifies listeners
@@ -733,7 +754,15 @@ final class Terminal with Listenable {
   /// terminal.write(Uint8List.fromList(utf8.encode('Hello\r\n')));
   /// ```
   void write(Uint8List data) {
-    bindings.terminalVtWrite(_handle, data);
+    try {
+      bindings.terminalVtWrite(_handle, data);
+    } on Object catch (error, stackTrace) {
+      try {
+        notifyListeners();
+      } finally {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+    }
     notifyListeners();
   }
 
