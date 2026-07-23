@@ -32,9 +32,12 @@ abstract interface class TerminalViewBinding {
   /// Active virtual modifier keys.
   Mods get virtualMods;
 
-  /// Subscribes to [focusNode] and [scrollController] for focus and
-  /// scroll handling.
-  void attach(FocusNode focusNode, ScrollController scrollController);
+  /// Subscribes to focus and scroll changes in the owning Flutter view.
+  void attach(
+    FocusNode focusNode,
+    ScrollController scrollController, {
+    required int viewId,
+  });
 
   /// Cancels the active selection gesture.
   void cancelSelectionGesture();

@@ -334,7 +334,7 @@ void main() {
         );
         addTearDown(focusNode.dispose);
         addTearDown(scrollController.dispose);
-        controller.attach(focusNode, scrollController);
+        controller.attach(focusNode, scrollController, viewId: 0);
         return scrollController;
       }
 
@@ -468,7 +468,7 @@ void main() {
           addTearDown(focusNode.dispose);
           addTearDown(scrollController.dispose);
 
-          controller.attach(focusNode, scrollController);
+          controller.attach(focusNode, scrollController, viewId: 0);
           async.elapse(const Duration(milliseconds: 250));
 
           expect(idle.length, 1);

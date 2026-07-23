@@ -19,6 +19,7 @@ final class TerminalInputClient with DeltaTextInputClient {
     text: ' ',
   );
 
+  int? _viewId;
   TextInputConnection? _connection;
   TextEditingValue _value = _sentinel;
   Brightness _keyboardAppearance = .dark;
@@ -63,8 +64,24 @@ final class TerminalInputClient with DeltaTextInputClient {
     _onTextCommitted = callback;
   }
 
+  /// Replaces an active connection because platform text input is view-bound.
+  set viewId(int value) {
+    if (_viewId == value) return;
+    final wasAttached = _connection != null;
+    if (wasAttached) _closeConnection();
+    _viewId = value;
+    if (wasAttached) _openConnection();
+  }
+
   TextInputConfiguration get _configuration {
+    final viewId = _viewId;
+    if (viewId == null) {
+      throw StateError(
+        'Text input requires an owning Flutter view before attachment.',
+      );
+    }
     return TextInputConfiguration(
+      viewId: viewId,
       autocorrect: false,
       inputType: .multiline,
       inputAction: .newline,
