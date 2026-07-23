@@ -99,6 +99,7 @@ final class CompileFromSource extends LibraryProvider {
 
     final installDir = target.parent.parent.uri;
     final zig = zigTarget(os, arch, iOSSdk: ios);
+    final zigCacheDir = os == .windows ? _zigCacheDir(sourceDir) : null;
 
     final zigArgs = [
       'build',
@@ -106,7 +107,7 @@ final class CompileFromSource extends LibraryProvider {
       '-p',
       Directory.fromUri(installDir).path,
       '--release=fast',
-      if (os == .windows) ...['--global-cache-dir', _zigCacheDir(sourceDir)],
+      if (zigCacheDir != null) ...['--global-cache-dir', zigCacheDir],
       if (os != .current || arch != .current) '-Dtarget=$zig',
       if (ios == .iPhoneSimulator && arch == .arm64) '-Dcpu=apple_a17',
     ];
@@ -115,6 +116,12 @@ final class CompileFromSource extends LibraryProvider {
       'zig',
       zigArgs,
       workingDirectory: sourceDir.path,
+      environment: zigCacheDir == null
+          ? null
+          : {
+              'ZIG_GLOBAL_CACHE_DIR': zigCacheDir,
+              'ZIG_LOCAL_CACHE_DIR': zigCacheDir,
+            },
     );
 
     if (result.exitCode != 0) {
