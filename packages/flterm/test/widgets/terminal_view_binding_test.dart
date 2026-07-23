@@ -42,7 +42,7 @@ void main() {
         addTearDown(focusNode.dispose);
         addTearDown(scrollController.dispose);
 
-        binding.attach(focusNode, scrollController);
+        binding.attach(focusNode, scrollController, viewId: 0);
 
         expect(binding.detach, returnsNormally);
       });
@@ -57,9 +57,12 @@ void main() {
         addTearDown(scrollController1.dispose);
         addTearDown(scrollController2.dispose);
 
-        binding.attach(node1, scrollController1);
+        binding.attach(node1, scrollController1, viewId: 0);
 
-        expect(() => binding.attach(node2, scrollController2), returnsNormally);
+        expect(
+          () => binding.attach(node2, scrollController2, viewId: 0),
+          returnsNormally,
+        );
       });
     });
 
@@ -216,7 +219,7 @@ void main() {
         addTearDown(focusNode.dispose);
         addTearDown(sc.dispose);
         final customBinding = custom as TerminalViewBinding;
-        customBinding.attach(focusNode, sc);
+        customBinding.attach(focusNode, sc, viewId: 0);
 
         writeNumberedLines(custom, 10);
         custom.terminal.scrollViewport(-5);
@@ -356,7 +359,7 @@ void main() {
         final sc = ScrollController();
         addTearDown(focusNode.dispose);
         addTearDown(sc.dispose);
-        binding.attach(focusNode, sc);
+        binding.attach(focusNode, sc, viewId: 0);
 
         expect(binding.cursorBlinks, isFalse);
       });
@@ -379,7 +382,7 @@ void main() {
             child: Focus(focusNode: focusNode, child: const SizedBox()),
           ),
         );
-        binding.attach(focusNode, sc);
+        binding.attach(focusNode, sc, viewId: 0);
         focusNode.requestFocus();
         await tester.pump();
 
@@ -410,7 +413,7 @@ void main() {
             child: Focus(focusNode: focusNode, child: const SizedBox()),
           ),
         );
-        binding.attach(focusNode, sc);
+        binding.attach(focusNode, sc, viewId: 0);
         focusNode.requestFocus();
         await tester.pump();
 
@@ -446,7 +449,7 @@ void main() {
         final sc = ScrollController();
         addTearDown(focusNode.dispose);
         addTearDown(sc.dispose);
-        binding.attach(focusNode, sc);
+        binding.attach(focusNode, sc, viewId: 0);
 
         writeUtf8(controller.terminal, '\x1b[?1049h');
         writeUtf8(controller.terminal, '\x1b[?12l');

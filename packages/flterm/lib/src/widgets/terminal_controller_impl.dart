@@ -193,12 +193,18 @@ class TerminalControllerImpl extends TerminalController
   }
 
   @override
-  void attach(FocusNode focusNode, ScrollController scrollController) {
+  void attach(
+    FocusNode focusNode,
+    ScrollController scrollController, {
+    required int viewId,
+  }) {
     _focusNode?.removeListener(_onFocusChanged);
     _focusNode = focusNode;
     _wasFocused = focusNode.hasFocus;
     _focusNode!.addListener(_onFocusChanged);
-    _textInput.keyboardAppearance = _brightness;
+    _textInput
+      ..viewId = viewId
+      ..keyboardAppearance = _brightness;
     if (_wasFocused && _keyboardState != .disabled) {
       if (_keyboardState == .showing) {
         _textInput.show();

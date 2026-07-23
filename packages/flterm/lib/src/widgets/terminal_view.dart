@@ -148,6 +148,7 @@ class _TerminalViewState extends State<TerminalView> {
   var _devicePixelRatio = 1.0;
   Timer? _blinkTimer;
   var _blinkVisible = true;
+  int? _viewId;
 
   TerminalController get _controller => widget.controller;
 
@@ -179,6 +180,12 @@ class _TerminalViewState extends State<TerminalView> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final viewId = View.of(context).viewId;
+    if (_viewId != viewId) {
+      _viewId = viewId;
+      _binding.attach(_focusNode, _scrollController, viewId: viewId);
+    }
+
     final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
     if (_devicePixelRatio == devicePixelRatio) return;
 
@@ -197,7 +204,7 @@ class _TerminalViewState extends State<TerminalView> {
       _binding.detach();
       _binding = _asBinding(_controller);
       _binding.brightness = _themeBrightness;
-      _binding.attach(_focusNode, _scrollController);
+      _binding.attach(_focusNode, _scrollController, viewId: _viewId!);
       _controller.addListener(_onControllerChanged);
       _links.invalidateContent();
     }
@@ -206,7 +213,7 @@ class _TerminalViewState extends State<TerminalView> {
       if (_ownsFocusNode) _focusNode.dispose();
       _focusNode = widget.focusNode ?? FocusNode();
       _ownsFocusNode = widget.focusNode == null;
-      _binding.attach(_focusNode, _scrollController);
+      _binding.attach(_focusNode, _scrollController, viewId: _viewId!);
     }
 
     if (widget.scrollController != oldWidget.scrollController) {
@@ -216,7 +223,7 @@ class _TerminalViewState extends State<TerminalView> {
       _ownsScrollController = widget.scrollController == null;
       _scrollController.activeScreen = _controller.activeScreen;
       _scrollController.addListener(_onScrollChanged);
-      _binding.attach(_focusNode, _scrollController);
+      _binding.attach(_focusNode, _scrollController, viewId: _viewId!);
     }
 
     if (widget.theme != oldWidget.theme) {
@@ -281,7 +288,6 @@ class _TerminalViewState extends State<TerminalView> {
     _scrollController.addListener(_onScrollChanged);
 
     _binding.brightness = _themeBrightness;
-    _binding.attach(_focusNode, _scrollController);
     _controller.addListener(_onControllerChanged);
     _syncLinkInteraction();
   }

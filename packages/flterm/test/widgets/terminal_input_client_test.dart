@@ -52,7 +52,7 @@ void main() {
     }
 
     setUp(() {
-      handler = TerminalInputClient();
+      handler = TerminalInputClient()..viewId = 0;
       commits = [];
       deletes = [];
       newlines = [];
@@ -812,6 +812,42 @@ void main() {
       });
     });
 
+    group('viewId', () {
+      test('keeps the active connection when the view is unchanged', () {
+        final calls = recordTextInputCalls();
+        handler.attach();
+        calls.clear();
+
+        handler.viewId = 0;
+
+        expect(calls, isEmpty);
+      });
+
+      test('replaces the active connection when the view changes', () {
+        final calls = recordTextInputCalls();
+        handler.attach();
+        calls.clear();
+
+        handler.viewId = 1;
+
+        expect(calls.map((call) => call.method), [
+          'TextInput.clearClient',
+          'TextInput.setClient',
+          'TextInput.setEditingState',
+        ]);
+      });
+
+      test('uses the new view for the replacement connection', () {
+        final calls = recordTextInputCalls();
+        handler.attach();
+        calls.clear();
+
+        handler.viewId = 1;
+
+        expect(textInputConfig(calls)['viewId'], 1);
+      });
+    });
+
     group('keyboardAppearance', () {
       test('updates the active config', () {
         final calls = recordTextInputCalls();
@@ -874,6 +910,22 @@ void main() {
     });
 
     group('attach', () {
+      test('throws when no Flutter view is set', () {
+        final client = TerminalInputClient();
+        addTearDown(client.detach);
+
+        expect(
+          client.attach,
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'Text input requires an owning Flutter view before attachment.',
+            ),
+          ),
+        );
+      });
+
       test('replaces an existing connection', () {
         handler.attach();
         expect(handler.isAttached, isTrue);

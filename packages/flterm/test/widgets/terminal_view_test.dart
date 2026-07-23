@@ -1054,6 +1054,56 @@ void main() {
       expect(calls.where((call) => call.method == 'TextInput.show'), isEmpty);
     });
 
+    group('text input connection', () {
+      List<MethodCall> lifecycleCalls(List<MethodCall> calls) {
+        return calls
+            .where(
+              (call) => const {
+                'TextInput.setClient',
+                'TextInput.clearClient',
+                'TextInput.show',
+                'TextInput.hide',
+                'TextInput.updateConfig',
+              }.contains(call.method),
+            )
+            .toList();
+      }
+
+      testWidgets('uses the containing Flutter view', (tester) async {
+        final calls = recordTextInputCalls();
+
+        await tester.pumpWidget(
+          wrapInApp(controller: controller, autofocus: true),
+        );
+        await tester.pump();
+        final setClient = calls.singleWhere(
+          (call) => call.method == 'TextInput.setClient',
+        );
+        final arguments = setClient.arguments! as List<Object?>;
+        final configuration = arguments[1]! as Map<String, Object?>;
+
+        expect(configuration['viewId'], tester.view.viewId);
+      });
+
+      testWidgets('keeps the connection across same-view dependency changes', (
+        tester,
+      ) async {
+        final calls = recordTextInputCalls();
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          wrapInApp(controller: controller, autofocus: true),
+        );
+        await tester.pump();
+        calls.clear();
+
+        tester.view.devicePixelRatio = tester.view.devicePixelRatio + 1;
+        await tester.pump();
+
+        expect(lifecycleCalls(calls), isEmpty);
+      });
+    });
+
     testWidgets('touch drag does not create selection', (tester) async {
       writeUtf8(controller, 'hello world');
       await tester.pumpWidget(
