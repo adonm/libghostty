@@ -1,0 +1,12 @@
+# Generated files
+*.log
+/pubspec.lock
+**/doc/api/
+/build/
+/coverage/
+**/failures/
+
+# Development-only files
+/dart_test.yaml
+/test/
+/tool/
