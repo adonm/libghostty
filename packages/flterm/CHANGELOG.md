@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Text input recovery**: terminal clients reconnect when another input client
+  takes the platform text input connection, including while composition is
+  active.
+
 ## 0.0.5
 
 ### Added
