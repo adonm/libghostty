@@ -210,11 +210,6 @@ class Layouts {
   late final int styleColorG;
   late final int styleColorB;
 
-  // GhosttyTerminalOptions
-  late final int terminalOptsSize;
-  late final int terminalOptsRows;
-  late final int terminalOptsMaxScrollback;
-
   // GhosttyTerminalScrollbar
   late final int scrollbarSize;
   late final int scrollbarOffset;
@@ -457,11 +452,6 @@ class Layouts {
     styleColorR = scValueOff + sub['r'];
     styleColorG = scValueOff + sub['g'];
     styleColorB = scValueOff + sub['b'];
-
-    struct = _Struct(types, 'GhosttyTerminalOptions');
-    terminalOptsSize = struct.size;
-    terminalOptsRows = struct['rows'];
-    terminalOptsMaxScrollback = struct['max_scrollback'];
 
     struct = _Struct(types, 'GhosttyTerminalScrollbar');
     scrollbarSize = struct.size;

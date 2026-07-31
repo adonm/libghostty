@@ -3898,9 +3898,14 @@ Result ghostty_terminal_mode_set(
 
 /// Create a new terminal instance.
 ///
+/// The terminal starts with various reasonable defaults e.g. around
+/// scrollback limits. Use ghostty_terminal_set() to change any options
+/// prior to using the terminal.
+///
 /// @param allocator Pointer to allocator, or NULL to use the default allocator
 /// @param terminal Pointer to store the created terminal handle
-/// @param options Terminal initialization options
+/// @param cols Terminal width in cells (must be greater than zero)
+/// @param rows Terminal height in cells (must be greater than zero)
 /// @return GHOSTTY_SUCCESS on success, or an error code on failure
 ///
 /// @ingroup terminal
@@ -3908,20 +3913,23 @@ Result ghostty_terminal_mode_set(
   ffi.Int Function(
     ffi.Pointer<Allocator>,
     ffi.Pointer<Terminal>,
-    TerminalOptions,
+    ffi.Uint16,
+    ffi.Uint16,
   )
 >(symbol: 'ghostty_terminal_new', isLeaf: true)
 external int _ghostty_terminal_new(
   ffi.Pointer<Allocator> allocator,
   ffi.Pointer<Terminal> terminal,
-  TerminalOptions options,
+  int cols,
+  int rows,
 );
 
 Result ghostty_terminal_new(
   ffi.Pointer<Allocator> allocator,
   ffi.Pointer<Terminal> terminal,
-  TerminalOptions options,
-) => Result.fromValue(_ghostty_terminal_new(allocator, terminal, options));
+  int cols,
+  int rows,
+) => Result.fromValue(_ghostty_terminal_new(allocator, terminal, cols, rows));
 
 /// Convert a grid reference back to a point in the given coordinate system.
 ///
@@ -4568,7 +4576,8 @@ Result ghostty_terminal_selection_ordered(
 /// write_pty callback and userdata pointer. The value is passed
 /// directly for pointer types (callbacks, userdata) or as a pointer
 /// to the value for non-pointer types (e.g. String*).
-/// NULL clears the option to its default.
+/// The behavior of a NULL value is specific to each option and is
+/// documented by the corresponding TerminalOption value.
 ///
 /// Callbacks are invoked synchronously during ghostty_terminal_vt_write().
 /// Callbacks must not call ghostty_terminal_vt_write() on the same
@@ -6274,6 +6283,45 @@ typedef TerminalColorSchemeFn =
       >
     >;
 
+/// A request to show a desktop notification.
+///
+/// This is a sized struct. The callback must only access fields present in the
+/// size reported by `size`. Both strings are borrowed and valid only for the
+/// duration of the callback.
+///
+/// @ingroup terminal
+final class TerminalDesktopNotification extends ffi.Struct {
+  /// Size of this struct in bytes.
+  @ffi.Size()
+  external int size;
+
+  /// Notification title, or an empty string when the protocol omits it.
+  external String title;
+
+  /// Notification body.
+  external String body;
+}
+
+/// Callback function type for desktop notifications.
+///
+/// Called synchronously when the terminal receives OSC 9 or OSC 777.
+///
+/// @param terminal The terminal handle
+/// @param userdata The userdata pointer set via GHOSTTY_TERMINAL_OPT_USERDATA
+/// @param notification Borrowed desktop notification request
+///
+/// @ingroup terminal
+typedef TerminalDesktopNotificationFn =
+    ffi.Pointer<
+      ffi.NativeFunction<
+        ffi.Void Function(
+          Terminal terminal,
+          ffi.Pointer<ffi.Void> userdata,
+          ffi.Pointer<TerminalDesktopNotification> notification,
+        )
+      >
+    >;
+
 /// Callback function type for device attributes queries (DA1/DA2/DA3).
 ///
 /// Called when the terminal receives a device attributes query (CSI c,
@@ -6321,22 +6369,48 @@ typedef TerminalEnquiryFn =
 
 final class TerminalImpl extends ffi.Opaque {}
 
-/// Terminal initialization options.
+/// A progress report emitted by the running program.
+///
+/// This is a sized struct. The callback must only access fields present in the
+/// size reported by `size`.
 ///
 /// @ingroup terminal
-final class TerminalOptions extends ffi.Struct {
-  /// Terminal width in cells. Must be greater than zero.
-  @ffi.Uint16()
-  external int cols;
-
-  /// Terminal height in cells. Must be greater than zero.
-  @ffi.Uint16()
-  external int rows;
-
-  /// Maximum number of lines to keep in scrollback history.
+final class TerminalProgressReport extends ffi.Struct {
+  /// Size of this struct in bytes.
   @ffi.Size()
-  external int max_scrollback;
+  external int size;
+
+  /// Literal progress state reported by the running program.
+  @ffi.UnsignedInt()
+  external int stateAsInt;
+
+  TerminalProgressState get state =>
+      TerminalProgressState.fromValue(stateAsInt);
+
+  /// Progress percentage from 0 through 100, or -1 when omitted.
+  @ffi.Int8()
+  external int progress;
 }
+
+/// Callback function type for progress reports.
+///
+/// Called synchronously when the terminal receives OSC 9;4.
+///
+/// @param terminal The terminal handle
+/// @param userdata The userdata pointer set via GHOSTTY_TERMINAL_OPT_USERDATA
+/// @param report Borrowed progress report
+///
+/// @ingroup terminal
+typedef TerminalProgressReportFn =
+    ffi.Pointer<
+      ffi.NativeFunction<
+        ffi.Void Function(
+          Terminal terminal,
+          ffi.Pointer<ffi.Void> userdata,
+          ffi.Pointer<TerminalProgressReport> report,
+        )
+      >
+    >;
 
 /// Callback function type for pwd_changed.
 ///
