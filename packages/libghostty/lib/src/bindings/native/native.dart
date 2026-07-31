@@ -917,14 +917,10 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
-  CResult<int> terminalNew(int cols, int rows, int maxScrollback) {
+  CResult<int> terminalNew(int cols, int rows) {
     return using((arena) {
       final ptr = arena<Pointer<TerminalImpl>>();
-      final opts = arena<TerminalOptions>();
-      opts.ref.cols = cols;
-      opts.ref.rows = rows;
-      opts.ref.max_scrollback = maxScrollback;
-      final result = ghostty_terminal_new(nullptr, ptr, opts.ref);
+      final result = ghostty_terminal_new(nullptr, ptr, cols, rows);
       return (result, ptr.value.address);
     });
   }
@@ -1167,6 +1163,16 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<int> terminalGetScrollbackMaxBytes(int handle) {
+    return _terminalGetSize(handle, .scrollbackMaxBytes);
+  }
+
+  @override
+  CResult<int> terminalGetScrollbackMaxLines(int handle) {
+    return _terminalGetSize(handle, .scrollbackMaxLines);
+  }
+
+  @override
   CResult<int> terminalGetWidthPx(int handle) {
     return _terminalGetU32(handle, .widthPx);
   }
@@ -1358,12 +1364,22 @@ class NativeBindings implements GhosttyBindings {
 
   @override
   Result terminalSetApcBufferLimit(int handle, int? bytes) {
-    return _terminalSetApcSize(handle, .apcMaxBytes, bytes);
+    return _terminalSetSize(handle, .apcMaxBytes, bytes);
   }
 
   @override
   Result terminalSetKittyApcBufferLimit(int handle, int? bytes) {
-    return _terminalSetApcSize(handle, .apcMaxBytesKitty, bytes);
+    return _terminalSetSize(handle, .apcMaxBytesKitty, bytes);
+  }
+
+  @override
+  Result terminalSetScrollbackMaxBytes(int handle, int? bytes) {
+    return _terminalSetSize(handle, .scrollbackMaxBytes, bytes);
+  }
+
+  @override
+  Result terminalSetScrollbackMaxLines(int handle, int? lines) {
+    return _terminalSetSize(handle, .scrollbackMaxLines, lines);
   }
 
   @override
@@ -2208,7 +2224,7 @@ class NativeBindings implements GhosttyBindings {
     );
   }
 
-  Result _terminalSetApcSize(int handle, TerminalOption option, int? value) {
+  Result _terminalSetSize(int handle, TerminalOption option, int? value) {
     if (value == null) {
       return ghostty_terminal_set(Pointer.fromAddress(handle), option, nullptr);
     }
@@ -3655,6 +3671,95 @@ class NativeBindings implements GhosttyBindings {
             return ClipboardWriteResult.ioError.value;
           }
         }, exceptionalReturn: _clipboardWriteExceptionResult);
+    map[option] = callable;
+    ghostty_terminal_set(
+      Pointer.fromAddress(handle),
+      option,
+      callable.nativeFunction.cast(),
+    );
+  }
+
+  @override
+  void terminalSetOnDesktopNotification(
+    int handle,
+    DesktopNotificationCallback? callback,
+  ) {
+    final map = _callables.putIfAbsent(handle, () => {});
+    const option = TerminalOption.desktopNotification;
+    map[option]?.close();
+    if (callback == null) {
+      map.remove(option);
+      ghostty_terminal_set(Pointer.fromAddress(handle), option, nullptr);
+      return;
+    }
+    final callable =
+        NativeCallable<
+          Void Function(
+            Terminal,
+            Pointer<Void>,
+            Pointer<TerminalDesktopNotification>,
+          )
+        >.isolateLocal((
+          Terminal terminal,
+          Pointer<Void> userdata,
+          Pointer<TerminalDesktopNotification> notification,
+        ) {
+          try {
+            final value = notification.ref;
+            if (value.size < sizeOf<TerminalDesktopNotification>()) return;
+            callback((
+              title: utf8.decode(value.title.ptr.asTypedList(value.title.len)),
+              body: utf8.decode(value.body.ptr.asTypedList(value.body.len)),
+            ));
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
+          }
+        });
+    map[option] = callable;
+    ghostty_terminal_set(
+      Pointer.fromAddress(handle),
+      option,
+      callable.nativeFunction.cast(),
+    );
+  }
+
+  @override
+  void terminalSetOnProgressReport(
+    int handle,
+    TerminalProgressCallback? callback,
+  ) {
+    final map = _callables.putIfAbsent(handle, () => {});
+    const option = TerminalOption.progressReport;
+    map[option]?.close();
+    if (callback == null) {
+      map.remove(option);
+      ghostty_terminal_set(Pointer.fromAddress(handle), option, nullptr);
+      return;
+    }
+    final callable =
+        NativeCallable<
+          Void Function(
+            Terminal,
+            Pointer<Void>,
+            Pointer<TerminalProgressReport>,
+          )
+        >.isolateLocal((
+          Terminal terminal,
+          Pointer<Void> userdata,
+          Pointer<TerminalProgressReport> report,
+        ) {
+          try {
+            final value = report.ref;
+            if (value.size < sizeOf<TerminalProgressReport>()) return;
+            final progress = value.progress;
+            callback((
+              state: value.state,
+              progress: progress < 0 ? null : progress,
+            ));
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
+          }
+        });
     map[option] = callable;
     ghostty_terminal_set(
       Pointer.fromAddress(handle),

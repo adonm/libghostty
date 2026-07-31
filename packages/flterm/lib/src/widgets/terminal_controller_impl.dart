@@ -78,11 +78,7 @@ class TerminalControllerImpl extends TerminalController
        _keyEvent = vt.KeyEvent(),
        _mouseEvent = MouseEvent(),
        _textInput = TerminalInputClient(),
-       terminal = Terminal(
-         cols: config.cols,
-         rows: config.rows,
-         maxScrollback: config.scrollbackLimit,
-       ),
+       terminal = Terminal(cols: config.cols, rows: config.rows),
        super.base() {
     _selectionGesture = SelectionGestureDriver(terminal);
     _compressionScheduler = CompressionScheduler(
