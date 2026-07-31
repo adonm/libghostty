@@ -153,6 +153,10 @@ class TerminalControllerImpl extends TerminalController
   }
 
   @override
+  set onDesktopNotification(ValueChanged<DesktopNotification>? value) =>
+      terminal.onDesktopNotification = value;
+
+  @override
   String get preeditText => _preeditText;
 
   @override

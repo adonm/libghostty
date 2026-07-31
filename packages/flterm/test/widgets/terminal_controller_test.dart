@@ -198,6 +198,17 @@ void main() {
       });
     });
 
+    group('onDesktopNotification', () {
+      test('forwards OSC 9 notifications', () {
+        DesktopNotification? notification;
+        controller.onDesktopNotification = (value) => notification = value;
+
+        writeControllerUtf8(controller, '\x1b]9;Build finished\x07');
+
+        expect(notification, (title: '', body: 'Build finished'));
+      });
+    });
+
     group('selection', () {
       test('selectRange notifies listeners and installs selection', () {
         var notified = false;

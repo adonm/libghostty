@@ -13,6 +13,7 @@ export 'package:libghostty/libghostty.dart'
         ClipboardWriteCallback,
         ClipboardWriteResult,
         CursorShape,
+        DesktopNotification,
         DeviceAttributesResponse,
         Formatter,
         FormatterExtra,
