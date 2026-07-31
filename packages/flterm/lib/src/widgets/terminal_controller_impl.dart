@@ -157,6 +157,10 @@ class TerminalControllerImpl extends TerminalController
       terminal.onDesktopNotification = value;
 
   @override
+  set onProgressReport(ValueChanged<TerminalProgress>? value) =>
+      terminal.onProgressReport = value;
+
+  @override
   String get preeditText => _preeditText;
 
   @override

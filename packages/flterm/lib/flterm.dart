@@ -27,6 +27,8 @@ export 'package:libghostty/libghostty.dart'
         SelectionGestureBehavior,
         SelectionGestureBehaviors,
         TerminalMode,
+        TerminalProgress,
+        TerminalProgressState,
         TerminalScreen,
         UnderlineStyle,
         initializeForWeb;

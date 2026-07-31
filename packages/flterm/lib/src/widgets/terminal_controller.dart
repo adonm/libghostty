@@ -48,6 +48,13 @@ abstract class TerminalController extends ChangeNotifier
   /// display them. Fires synchronously during [write].
   set onDesktopNotification(ValueChanged<DesktopNotification>? callback);
 
+  /// Sets the callback for program progress reported through OSC 9;4, or
+  /// clears it if null.
+  ///
+  /// The application decides how to present progress. Fires synchronously
+  /// during [write].
+  set onProgressReport(ValueChanged<TerminalProgress>? callback);
+
   /// Called when the grid dimensions change. Forward to your backend.
   OnResize? onResize;
 

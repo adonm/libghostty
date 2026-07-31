@@ -209,6 +209,17 @@ void main() {
       });
     });
 
+    group('onProgressReport', () {
+      test('forwards determinate OSC 9;4 reports', () {
+        TerminalProgress? report;
+        controller.onProgressReport = (value) => report = value;
+
+        writeControllerUtf8(controller, '\x1b]9;4;1;42\x07');
+
+        expect(report, (state: TerminalProgressState.set, progress: 42));
+      });
+    });
+
     group('selection', () {
       test('selectRange notifies listeners and installs selection', () {
         var notified = false;
