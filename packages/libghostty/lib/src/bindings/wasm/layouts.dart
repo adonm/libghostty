@@ -21,6 +21,11 @@ class Layouts {
   late final int clipboardWriteContents;
   late final int clipboardWriteContentsLen;
 
+  // GhosttyTerminalDesktopNotification
+  late final int desktopNotificationSize;
+  late final int desktopNotificationTitle;
+  late final int desktopNotificationBody;
+
   // GhosttyColorRgb
   late final int colorRgbSize;
   late final int colorRgbG;
@@ -237,6 +242,11 @@ class Layouts {
     clipboardWriteLocation = struct['location'];
     clipboardWriteContents = struct['contents'];
     clipboardWriteContentsLen = struct['contents_len'];
+
+    struct = _Struct(types, 'GhosttyTerminalDesktopNotification');
+    desktopNotificationSize = struct.size;
+    desktopNotificationTitle = struct['title'];
+    desktopNotificationBody = struct['body'];
 
     struct = _Struct(types, 'GhosttyColorRgb');
     colorRgbSize = struct.size;

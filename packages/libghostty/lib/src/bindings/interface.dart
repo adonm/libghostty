@@ -194,6 +194,10 @@ abstract interface class GhosttyBindings {
     int handle,
     ClipboardWriteCallback? callback,
   );
+  void terminalSetOnDesktopNotification(
+    int handle,
+    DesktopNotificationCallback? callback,
+  );
   void terminalSetOnTitleChanged(int handle, VoidCallback? callback);
   void terminalSetOnPwdChanged(int handle, VoidCallback? callback);
   void terminalSetOnEnquiry(int handle, ValueGetter<Uint8List>? callback);

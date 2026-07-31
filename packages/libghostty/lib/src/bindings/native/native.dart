@@ -3680,6 +3680,50 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  void terminalSetOnDesktopNotification(
+    int handle,
+    DesktopNotificationCallback? callback,
+  ) {
+    final map = _callables.putIfAbsent(handle, () => {});
+    const option = TerminalOption.desktopNotification;
+    map[option]?.close();
+    if (callback == null) {
+      map.remove(option);
+      ghostty_terminal_set(Pointer.fromAddress(handle), option, nullptr);
+      return;
+    }
+    final callable =
+        NativeCallable<
+          Void Function(
+            Terminal,
+            Pointer<Void>,
+            Pointer<TerminalDesktopNotification>,
+          )
+        >.isolateLocal((
+          Terminal terminal,
+          Pointer<Void> userdata,
+          Pointer<TerminalDesktopNotification> notification,
+        ) {
+          try {
+            final value = notification.ref;
+            if (value.size < sizeOf<TerminalDesktopNotification>()) return;
+            callback((
+              title: utf8.decode(value.title.ptr.asTypedList(value.title.len)),
+              body: utf8.decode(value.body.ptr.asTypedList(value.body.len)),
+            ));
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
+          }
+        });
+    map[option] = callable;
+    ghostty_terminal_set(
+      Pointer.fromAddress(handle),
+      option,
+      callable.nativeFunction.cast(),
+    );
+  }
+
+  @override
   void terminalSetOnTitleChanged(int handle, VoidCallback? callback) {
     final map = _callables.putIfAbsent(handle, () => {});
     map[TerminalOption.titleChanged]?.close();

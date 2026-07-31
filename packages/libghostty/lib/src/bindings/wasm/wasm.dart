@@ -1713,6 +1713,45 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  void terminalSetOnDesktopNotification(
+    int handle,
+    DesktopNotificationCallback? callback,
+  ) {
+    final map = _callbacks.putIfAbsent(handle, () => {});
+    const option = TerminalOption.desktopNotification;
+    if (callback == null) {
+      final existing = map.remove(option);
+      if (existing != null) _table.set(existing.$1);
+      _exports.ghostty_terminal_set(handle, option.value, 0);
+      return;
+    }
+    final reuseIndex = map[option]?.$1;
+    final index = _registerCallback(
+      ((int terminal, int userdata, int notificationPtr) {
+        try {
+          if (_mem.readU32(notificationPtr) < _layout.desktopNotificationSize) {
+            return;
+          }
+          callback((
+            title: _readString(
+              notificationPtr + _layout.desktopNotificationTitle,
+            ),
+            body: _readString(
+              notificationPtr + _layout.desktopNotificationBody,
+            ),
+          ));
+        } on Object catch (error, stackTrace) {
+          _captureCallbackError(error, stackTrace);
+        }
+      }).toJS,
+      ['i32', 'i32', 'i32'],
+      reuseIndex: reuseIndex,
+    );
+    map[option] = (index, callback);
+    _exports.ghostty_terminal_set(handle, option.value, index);
+  }
+
+  @override
   void terminalSetOnTitleChanged(int handle, VoidCallback? callback) {
     final map = _callbacks.putIfAbsent(handle, () => {});
     const option = TerminalOption.titleChanged;
@@ -4378,6 +4417,12 @@ class WasmBindings implements GhosttyBindings {
     final value = _mem.readU64(outPtr);
     _exports.ghostty_wasm_free_u8_array(outPtr, 8);
     return (.fromValue(result), value);
+  }
+
+  String _readString(int pointer) {
+    final data = _mem.readPtr(pointer);
+    final length = _mem.readU32(pointer + _layout.stringLen);
+    return length == 0 ? '' : utf8.decode(_mem.readBytes(data, length));
   }
 
   CResult<Style> _terminalGetStyle(int handle, TerminalData data) {

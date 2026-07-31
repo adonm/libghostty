@@ -60,6 +60,19 @@ void main() {
       });
     });
 
+    group('onDesktopNotification', () {
+      test('receives OSC 9 notifications', () {
+        DesktopNotification? notification;
+        terminal.onDesktopNotification = (value) => notification = value;
+
+        terminal.write(
+          Uint8List.fromList('\x1b]9;Build finished\x07'.codeUnits),
+        );
+
+        expect(notification, (title: '', body: 'Build finished'));
+      });
+    });
+
     group('dispose', () {
       test('succeeds after a callback error', () {
         final error = StateError('bell failed');

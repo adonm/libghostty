@@ -56,6 +56,14 @@ typedef ClipboardWrite = ({
 typedef ClipboardWriteCallback =
     ClipboardWriteResult Function(ClipboardWrite write);
 
+/// A desktop notification requested by terminal content.
+///
+/// Both strings are owned by Dart and remain valid after the callback returns.
+typedef DesktopNotification = ({String title, String body});
+
+/// Handles a desktop notification requested by terminal content.
+typedef DesktopNotificationCallback = void Function(DesktopNotification value);
+
 /// An untracked grid reference value.
 ///
 /// The value follows libghostty's untracked grid-reference lifetime rules and

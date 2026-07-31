@@ -12,6 +12,8 @@ export 'src/bindings/types/aliases.dart'
         ClipboardWrite,
         ClipboardWriteCallback,
         DecodedImage,
+        DesktopNotification,
+        DesktopNotificationCallback,
         PngDecoder,
         TerminalGeometry,
         X11ColorName;

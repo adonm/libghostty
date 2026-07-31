@@ -334,6 +334,15 @@ final class Terminal with Listenable {
     bindings.terminalSetOnClipboardWrite(_handle, value);
   }
 
+  /// Registers a callback for OSC 9 and OSC 777 desktop notifications.
+  ///
+  /// Requests are untrusted terminal content. The callback decides whether and
+  /// how to display them. Fires synchronously during [write]. Set to null to
+  /// ignore notifications.
+  set onDesktopNotification(DesktopNotificationCallback? value) {
+    bindings.terminalSetOnDesktopNotification(_handle, value);
+  }
+
   /// Registers a callback for color scheme queries (CSI ? 996 n).
   ///
   /// Return the current [ColorScheme], or null to silently ignore the query.
