@@ -108,7 +108,15 @@ final class CompileFromSource extends LibraryProvider {
       Directory.fromUri(installDir).path,
       '--release=fast',
       if (zigCacheDir != null) ...['--global-cache-dir', zigCacheDir],
-      if (os != .current || arch != .current) '-Dtarget=$zig',
+      // Always pass an explicit target, even for a native build. Without
+      // `-Dtarget`, Zig defaults the CPU model to `native` and tunes the
+      // binary for the build machine (e.g. AVX2/AVX-512 on a CI runner),
+      // which then crashes with an illegal instruction (0xC000001D) on
+      // consumer CPUs lacking those extensions. An explicit target resolves
+      // to the arch's baseline CPU instead. This mirrors the upstream release
+      // workflow (.github/workflows/build.yml), which passes `-Dtarget` for
+      // every artifact, including native ones.
+      '-Dtarget=$zig',
       if (ios == .iPhoneSimulator && arch == .arm64) '-Dcpu=apple_a17',
     ];
 
