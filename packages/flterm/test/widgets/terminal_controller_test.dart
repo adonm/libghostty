@@ -774,31 +774,13 @@ void main() {
         expect(controller.config.cols, 120);
       });
 
-      test('initial config applies APC size limits', () {
+      test('initial config applies terminal options', () {
         final custom = TerminalControllerImpl(
           config: const TerminalConfig(
+            scrollbackMaxBytes: 1024,
+            scrollbackMaxLines: 10,
             kittyImageStorageLimit: 1 << 20,
             apcBufferLimit: 1,
-          ),
-        );
-        addTearDown(custom.dispose);
-
-        custom.write(transmitRedPixel(id: 91));
-
-        expect(KittyGraphics.of(custom.terminal)!.image(91), isNull);
-      });
-
-      test('setter applies APC buffer limits', () {
-        controller.config = const TerminalConfig(apcBufferLimit: 1);
-
-        controller.write(transmitRedPixel(id: 92));
-
-        expect(KittyGraphics.of(controller.terminal)!.image(92), isNull);
-      });
-
-      test('initial config applies cursor reset defaults', () {
-        final custom = TerminalControllerImpl(
-          config: const TerminalConfig(
             cursorStyle: CursorShape.underline,
             cursorBlink: true,
           ),
@@ -807,11 +789,36 @@ void main() {
         addTearDown(custom.dispose);
         addTearDown(renderState.dispose);
 
+        expect(custom.terminal.scrollbackMaxBytes, 1024);
+        expect(custom.terminal.scrollbackMaxLines, 10);
+
+        custom.write(transmitRedPixel(id: 91));
+
+        expect(KittyGraphics.of(custom.terminal)!.image(91), isNull);
+
         writeTerminalUtf8(custom.terminal, '\x1b[0 q');
         renderState.update(custom.terminal);
 
         expect(renderState.cursor.shape, CursorShape.underline);
         expect(renderState.cursor.blinking, isTrue);
+      });
+
+      test('setter applies scrollback limits', () {
+        controller.config = const TerminalConfig(
+          scrollbackMaxBytes: 2048,
+          scrollbackMaxLines: 20,
+        );
+
+        expect(controller.terminal.scrollbackMaxBytes, 2048);
+        expect(controller.terminal.scrollbackMaxLines, 20);
+      });
+
+      test('setter applies APC buffer limits', () {
+        controller.config = const TerminalConfig(apcBufferLimit: 1);
+
+        controller.write(transmitRedPixel(id: 92));
+
+        expect(KittyGraphics.of(controller.terminal)!.image(92), isNull);
       });
 
       test('setter applies cursor reset defaults', () {

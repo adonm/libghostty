@@ -654,6 +654,8 @@ class TerminalControllerImpl extends TerminalController
   }
 
   void _applyTerminalOptions() {
+    terminal.scrollbackMaxBytes = _config.scrollbackMaxBytes;
+    terminal.scrollbackMaxLines = _config.scrollbackMaxLines;
     terminal.kittyImageStorageLimit = _config.kittyImageStorageLimit;
     terminal.setApcBufferLimit(_config.apcBufferLimit);
     terminal.setGlyphProtocol(enabled: _config.glyphProtocol);
