@@ -93,6 +93,29 @@ void main() {
       });
     });
 
+    group('onProgressReport', () {
+      test('receives determinate OSC 9;4 reports', () {
+        TerminalProgress? report;
+        terminal.onProgressReport = (value) => report = value;
+
+        terminal.write(Uint8List.fromList('\x1b]9;4;1;42\x07'.codeUnits));
+
+        expect(report, (state: TerminalProgressState.set, progress: 42));
+      });
+
+      test('maps omitted progress to null', () {
+        TerminalProgress? report;
+        terminal.onProgressReport = (value) => report = value;
+
+        terminal.write(Uint8List.fromList('\x1b]9;4;3\x07'.codeUnits));
+
+        expect(report, (
+          state: TerminalProgressState.indeterminate,
+          progress: null,
+        ));
+      });
+    });
+
     group('write', () {
       Object captureError(void Function() operation) {
         try {

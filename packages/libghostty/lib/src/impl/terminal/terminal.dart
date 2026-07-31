@@ -343,6 +343,13 @@ final class Terminal with Listenable {
     bindings.terminalSetOnDesktopNotification(_handle, value);
   }
 
+  /// Registers a callback for OSC 9;4 progress reports.
+  ///
+  /// Fires synchronously during [write]. Set to null to ignore reports.
+  set onProgressReport(TerminalProgressCallback? value) {
+    bindings.terminalSetOnProgressReport(_handle, value);
+  }
+
   /// Registers a callback for color scheme queries (CSI ? 996 n).
   ///
   /// Return the current [ColorScheme], or null to silently ignore the query.

@@ -198,6 +198,10 @@ abstract interface class GhosttyBindings {
     int handle,
     DesktopNotificationCallback? callback,
   );
+  void terminalSetOnProgressReport(
+    int handle,
+    TerminalProgressCallback? callback,
+  );
   void terminalSetOnTitleChanged(int handle, VoidCallback? callback);
   void terminalSetOnPwdChanged(int handle, VoidCallback? callback);
   void terminalSetOnEnquiry(int handle, ValueGetter<Uint8List>? callback);

@@ -1752,6 +1752,46 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  void terminalSetOnProgressReport(
+    int handle,
+    TerminalProgressCallback? callback,
+  ) {
+    final map = _callbacks.putIfAbsent(handle, () => {});
+    const option = TerminalOption.progressReport;
+    if (callback == null) {
+      final existing = map.remove(option);
+      if (existing != null) _table.set(existing.$1);
+      _exports.ghostty_terminal_set(handle, option.value, 0);
+      return;
+    }
+    final reuseIndex = map[option]?.$1;
+    final index = _registerCallback(
+      ((int terminal, int userdata, int reportPtr) {
+        try {
+          if (_mem.readU32(reportPtr) < _layout.terminalProgressReportSize) {
+            return;
+          }
+          final rawProgress = _mem.readU8(
+            reportPtr + _layout.terminalProgressReportProgress,
+          );
+          callback((
+            state: TerminalProgressState.fromValue(
+              _mem.readU32(reportPtr + _layout.terminalProgressReportState),
+            ),
+            progress: rawProgress == 0xff ? null : rawProgress,
+          ));
+        } on Object catch (error, stackTrace) {
+          _captureCallbackError(error, stackTrace);
+        }
+      }).toJS,
+      ['i32', 'i32', 'i32'],
+      reuseIndex: reuseIndex,
+    );
+    map[option] = (index, callback);
+    _exports.ghostty_terminal_set(handle, option.value, index);
+  }
+
+  @override
   void terminalSetOnTitleChanged(int handle, VoidCallback? callback) {
     final map = _callbacks.putIfAbsent(handle, () => {});
     const option = TerminalOption.titleChanged;

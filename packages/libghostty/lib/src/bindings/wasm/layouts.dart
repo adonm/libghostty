@@ -26,6 +26,11 @@ class Layouts {
   late final int desktopNotificationTitle;
   late final int desktopNotificationBody;
 
+  // GhosttyTerminalProgressReport
+  late final int terminalProgressReportSize;
+  late final int terminalProgressReportState;
+  late final int terminalProgressReportProgress;
+
   // GhosttyColorRgb
   late final int colorRgbSize;
   late final int colorRgbG;
@@ -247,6 +252,11 @@ class Layouts {
     desktopNotificationSize = struct.size;
     desktopNotificationTitle = struct['title'];
     desktopNotificationBody = struct['body'];
+
+    struct = _Struct(types, 'GhosttyTerminalProgressReport');
+    terminalProgressReportSize = struct.size;
+    terminalProgressReportState = struct['state'];
+    terminalProgressReportProgress = struct['progress'];
 
     struct = _Struct(types, 'GhosttyColorRgb');
     colorRgbSize = struct.size;

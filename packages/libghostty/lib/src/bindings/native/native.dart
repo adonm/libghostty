@@ -3724,6 +3724,51 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  void terminalSetOnProgressReport(
+    int handle,
+    TerminalProgressCallback? callback,
+  ) {
+    final map = _callables.putIfAbsent(handle, () => {});
+    const option = TerminalOption.progressReport;
+    map[option]?.close();
+    if (callback == null) {
+      map.remove(option);
+      ghostty_terminal_set(Pointer.fromAddress(handle), option, nullptr);
+      return;
+    }
+    final callable =
+        NativeCallable<
+          Void Function(
+            Terminal,
+            Pointer<Void>,
+            Pointer<TerminalProgressReport>,
+          )
+        >.isolateLocal((
+          Terminal terminal,
+          Pointer<Void> userdata,
+          Pointer<TerminalProgressReport> report,
+        ) {
+          try {
+            final value = report.ref;
+            if (value.size < sizeOf<TerminalProgressReport>()) return;
+            final progress = value.progress;
+            callback((
+              state: value.state,
+              progress: progress < 0 ? null : progress,
+            ));
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
+          }
+        });
+    map[option] = callable;
+    ghostty_terminal_set(
+      Pointer.fromAddress(handle),
+      option,
+      callable.nativeFunction.cast(),
+    );
+  }
+
+  @override
   void terminalSetOnTitleChanged(int handle, VoidCallback? callback) {
     final map = _callables.putIfAbsent(handle, () => {});
     map[TerminalOption.titleChanged]?.close();

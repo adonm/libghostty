@@ -16,6 +16,8 @@ export 'src/bindings/types/aliases.dart'
         DesktopNotificationCallback,
         PngDecoder,
         TerminalGeometry,
+        TerminalProgress,
+        TerminalProgressCallback,
         X11ColorName;
 export 'src/bindings/types/types.dart'
     show
@@ -75,6 +77,7 @@ export 'src/ffi/libghostty_enums.g.dart'
         SysLogLevel,
         TerminalCompressionMode,
         TerminalCompressionResult,
+        TerminalProgressState,
         TerminalScreen;
 export 'src/impl/build_info.dart' show LibGhosttyBuildInfo;
 export 'src/impl/color.dart'
