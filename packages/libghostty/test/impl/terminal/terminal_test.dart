@@ -58,6 +58,28 @@ void main() {
       });
     });
 
+    group('scrollbackMaxLines', () {
+      test('gets the value set through the setter', () {
+        terminal.scrollbackMaxLines = 100;
+
+        expect(terminal.scrollbackMaxLines, 100);
+      });
+
+      test('returns null when cleared', () {
+        terminal.scrollbackMaxLines = null;
+
+        expect(terminal.scrollbackMaxLines, isNull);
+      });
+    });
+
+    group('scrollbackMaxBytes', () {
+      test('gets the value set through the setter', () {
+        terminal.scrollbackMaxBytes = 1024;
+
+        expect(terminal.scrollbackMaxBytes, 1024);
+      });
+    });
+
     group('write', () {
       Object captureError(void Function() operation) {
         try {
