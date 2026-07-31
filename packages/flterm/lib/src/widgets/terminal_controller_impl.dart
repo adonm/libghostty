@@ -153,6 +153,14 @@ class TerminalControllerImpl extends TerminalController
   }
 
   @override
+  set onDesktopNotification(ValueChanged<DesktopNotification>? value) =>
+      terminal.onDesktopNotification = value;
+
+  @override
+  set onProgressReport(ValueChanged<TerminalProgress>? value) =>
+      terminal.onProgressReport = value;
+
+  @override
   String get preeditText => _preeditText;
 
   @override
@@ -654,6 +662,8 @@ class TerminalControllerImpl extends TerminalController
   }
 
   void _applyTerminalOptions() {
+    terminal.scrollbackMaxBytes = _config.scrollbackMaxBytes;
+    terminal.scrollbackMaxLines = _config.scrollbackMaxLines;
     terminal.kittyImageStorageLimit = _config.kittyImageStorageLimit;
     terminal.setApcBufferLimit(_config.apcBufferLimit);
     terminal.setGlyphProtocol(enabled: _config.glyphProtocol);
