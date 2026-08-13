@@ -10,13 +10,13 @@ import 'package:flutter/foundation.dart'
         debugDefaultTargetPlatformOverride,
         defaultTargetPlatform;
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart' hide ColorScheme, KeyEvent;
 import 'package:libghostty/libghostty.dart'
     as vt
     show ColorScheme, ColorSchemeReportEncode;
+import 'package:material_ui/material_ui.dart';
 
 extension _SelectionEdges on Selection {
   Position get _startPoint => start.positionIn(.viewport)!;

@@ -677,15 +677,11 @@ void main() {
         expect(result, TerminalCompressionResult.unsupported);
       }, testOn: 'windows');
 
-      test(
-        'completes full compression on supported targets',
-        () {
-          final result = terminal.compress(mode: .full);
+      test('completes full compression on supported targets', () {
+        final result = terminal.compress(mode: .full);
 
-          expect(result, TerminalCompressionResult.complete);
-        },
-        testOn: 'linux || mac-os || android || ios',
-      );
+        expect(result, TerminalCompressionResult.complete);
+      }, testOn: 'linux || mac-os || android || ios');
     });
 
     group('onClipboardWrite', () {
