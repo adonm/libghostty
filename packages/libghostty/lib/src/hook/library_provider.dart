@@ -203,10 +203,11 @@ final class CompileFromSource extends LibraryProvider {
     final localGhostty = Directory.fromUri(workspaceRoot.resolve('ghostty/'));
     if (localGhostty.existsSync()) return localGhostty;
 
-    return switch (downloadMethod) {
+    final directory = await switch (downloadMethod) {
       .tarball => _downloadTarball(),
       .git => _gitClone(),
     };
+    return directory;
   }
 }
 

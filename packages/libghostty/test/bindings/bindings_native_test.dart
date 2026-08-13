@@ -382,15 +382,11 @@ void main() {
         expect(result, (Result.success, TerminalCompressionResult.unsupported));
       }, testOn: 'windows');
 
-      test(
-        'completes full compression on supported targets',
-        () {
-          final result = bindings.terminalCompress(terminal, .full);
+      test('completes full compression on supported targets', () {
+        final result = bindings.terminalCompress(terminal, .full);
 
-          expect(result, (Result.success, TerminalCompressionResult.complete));
-        },
-        testOn: 'linux || mac-os || android || ios',
-      );
+        expect(result, (Result.success, TerminalCompressionResult.complete));
+      }, testOn: 'linux || mac-os || android || ios');
 
       test('rejects an invalid handle', () {
         final result = bindings.terminalCompress(0, .incremental);
