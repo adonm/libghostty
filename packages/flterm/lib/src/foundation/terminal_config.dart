@@ -23,9 +23,11 @@ enum ScrollToBottom {
 ///
 /// Immutable value object passed to [TerminalController] at creation or
 /// replaced at runtime via [TerminalController.config]. Replacing the
-/// config applies mode changes and updates encoders without recreating
-/// the terminal: scrollback, screen content, and cursor position are
-/// preserved.
+/// config applies its modes, limits, cursor defaults, query responses, and
+/// input policies without recreating the terminal. [cols] and [rows] apply
+/// only when the controller is created; measured [TerminalView] geometry owns
+/// the live grid size. Lower resource limits can prune scrollback or protocol
+/// data.
 ///
 /// All defaults produce standard terminal behavior out of the box.
 ///
@@ -73,31 +75,41 @@ class TerminalConfig {
   /// Default APC payload buffer limit.
   static const defaultApcBufferLimit = 65 * 1024 * 1024;
 
-  /// Initial terminal width in cells. Must be positive.
+  /// Initial terminal width in cells.
+  ///
+  /// Must be positive. Replacing [TerminalController.config] does not resize an
+  /// existing terminal; [TerminalView] supplies its measured live dimensions.
   final int cols;
 
-  /// Initial terminal height in cells. Must be positive.
+  /// Initial terminal height in cells.
+  ///
+  /// Must be positive. Replacing [TerminalController.config] does not resize an
+  /// existing terminal; [TerminalView] supplies its measured live dimensions.
   final int rows;
 
   /// Maximum scrollback buffer size in bytes.
   ///
   /// Defaults to 10,000 bytes. Set to null for no limit, or 0 to disable
-  /// scrollback. When this and [scrollbackMaxLines] are set, the oldest
-  /// complete pages are discarded when either limit is reached.
+  /// scrollback and erase retained history. The limit is approximate because
+  /// libghostty allocates and prunes complete pages. When this and
+  /// [scrollbackMaxLines] are set, the oldest eligible pages are discarded
+  /// when either limit is reached. Lowering the value can prune immediately.
   final int? scrollbackMaxBytes;
 
   /// Maximum number of physical scrollback rows.
   ///
-  /// Defaults to no limit. At least one normal page is retained. When this
-  /// and [scrollbackMaxBytes] are set, the oldest complete pages are
-  /// discarded when either limit is reached.
+  /// Defaults to no limit. The limit is approximate because libghostty
+  /// allocates and prunes complete pages, so the retained count is generally
+  /// somewhat higher. When this and [scrollbackMaxBytes] are set, the oldest
+  /// eligible pages are discarded when either limit is reached. Lowering the
+  /// value can prune immediately.
   final int? scrollbackMaxLines;
 
   /// Maximum bytes of Kitty graphics image storage.
   ///
   /// Caps the in-memory footprint of images transmitted via the Kitty
   /// graphics protocol. Defaults to 64 MiB. Set to 0 to reject every
-  /// image payload.
+  /// image payload and delete stored Kitty images and placements.
   final int kittyImageStorageLimit;
 
   /// Maximum bytes buffered for APC payloads.
@@ -125,6 +137,7 @@ class TerminalConfig {
 
   /// Terminal modes applied on init and primary screen restore.
   ///
+  /// Every map entry is written; omitting a mode does not reset its live value.
   /// Programs can change modes at runtime via escape sequences. Use
   /// [TerminalController.modeGet] and [TerminalController.modeSet] to
   /// query or override the live state.

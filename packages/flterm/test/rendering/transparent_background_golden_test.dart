@@ -49,6 +49,9 @@ void main() {
     }) async {
       final terminal = Terminal(cols: cols, rows: rows);
       addTearDown(terminal.dispose);
+      applyTerminalTheme(terminal, theme);
+      final frameSource = TerminalFrameSource(terminal);
+      addTearDown(frameSource.dispose);
       writeUtf8(terminal, content);
 
       tester.view.devicePixelRatio = 1.0;
@@ -72,12 +75,14 @@ void main() {
                       alpha: theme.backgroundOpacity,
                     ),
                     child: TerminalRenderer(
-                      terminal: terminal,
+                      frameSource: frameSource,
                       theme: theme,
                       metrics: metrics,
                       offset: ViewportOffset.zero(),
                       renderCache: renderCache(),
-                      renderObserver: const _Observer(),
+                      focused: true,
+                      onGeometryChanged: (_) {},
+                      onViewportRowChanged: (_) {},
                     ),
                   ),
                 ),
@@ -149,17 +154,4 @@ void main() {
       await expectGolden('transparent_explicit_default.png');
     });
   });
-}
-
-class _Observer implements TerminalRenderObserver {
-  const _Observer();
-
-  @override
-  bool get hasFocus => true;
-
-  @override
-  void addListener(VoidCallback listener) {}
-
-  @override
-  void removeListener(VoidCallback listener) {}
 }

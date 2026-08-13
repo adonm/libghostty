@@ -80,9 +80,17 @@ void main() {
       bool blinkVisible = true,
       String preeditText = '',
       LinkSnapshot linkSnapshot = LinkSnapshot.empty,
-      OnResize? onResize,
+      ValueChanged<TerminalResizeEvent>? onGeometryChanged,
     }) {
+      final resolvedTheme =
+          theme ??
+          TerminalTheme.dark().copyWith(
+            fontFamilyFallback: bundledFontFamilyFallback,
+          );
+      applyTerminalTheme(terminal, resolvedTheme);
       selection?.applyTo(terminal);
+      final frameSource = TerminalFrameSource(terminal);
+      addTearDown(frameSource.dispose);
       final width = maxWidth ?? defaultCols * metrics.cellWidth;
       final height = maxHeight ?? defaultRows * metrics.cellHeight;
       return Directionality(
@@ -93,20 +101,29 @@ void main() {
             constraints: BoxConstraints(maxWidth: width, maxHeight: height),
             child: RepaintBoundary(
               child: TerminalRenderer(
-                terminal: terminal,
-                theme:
-                    theme ??
-                    TerminalTheme.dark().copyWith(
-                      fontFamilyFallback: bundledFontFamilyFallback,
-                    ),
+                frameSource: frameSource,
+                theme: resolvedTheme,
                 metrics: metrics,
                 offset: ViewportOffset.zero(),
                 renderCache: renderCache(),
-                renderObserver: _TestRenderObserver(hasFocus: focused),
+                focused: focused,
                 blinkVisible: blinkVisible,
                 preeditText: preeditText,
                 linkSnapshot: linkSnapshot,
-                onResize: onResize,
+                onGeometryChanged: (geometry) {
+                  terminal.resize(
+                    cols: geometry.cols,
+                    rows: geometry.rows,
+                    cellWidthPx:
+                        (geometry.cellWidth * geometry.devicePixelRatio)
+                            .round(),
+                    cellHeightPx:
+                        (geometry.cellHeight * geometry.devicePixelRatio)
+                            .round(),
+                  );
+                  onGeometryChanged?.call(geometry);
+                },
+                onViewportRowChanged: (_) {},
               ),
             ),
           ),
@@ -977,17 +994,4 @@ void main() {
       });
     });
   });
-}
-
-class _TestRenderObserver implements TerminalRenderObserver {
-  @override
-  final bool hasFocus;
-
-  const _TestRenderObserver({this.hasFocus = true});
-
-  @override
-  void addListener(VoidCallback listener) {}
-
-  @override
-  void removeListener(VoidCallback listener) {}
 }

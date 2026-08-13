@@ -7,6 +7,7 @@ import '../foundation.dart';
 import '../links/link_snapshot.dart';
 import 'atlas/atlas_config.dart';
 import 'paint_state.dart';
+import 'terminal_frame_source.dart';
 import 'terminal_render_cache.dart';
 import 'terminal_render_pipeline.dart';
 
@@ -14,40 +15,48 @@ import 'terminal_render_pipeline.dart';
 /// and selection overlays.
 ///
 /// This is the core rendering widget used internally by [TerminalView].
-/// It owns a [TerminalRenderBox] that orchestrates layout (grid sizing,
-/// terminal resize), frame sync, and a paint stack.
+/// It owns a [TerminalRenderBox] that orchestrates grid measurement, geometry
+/// intent reporting, frame sync, and a paint stack. The controller, not the
+/// renderer, validates and commits resize intents to the terminal engine.
 ///
 /// Sizing is determined by the parent constraints and cell metrics: the
 /// widget computes how many columns and rows fit, then sizes itself to
-/// exactly that grid. When the grid dimensions change, the terminal is
-/// resized and [onResize] fires.
+/// exactly that grid. When the grid, physical cell dimensions, or surface
+/// padding change, [onGeometryChanged] reports the geometry intent to the
+/// owner.
 ///
 /// ```dart
 /// TerminalRenderer(
-///   terminal: myTerminal,
+///   frameSource: frameSource,
 ///   theme: TerminalTheme.dark(),
 ///   metrics: measureCellMetrics(fontFamily: 'monospace', fontSize: 14),
 ///   offset: ViewportOffset.zero(),
-///   renderObserver: controller,
+///   focused: true,
 /// )
 /// ```
 @internal
-class TerminalRenderer extends LeafRenderObjectWidget {
-  /// The terminal whose screen is rendered.
-  final Terminal terminal;
+final class TerminalRenderer extends LeafRenderObjectWidget {
+  /// Supplies the terminal and publishes frame and viewport changes.
+  final TerminalFrameSource frameSource;
 
   /// Visual style applied to the terminal.
   ///
-  /// When changed, theme colors are pushed to the terminal (foreground,
-  /// background, palette, cursor color), the glyph atlas is updated if
-  /// font properties changed, and a full repaint is scheduled.
+  /// When changed, the glyph atlas is updated if font properties changed and
+  /// a full repaint is scheduled. The owning view applies terminal colors.
   final TerminalTheme theme;
 
   /// Cell pixel dimensions used for grid sizing and coordinate conversion.
   ///
   /// When changed, the glyph atlas is cleared and layout is recalculated.
-  /// A grid dimension change triggers terminal resize and [onResize].
+  /// A geometry change triggers [onGeometryChanged].
   final CellMetrics metrics;
+
+  /// Padding around the rendered terminal surface in logical pixels.
+  ///
+  /// This is carried to the resize callback so surface-space mouse
+  /// coordinates can be converted consistently with the terminal engine's
+  /// physical surface size.
+  final EdgeInsets surfacePadding;
 
   /// Scroll offset provided by a [Scrollable] ancestor.
   ///
@@ -55,11 +64,11 @@ class TerminalRenderer extends LeafRenderObjectWidget {
   /// At `pixels == maxScrollExtent`, the live screen is visible.
   final ViewportOffset offset;
 
-  /// Observable focus state.
+  /// Whether the terminal view currently has focus.
   ///
-  /// Listened to by the render box. Changes trigger a repaint to update
-  /// cursor appearance (filled vs hollow).
-  final TerminalRenderObserver renderObserver;
+  /// The owning view supplies this value from its [FocusNode]. Changes
+  /// trigger a repaint to update cursor appearance.
+  final bool focused;
 
   /// Whether the cursor blink is currently in the visible phase.
   ///
@@ -73,34 +82,36 @@ class TerminalRenderer extends LeafRenderObjectWidget {
   /// Visible link styling state prepared by the view layer.
   final LinkSnapshot linkSnapshot;
 
-  /// Called when the terminal grid dimensions change during layout.
+  /// Reports terminal geometry changes discovered during layout.
   ///
-  /// Fires after the terminal has been resized. Use this to notify the
-  /// backend (PTY, SSH) of the new dimensions.
-  final OnResize? onResize;
+  /// The callback receives the complete measured geometry. The owner must
+  /// apply the transaction before notifying its backend.
+  final ValueChanged<TerminalResizeEvent> onGeometryChanged;
+
+  /// Device pixel ratio of the Flutter view hosting this renderer.
+  final double devicePixelRatio;
 
   /// Internal render cache used to share compatible atlas state.
   final TerminalRenderCache renderCache;
 
-  /// Reports viewport movement that bypasses [Terminal] listeners.
-  ///
-  /// Scrolling may change [Terminal.compressionActivity] by making previously
-  /// visible scrollback eligible for compression.
-  final VoidCallback? onViewportChanged;
+  /// Requests a terminal viewport row derived from Flutter scroll layout.
+  final ValueChanged<int> onViewportRowChanged;
 
   const TerminalRenderer({
     super.key,
-    required this.terminal,
+    required this.frameSource,
     required this.theme,
     required this.metrics,
+    this.surfacePadding = EdgeInsets.zero,
     required this.offset,
-    required this.renderObserver,
+    required this.focused,
     required this.renderCache,
+    this.devicePixelRatio = 1,
     this.blinkVisible = true,
     this.preeditText = '',
     this.linkSnapshot = .empty,
-    this.onResize,
-    this.onViewportChanged,
+    required this.onGeometryChanged,
+    required this.onViewportRowChanged,
   });
 
   @override
@@ -109,14 +120,16 @@ class TerminalRenderer extends LeafRenderObjectWidget {
       theme: theme,
       offset: offset,
       metrics: metrics,
-      terminal: terminal,
+      surfacePadding: surfacePadding,
+      frameSource: frameSource,
       renderCache: renderCache,
-      onResize: onResize,
-      onViewportChanged: onViewportChanged,
+      devicePixelRatio: devicePixelRatio,
+      onGeometryChanged: onGeometryChanged,
+      onViewportRowChanged: onViewportRowChanged,
       blinkVisible: blinkVisible,
       preeditText: preeditText,
       linkSnapshot: linkSnapshot,
-      renderObserver: renderObserver,
+      focused: focused,
     );
   }
 
@@ -124,7 +137,7 @@ class TerminalRenderer extends LeafRenderObjectWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties
-      ..add(DiagnosticsProperty<Terminal>('terminal', terminal))
+      ..add(DiagnosticsProperty<Terminal>('terminal', frameSource.terminal))
       ..add(DiagnosticsProperty<TerminalTheme>('theme', theme))
       ..add(DiagnosticsProperty<CellMetrics>('metrics', metrics))
       ..add(DiagnosticsProperty<ViewportOffset>('offset', offset))
@@ -144,14 +157,16 @@ class TerminalRenderer extends LeafRenderObjectWidget {
     TerminalRenderBox renderObject,
   ) {
     renderObject
-      ..terminal = terminal
+      ..frameSource = frameSource
       ..theme = theme
       ..renderCache = renderCache
       ..offset = offset
       ..metrics = metrics
-      ..onResize = onResize
-      ..onViewportChanged = onViewportChanged
-      ..renderObserver = renderObserver
+      ..surfacePadding = surfacePadding
+      ..devicePixelRatio = devicePixelRatio
+      ..onGeometryChanged = onGeometryChanged
+      ..onViewportRowChanged = onViewportRowChanged
+      ..focused = focused
       ..blinkVisible = blinkVisible
       ..preeditText = preeditText
       ..linkSnapshot = linkSnapshot;
@@ -163,8 +178,8 @@ class TerminalRenderer extends LeafRenderObjectWidget {
 /// Three phases per frame:
 ///
 /// 1. **Layout**: computes grid size from constraints and [CellMetrics],
-///    configures the glyph atlas for the current DPR, resizes the terminal
-///    if the grid changed, and updates scroll extents.
+///    configures the glyph atlas for the current DPR, reports geometry intent
+///    when measurements change, and updates scroll extents.
 ///
 /// 2. **Sync** (start of paint): snapshots terminal cells, resolves colors
 ///    (including OSC 10/11 overrides, bold-is-bright, inverse, faint),
@@ -176,44 +191,58 @@ class TerminalRenderer extends LeafRenderObjectWidget {
 ///
 /// Created and managed by [TerminalRenderer]. Not intended for direct use.
 @internal
-class TerminalRenderBox extends RenderBox {
-  Terminal _terminal;
-  ViewportOffset _offset;
-  TerminalRenderObserver _renderObserver;
-  OnResize? _onResize;
-  VoidCallback? _onViewportChanged;
-  TerminalRenderCache _renderCache;
-  late TerminalAtlasHandle _atlasHandle;
-  var _performingLayout = false;
-  var _needsFrameSync = false;
-  var _stickToBottom = true;
-  var _lastScrollbackRows = 0;
-  var _preeditText = '';
-  LinkSnapshot _linkSnapshot;
-
+final class TerminalRenderBox extends RenderBox {
   final TerminalPaintState _paintState;
   late final TerminalRenderPipeline _pipeline;
 
+  var _applyingViewportIntent = false;
+  var _cellHeightPx = 0;
+  var _cellWidthPx = 0;
+  double _devicePixelRatio;
+  TerminalFrameSource _frameSource;
+  late TerminalAtlasHandle _atlasHandle;
+  var _lastCellHeight = 0.0;
+  var _lastCellWidth = 0.0;
+  var _lastDevicePixelRatio = 0.0;
+  var _lastScrollbackRows = 0;
+  var _lastSurfacePadding = EdgeInsets.zero;
+  LinkSnapshot _linkSnapshot;
+  var _needsFrameSync = false;
+  ViewportOffset _offset;
+  ValueChanged<TerminalResizeEvent> _onGeometryChanged;
+  ValueChanged<int> _onViewportRowChanged;
+  int? _pendingViewportRow;
+  var _performingLayout = false;
+  var _preeditText = '';
+  bool? _primaryStickToBottom;
+  TerminalRenderCache _renderCache;
+  var _stickToBottom = true;
+  var _surfacePadding = EdgeInsets.zero;
+
   TerminalRenderBox({
-    required this._terminal,
+    required this._frameSource,
     required TerminalTheme theme,
     required CellMetrics metrics,
+    EdgeInsets surfacePadding = EdgeInsets.zero,
     required this._offset,
-    required this._renderObserver,
+    required bool focused,
     required this._renderCache,
+    required this._devicePixelRatio,
     bool blinkVisible = true,
     this._linkSnapshot = .empty,
     this._preeditText = '',
-    this._onResize,
-    this._onViewportChanged,
-  }) : _paintState = TerminalPaintState(theme, metrics)
+    required this._onGeometryChanged,
+    required this._onViewportRowChanged,
+  }) : _surfacePadding = surfacePadding,
+       _lastSurfacePadding = surfacePadding,
+       _paintState = TerminalPaintState(theme, metrics)
          ..blinkVisible = blinkVisible
-         ..cursorFocused = _renderObserver.hasFocus {
+         ..cursorFocused = focused {
     _atlasHandle = _renderCache.acquireAtlas(
       .fromTheme(
         theme: theme,
         metrics: metrics,
-        devicePixelRatio: _currentDevicePixelRatio,
+        devicePixelRatio: _devicePixelRatio,
       ),
     );
     final atlas = _atlasHandle.atlas;
@@ -222,8 +251,14 @@ class TerminalRenderBox extends RenderBox {
       state: _paintState,
       onImageReady: markNeedsPaint,
     );
+  }
 
-    _applyTerminalThemeColors();
+  Terminal get _terminal => _frameSource.terminal;
+
+  set surfacePadding(EdgeInsets value) {
+    if (_surfacePadding == value) return;
+    _surfacePadding = value;
+    markNeedsLayout();
   }
 
   bool get blinkVisible => _paintState.blinkVisible;
@@ -315,16 +350,25 @@ class TerminalRenderBox extends RenderBox {
     markNeedsLayout();
   }
 
-  set onResize(OnResize? value) => _onResize = value;
+  set onGeometryChanged(ValueChanged<TerminalResizeEvent> value) =>
+      _onGeometryChanged = value;
 
-  set onViewportChanged(VoidCallback? value) => _onViewportChanged = value;
+  set devicePixelRatio(double value) {
+    if (_devicePixelRatio == value) return;
+    _devicePixelRatio = value;
+    markNeedsLayout();
+  }
 
-  set renderObserver(TerminalRenderObserver value) {
-    if (_renderObserver == value) return;
-    if (attached) _renderObserver.removeListener(_onRenderObserverChanged);
-    _renderObserver = value;
-    if (attached) _renderObserver.addListener(_onRenderObserverChanged);
-    _onRenderObserverChanged();
+  set onViewportRowChanged(ValueChanged<int> value) =>
+      _onViewportRowChanged = value;
+
+  bool get focused => _paintState.cursorFocused;
+
+  set focused(bool value) {
+    if (_paintState.cursorFocused == value) return;
+    _paintState.cursorFocused = value;
+    _pipeline.refreshCursorGlyph();
+    markNeedsPaint();
   }
 
   set renderCache(TerminalRenderCache value) {
@@ -335,12 +379,19 @@ class TerminalRenderBox extends RenderBox {
     if (atlasChanged) _markFrameDirty();
   }
 
-  set terminal(Terminal value) {
-    if (_terminal == value) return;
-    if (attached) _terminal.removeListener(_onTerminalChanged);
-    _terminal = value;
-    if (attached) _terminal.addListener(_onTerminalChanged);
-    _applyTerminalThemeColors();
+  set frameSource(TerminalFrameSource value) {
+    if (identical(_frameSource, value)) return;
+    if (attached) _frameSource.removeListener(_onFrameChanged);
+    final terminalChanged = !identical(_terminal, value.terminal);
+    _frameSource = value;
+    if (attached) _frameSource.addListener(_onFrameChanged);
+    if (terminalChanged) {
+      _stickToBottom = true;
+      _primaryStickToBottom = null;
+      _cellWidthPx = 0;
+      _cellHeightPx = 0;
+      _pendingViewportRow = null;
+    }
     _needsFrameSync = true;
     markNeedsLayout();
   }
@@ -362,7 +413,6 @@ class TerminalRenderBox extends RenderBox {
         oldTheme.fontFamily != value.fontFamily ||
         !_listEquals(oldTheme.fontFamilyFallback, value.fontFamilyFallback);
     _paintState.updateTheme(value);
-    _applyTerminalThemeColors();
     _pipeline.markAllRowsDirty();
     _needsFrameSync = true;
 
@@ -377,8 +427,7 @@ class TerminalRenderBox extends RenderBox {
   void attach(PipelineOwner owner) {
     super.attach(owner);
     _offset.addListener(_onScroll);
-    _renderObserver.addListener(_onRenderObserverChanged);
-    _terminal.addListener(_onTerminalChanged);
+    _frameSource.addListener(_onFrameChanged);
     markNeedsLayout();
   }
 
@@ -396,20 +445,13 @@ class TerminalRenderBox extends RenderBox {
           value: _paintState.blinkVisible,
           ifTrue: 'cursor visible',
         ),
-      )
-      ..add(
-        DiagnosticsProperty<TerminalRenderObserver?>(
-          'renderObserver',
-          _renderObserver,
-        ),
       );
   }
 
   @override
   void detach() {
     _offset.removeListener(_onScroll);
-    _renderObserver.removeListener(_onRenderObserverChanged);
-    _terminal.removeListener(_onTerminalChanged);
+    _frameSource.removeListener(_onFrameChanged);
     super.detach();
   }
 
@@ -440,73 +482,83 @@ class TerminalRenderBox extends RenderBox {
   @override
   void performLayout() {
     _performingLayout = true;
+    try {
+      final maxW = constraints.hasBoundedWidth ? constraints.maxWidth : 0.0;
+      final maxH = constraints.hasBoundedHeight ? constraints.maxHeight : 0.0;
+      final (newCols, newRows) = _paintState.metrics.gridSize(maxW, maxH);
 
-    final maxW = constraints.hasBoundedWidth ? constraints.maxWidth : 0.0;
-    final maxH = constraints.hasBoundedHeight ? constraints.maxHeight : 0.0;
-    final (newCols, newRows) = _paintState.metrics.gridSize(maxW, maxH);
+      size = constraints.constrain(
+        Size(
+          newCols * _paintState.metrics.cellWidth,
+          newRows * _paintState.metrics.cellHeight,
+        ),
+      );
 
-    size = constraints.constrain(
-      Size(
-        newCols * _paintState.metrics.cellWidth,
-        newRows * _paintState.metrics.cellHeight,
-      ),
-    );
+      final dpr = _devicePixelRatio;
+      final atlasReconfigured = _acquireAtlasForCurrentConfig(dpr: dpr);
 
-    final dpr = _currentDevicePixelRatio;
-    final atlasReconfigured = _acquireAtlasForCurrentConfig(dpr: dpr);
-
-    final gridChanged =
-        newCols != _paintState.cols || newRows != _paintState.rows;
-    if (gridChanged) {
-      _paintState.cols = newCols;
-      _paintState.rows = newRows;
-      _paintState.devicePixelRatio = dpr;
-      if (newCols > 0 && newRows > 0) {
-        _pipeline.configureGrid(newRows, newCols);
-        // Cell size is reported in physical pixels so size-report
-        // escapes and Kitty graphics geometry match a native terminal
-        // at the same DPI.
-        _terminal.resize(
-          cols: newCols,
-          rows: newRows,
-          cellWidthPx: (_paintState.metrics.cellWidth * dpr).round(),
-          cellHeightPx: (_paintState.metrics.cellHeight * dpr).round(),
-        );
-        _onResize?.call(newCols, newRows);
+      final gridChanged =
+          newCols != _paintState.cols || newRows != _paintState.rows;
+      final cellWidthPx = (_paintState.metrics.cellWidth * dpr).round();
+      final cellHeightPx = (_paintState.metrics.cellHeight * dpr).round();
+      final logicalMetricsChanged =
+          _paintState.metrics.cellWidth != _lastCellWidth ||
+          _paintState.metrics.cellHeight != _lastCellHeight;
+      final devicePixelRatioChanged = dpr != _lastDevicePixelRatio;
+      final geometryChanged =
+          gridChanged ||
+          cellWidthPx != _cellWidthPx ||
+          cellHeightPx != _cellHeightPx ||
+          logicalMetricsChanged ||
+          devicePixelRatioChanged ||
+          _surfacePadding != _lastSurfacePadding;
+      if (_paintState.devicePixelRatio != dpr) {
+        _paintState.devicePixelRatio = dpr;
       }
-    } else if (_paintState.devicePixelRatio != dpr) {
-      _paintState.devicePixelRatio = dpr;
+      if (geometryChanged) {
+        _paintState.cols = newCols;
+        _paintState.rows = newRows;
+        if (newCols > 0 && newRows > 0) {
+          if (gridChanged) _pipeline.configureGrid(newRows, newCols);
+          _onGeometryChanged(
+            TerminalResizeEvent(
+              cols: newCols,
+              rows: newRows,
+              cellWidth: _paintState.metrics.cellWidth,
+              cellHeight: _paintState.metrics.cellHeight,
+              paddingLeft: _surfacePadding.left,
+              paddingRight: _surfacePadding.right,
+              paddingTop: _surfacePadding.top,
+              paddingBottom: _surfacePadding.bottom,
+              devicePixelRatio: dpr,
+            ),
+          );
+        }
+        _cellWidthPx = cellWidthPx;
+        _cellHeightPx = cellHeightPx;
+        _lastCellWidth = _paintState.metrics.cellWidth;
+        _lastCellHeight = _paintState.metrics.cellHeight;
+        _lastDevicePixelRatio = dpr;
+      }
+      _lastSurfacePadding = _surfacePadding;
+
+      _syncScrollLayout();
+
+      // Grid changes invalidate every row's sprite slot layout. Atlas
+      // rebinding invalidates atlas references inside the pipeline.
+      if (gridChanged) _pipeline.markAllRowsDirty();
+
+      if (geometryChanged || atlasReconfigured) _markFrameDirty();
+    } finally {
+      _performingLayout = false;
     }
-
-    _syncScrollLayout();
-
-    // Grid changes invalidate every row's sprite slot layout. Atlas
-    // rebinding invalidates atlas references inside the pipeline.
-    if (gridChanged) _pipeline.markAllRowsDirty();
-
-    if (gridChanged || atlasReconfigured) _markFrameDirty();
-
-    _performingLayout = false;
-  }
-
-  void _applyTerminalThemeColors() {
-    _terminal.foreground = _paintState.theme.foreground.toRgbColor();
-    _terminal.background = _paintState.theme.background.toRgbColor();
-    // Sentinel cursor colors (cellForeground/cellBackground) can't be
-    // reported as a single RGB, so we only push a fixed color down to
-    // libghostty; the flterm cursor painter resolves sentinels locally.
-    _terminal.cursorColor = _paintState.theme.cursor.color?.fixedColor
-        ?.toRgbColor();
-    _terminal.palette = [
-      for (var i = 0; i < 256; i++) _paintState.theme.palette[i].toRgbColor(),
-    ];
   }
 
   bool _acquireAtlasForCurrentConfig({double? dpr, bool force = false}) {
     final config = AtlasConfig.fromTheme(
       theme: _paintState.theme,
       metrics: _paintState.metrics,
-      devicePixelRatio: dpr ?? _currentDevicePixelRatio,
+      devicePixelRatio: dpr ?? _devicePixelRatio,
     );
     if (!force && config == _atlasHandle.config) return false;
 
@@ -515,15 +567,6 @@ class TerminalRenderBox extends RenderBox {
     _pipeline.bindAtlas(_atlasHandle.atlas);
     previousHandle.release();
     return true;
-  }
-
-  double get _currentDevicePixelRatio {
-    return WidgetsBinding
-        .instance
-        .platformDispatcher
-        .views
-        .first
-        .devicePixelRatio;
   }
 
   static bool _listEquals(List<String> a, List<String> b) {
@@ -537,12 +580,6 @@ class TerminalRenderBox extends RenderBox {
 
   void _markFrameDirty() {
     _needsFrameSync = true;
-    markNeedsPaint();
-  }
-
-  void _onRenderObserverChanged() {
-    _paintState.cursorFocused = _renderObserver.hasFocus;
-    _pipeline.refreshCursorGlyph();
     markNeedsPaint();
   }
 
@@ -563,8 +600,12 @@ class TerminalRenderBox extends RenderBox {
     final targetRow = (pixels / cellHeight).floor();
     if (targetRow == scrollbar.offset) return;
 
-    _terminal.scrollToRow(targetRow);
-    _onViewportChanged?.call();
+    _applyingViewportIntent = true;
+    try {
+      _onViewportRowChanged(targetRow);
+    } finally {
+      _applyingViewportIntent = false;
+    }
     _markFrameDirty();
   }
 
@@ -573,10 +614,24 @@ class TerminalRenderBox extends RenderBox {
   // When scrollback length changes, a layout pass is needed because scroll
   // extents must be recalculated. For normal output (same scrollback
   // length), only a repaint is needed.
-  void _onTerminalChanged() {
+  void _onFrameChanged() {
     if (_paintState.rows == 0 || _performingLayout) return;
+    if (_applyingViewportIntent) {
+      _markFrameDirty();
+      return;
+    }
 
-    if (_terminal.scrollbackRows != _lastScrollbackRows) {
+    final scrollbar = _terminal.scrollbar;
+    final scrollbackLen = scrollbar.total - scrollbar.visible;
+    final flutterRow = (_offset.pixels / _paintState.metrics.cellHeight)
+        .floor();
+    if (flutterRow != scrollbar.offset) {
+      _pendingViewportRow = scrollbar.offset;
+      _stickToBottom = scrollbackLen <= 0 || scrollbar.offset >= scrollbackLen;
+    }
+
+    if (_terminal.scrollbackRows != _lastScrollbackRows ||
+        _pendingViewportRow != null) {
       _needsFrameSync = true;
       markNeedsLayout();
       return;
@@ -596,16 +651,33 @@ class TerminalRenderBox extends RenderBox {
     _offset.applyViewportDimension(size.height);
 
     if (_terminal.activeScreen == .alternate) {
+      _primaryStickToBottom ??= _stickToBottom;
+      _pendingViewportRow = null;
       _offset.applyContentDimensions(0, 0);
       _lastScrollbackRows = 0;
       _stickToBottom = true;
       return;
     }
 
+    final primaryStickToBottom = _primaryStickToBottom;
+    if (primaryStickToBottom != null) {
+      _stickToBottom = primaryStickToBottom;
+      _primaryStickToBottom = null;
+    }
+
     final scrollbar = _terminal.scrollbar;
     final scrollbackLen = scrollbar.total - scrollbar.visible;
     final cellHeight = _paintState.metrics.cellHeight;
     final maxExtent = scrollbackLen * cellHeight;
+
+    final pendingViewportRow = _pendingViewportRow;
+    _pendingViewportRow = null;
+    if (pendingViewportRow != null) {
+      final targetPixels =
+          pendingViewportRow.clamp(0, scrollbackLen) * cellHeight;
+      final correction = targetPixels - _offset.pixels;
+      if (correction.abs() > 0.01) _offset.correctBy(correction);
+    }
 
     // Detect if the terminal was scrolled to bottom externally.
     if (!_stickToBottom &&
@@ -618,8 +690,7 @@ class TerminalRenderBox extends RenderBox {
       final correction = maxExtent - _offset.pixels;
       if (correction.abs() > 0.01) _offset.correctBy(correction);
       if (scrollbar.offset < scrollbackLen) {
-        _terminal.scrollToBottom();
-        _onViewportChanged?.call();
+        _onViewportRowChanged(scrollbackLen);
       }
     }
     _offset.applyContentDimensions(0, maxExtent);
@@ -640,12 +711,4 @@ class TerminalRenderBox extends RenderBox {
       linkSnapshot: _linkSnapshot,
     );
   }
-}
-
-extension on Color {
-  RgbColor toRgbColor() => RgbColor(
-    (r * 255.0).round().clamp(0, 255),
-    (g * 255.0).round().clamp(0, 255),
-    (b * 255.0).round().clamp(0, 255),
-  );
 }
