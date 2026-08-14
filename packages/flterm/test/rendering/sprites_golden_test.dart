@@ -84,6 +84,9 @@ void main() {
       double? maxWidth,
       double? maxHeight,
     }) {
+      applyTerminalTheme(terminal, theme);
+      final frameSource = TerminalFrameSource(terminal);
+      addTearDown(frameSource.dispose);
       final width = maxWidth ?? cols * metrics.cellWidth;
       final height = maxHeight ?? rows * metrics.cellHeight;
       return Directionality(
@@ -93,12 +96,14 @@ void main() {
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: width, maxHeight: height),
             child: TerminalRenderer(
-              terminal: terminal,
+              frameSource: frameSource,
               theme: theme,
               metrics: metrics,
               offset: ViewportOffset.zero(),
               renderCache: renderCache(),
-              renderObserver: const _TestRenderObserver(),
+              focused: true,
+              onGeometryChanged: (_) {},
+              onViewportRowChanged: (_) {},
             ),
           ),
         ),
@@ -323,17 +328,4 @@ void main() {
       });
     });
   });
-}
-
-class _TestRenderObserver implements TerminalRenderObserver {
-  const _TestRenderObserver();
-
-  @override
-  bool get hasFocus => true;
-
-  @override
-  void addListener(VoidCallback listener) {}
-
-  @override
-  void removeListener(VoidCallback listener) {}
 }

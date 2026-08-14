@@ -2,11 +2,40 @@
 
 ## Unreleased
 
+### Breaking
+
+- **Renderer-neutral controller**: focus and soft-keyboard APIs move from
+  `TerminalController` to `TerminalView`. Pass a `FocusNode` for imperative
+  focus control and configure soft-keyboard access with `showKeyboard`.
+- **Controller contract**: `TerminalController` supports one attached
+  `TerminalView`. A second concurrent attachment throws `StateError`.
+- **Callback configuration**: `onBell`, `onOutput`, `onPwdChanged`, `onResize`,
+  and `onTitleChanged` are setter-only. Retain callback references if their
+  identity is needed elsewhere.
+- **Removed public types**: `KeyboardState` and `TerminalScrollPosition` are no
+  longer exported. Use `FocusNode`, `TerminalView.showKeyboard`, and the
+  standard `ScrollPosition` interface.
+
+### Changed
+
+- **Resize lifecycle**: `onResize` reports only after `TerminalView` commits a
+  measured grid; assigning it later immediately reports that grid.
+  Cell-pixel-only changes skip the callback, and in-band output is emitted
+  first.
+
 ### Fixed
 
 - **Text input recovery**: terminal clients reconnect when another input client
   takes the platform text input connection, including while composition is
   active.
+- **Keyboard and IME input**: AltGr printable input no longer emits synthetic
+  Control or Alt bytes, Kitty keyboard reports include Caps Lock and Num Lock,
+  and newline/deletion deduplication no longer duplicates or suppresses input.
+- **Pointer input**: mouse and stylus button changes remain accurate during a
+  gesture, stylus drags select text, and a gesture no longer switches between
+  selection and terminal mouse reporting.
+- **View updates**: controller swaps transfer terminal focus correctly, and
+  changing `TerminalView.fontData` refreshes cell metrics.
 
 ## 0.0.5
 

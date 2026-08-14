@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flterm/src/rendering/terminal_frame_source.dart';
 import 'package:flterm/src/rendering/terminal_render_cache.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -48,6 +49,9 @@ final class FrameBenchmarkHarness {
           cache: TerminalRenderCache(),
         ),
     ];
+    final frameSources = [
+      for (final resource in resources) TerminalFrameSource(resource.terminal),
+    ];
     final retainedAtlases = <TerminalAtlasHandle>[];
     try {
       await _tester.pumpWidget(const SizedBox.shrink());
@@ -58,7 +62,7 @@ final class FrameBenchmarkHarness {
             _binding.wrapWithDefaultView(
               BenchmarkTerminalSurface(
                 key: ValueKey(sample),
-                terminal: resource.terminal,
+                frameSource: frameSources[sample],
                 cache: resource.cache,
               ),
             ),
@@ -80,6 +84,9 @@ final class FrameBenchmarkHarness {
       for (final handle in retainedAtlases) {
         handle.release();
       }
+      for (final source in frameSources) {
+        source.dispose();
+      }
       for (final resource in resources) {
         resource.cache.dispose();
         resource.terminal.dispose();
@@ -99,13 +106,15 @@ final class FrameBenchmarkHarness {
     List<Uint8List>? updates,
   }) async {
     final terminal = Terminal(cols: benchmarkColumns, rows: benchmarkRows);
+    final frameSource = TerminalFrameSource(terminal);
     final cache = TerminalRenderCache();
     addTearDown(terminal.dispose);
+    addTearDown(frameSource.dispose);
     addTearDown(cache.dispose);
     addTearDown(() => _tester.pumpWidget(const SizedBox.shrink()));
 
     await _tester.pumpWidget(
-      BenchmarkTerminalSurface(terminal: terminal, cache: cache),
+      BenchmarkTerminalSurface(frameSource: frameSource, cache: cache),
     );
     terminal.write(TerminalBenchmarkFixture.fullFrames(count: 1).single);
     await _tester.pump();
@@ -135,12 +144,14 @@ final class FrameBenchmarkHarness {
     required List<Uint8List> updates,
   }) async {
     final terminal = Terminal(cols: benchmarkColumns, rows: benchmarkRows);
+    final frameSource = TerminalFrameSource(terminal);
     final cache = TerminalRenderCache();
     addTearDown(terminal.dispose);
+    addTearDown(frameSource.dispose);
     addTearDown(cache.dispose);
     addTearDown(() => _tester.pumpWidget(const SizedBox.shrink()));
     await _tester.pumpWidget(
-      BenchmarkTerminalSurface(terminal: terminal, cache: cache),
+      BenchmarkTerminalSurface(frameSource: frameSource, cache: cache),
     );
 
     final summary = await _capture(() async {

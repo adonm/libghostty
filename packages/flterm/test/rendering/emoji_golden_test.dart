@@ -97,7 +97,10 @@ void main() {
       bool focused = true,
     }) async {
       selection?.applyTo(terminal);
+      final frameSource = TerminalFrameSource(terminal);
+      addTearDown(frameSource.dispose);
       final resolvedTheme = theme ?? emojiTheme;
+      applyTerminalTheme(terminal, resolvedTheme);
       final width = cols * metrics.cellWidth;
       final height = rows * metrics.cellHeight;
       tester.view.devicePixelRatio = 1.0;
@@ -115,12 +118,14 @@ void main() {
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: width, maxHeight: height),
               child: TerminalRenderer(
-                terminal: terminal,
+                frameSource: frameSource,
                 theme: resolvedTheme,
                 metrics: metrics,
                 offset: ViewportOffset.zero(),
                 renderCache: renderCache(),
-                renderObserver: _TestRenderObserver(hasFocus: focused),
+                focused: focused,
+                onGeometryChanged: (_) {},
+                onViewportRowChanged: (_) {},
               ),
             ),
           ),
@@ -448,17 +453,4 @@ void main() {
       });
     });
   });
-}
-
-class _TestRenderObserver implements TerminalRenderObserver {
-  @override
-  final bool hasFocus;
-
-  const _TestRenderObserver({this.hasFocus = true});
-
-  @override
-  void addListener(VoidCallback listener) {}
-
-  @override
-  void removeListener(VoidCallback listener) {}
 }
