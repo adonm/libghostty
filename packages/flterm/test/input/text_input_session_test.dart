@@ -1,12 +1,12 @@
-import 'package:flterm/src/input/terminal_input_client.dart';
+import 'package:flterm/src/input/text_input_session.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('TerminalInputClient', () {
-    late TerminalInputClient handler;
+  group('TextInputSession', () {
+    late TextInputSession handler;
     late List<String> commits;
     late List<int> deletes;
     late List<void> newlines;
@@ -52,7 +52,7 @@ void main() {
     }
 
     setUp(() {
-      handler = TerminalInputClient()..viewId = 0;
+      handler = TextInputSession()..viewId = 0;
       commits = [];
       deletes = [];
       newlines = [];
@@ -978,7 +978,7 @@ void main() {
 
     group('ensureAttached', () {
       test('throws when no Flutter view is set', () {
-        final client = TerminalInputClient();
+        final client = TextInputSession();
         addTearDown(client.detach);
 
         expect(
@@ -1014,7 +1014,7 @@ void main() {
       test('reopens a connection orphaned by another client', () {
         final calls = recordTextInputCalls();
         handler.ensureAttached();
-        final other = TerminalInputClient()..viewId = 0;
+        final other = TextInputSession()..viewId = 0;
         addTearDown(other.detach);
         other.ensureAttached();
         calls.clear();
@@ -1035,7 +1035,7 @@ void main() {
             composing: TextRange(start: 1, end: 3),
           ),
         );
-        final other = TerminalInputClient()..viewId = 0;
+        final other = TextInputSession()..viewId = 0;
         addTearDown(other.detach);
         other.ensureAttached();
         preedit.clear();

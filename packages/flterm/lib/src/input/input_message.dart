@@ -1,7 +1,7 @@
 import 'package:libghostty/libghostty.dart';
 
 /// The outcome of routing normalized keyboard input.
-enum TerminalKeyDisposition {
+enum KeyDisposition {
   /// The terminal did not consume the input.
   ignored,
 
@@ -13,7 +13,7 @@ enum TerminalKeyDisposition {
 }
 
 /// Keyboard input normalized independently of Flutter key event types.
-final class TerminalKeyInput {
+final class KeyInput {
   /// The terminal key action.
   final KeyAction action;
 
@@ -35,7 +35,7 @@ final class TerminalKeyInput {
   /// The key's code point without modifiers, or zero when unavailable.
   final int unshiftedCodepoint;
 
-  const TerminalKeyInput({
+  const KeyInput({
     required this.action,
     required this.character,
     required this.composing,
@@ -47,7 +47,7 @@ final class TerminalKeyInput {
 }
 
 /// Normalized mouse input for the terminal protocol.
-final class TerminalMouseEvent {
+final class MouseInput {
   /// The mouse action being reported.
   final MouseAction action;
 
@@ -66,7 +66,7 @@ final class TerminalMouseEvent {
   /// The logical vertical offset from the terminal grid origin.
   final double pixelY;
 
-  const TerminalMouseEvent({
+  const MouseInput({
     required this.action,
     required this.anyButtonPressed,
     required this.button,
@@ -77,10 +77,7 @@ final class TerminalMouseEvent {
 }
 
 /// Quantized terminal scroll input captured for one gesture target.
-final class TerminalScrollEvent {
-  /// Signed horizontal cell steps. Negative values scroll left.
-  final int horizontal;
-
+final class ScrollInput {
   /// The modifier state captured when the scroll target was selected.
   final Mods mods;
 
@@ -90,18 +87,21 @@ final class TerminalScrollEvent {
   /// The target's logical vertical offset from the terminal grid origin.
   final double pixelY;
 
-  /// Whether to encode mouse reports instead of alternate-scroll keys.
-  final bool reportMouse;
-
   /// Signed vertical cell steps. Negative values scroll up.
   final int vertical;
 
-  const TerminalScrollEvent({
-    required this.horizontal,
+  /// Signed horizontal cell steps. Negative values scroll left.
+  final int horizontal;
+
+  /// Whether to encode mouse reports instead of alternate-scroll keys.
+  final bool reportMouse;
+
+  const ScrollInput({
     required this.mods,
     required this.pixelX,
     required this.pixelY,
-    required this.reportMouse,
     required this.vertical,
+    required this.horizontal,
+    required this.reportMouse,
   });
 }

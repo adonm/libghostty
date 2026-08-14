@@ -12,17 +12,17 @@ import 'terminal_painter.dart';
 /// color and then draws per-cell explicit background rects on top via a
 /// batched [Canvas.drawVertices] call.
 ///
-/// When [TerminalPaintState.backgroundOpacity] is less than 1.0, skips
+/// When [PaintState.backgroundOpacity] is less than 1.0, skips
 /// the grid fill so the backdrop behind the repaint boundary layer
 /// shows through on default background cells; filling here would
 /// composite twice against that backdrop. Per-cell explicit background
 /// rects still render on top, with alpha scaled by the frame builder when
-/// [TerminalPaintState.backgroundOpacityCells] is true.
+/// [PaintState.backgroundOpacityCells] is true.
 class BackgroundPainter implements TerminalPainter {
   final Paint _fillPaint;
   final Paint _vertexPaint;
   final SpriteBuffer _sprites;
-  final TerminalPaintState _state;
+  final PaintState _state;
 
   BackgroundPainter(this._state, this._sprites)
     : _fillPaint = Paint(),

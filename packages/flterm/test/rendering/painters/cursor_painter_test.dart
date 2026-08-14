@@ -30,7 +30,7 @@ void main() {
     Future<ByteData> render({bool preeditActive = false}) async {
       final atlas = Atlas(config());
       addTearDown(atlas.dispose);
-      final state = TerminalPaintState(TerminalTheme.dark(), metrics)
+      final state = PaintState(TerminalTheme.dark(), metrics)
         ..cols = 2
         ..rows = 1
         ..cursor = const Cursor()

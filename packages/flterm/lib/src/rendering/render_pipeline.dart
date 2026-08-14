@@ -5,30 +5,30 @@ import 'package:libghostty/libghostty.dart';
 import '../links/link_snapshot.dart';
 import 'atlas/atlas.dart';
 import 'atlas/sprite_buffer.dart';
+import 'frame_builder.dart';
 import 'paint_state.dart';
-import 'terminal_frame_builder.dart';
-import 'terminal_painter_stack.dart';
+import 'painter_stack.dart';
 
 /// Owns the frame buffers, frame builder, and paint stack for one render box.
 ///
 /// [TerminalRenderBox] owns widget/render-object lifecycle. This class owns
 /// the terminal frame pipeline that must be rebound together when the atlas or
 /// grid changes.
-final class TerminalRenderPipeline {
-  final TerminalPaintState _state;
+final class RenderPipeline {
+  final PaintState _state;
   final SpriteBuffer _sprites;
-  late final TerminalPainterStack _painters;
-  late TerminalFrameBuilder _frameBuilder;
+  late final PainterStack _painters;
+  late FrameBuilder _frameBuilder;
   var _needsTerminalSync = false;
 
-  TerminalRenderPipeline({
+  RenderPipeline({
     required Atlas atlas,
-    required TerminalPaintState state,
+    required PaintState state,
     required void Function() onImageReady,
   }) : _state = state,
        _sprites = SpriteBuffer() {
-    _frameBuilder = TerminalFrameBuilder(atlas, _sprites, _state);
-    _painters = TerminalPainterStack(
+    _frameBuilder = FrameBuilder(atlas, _sprites, _state);
+    _painters = PainterStack(
       atlas: atlas,
       state: state,
       sprites: _sprites,
@@ -38,7 +38,7 @@ final class TerminalRenderPipeline {
 
   void bindAtlas(Atlas atlas) {
     final previousBuilder = _frameBuilder;
-    _frameBuilder = TerminalFrameBuilder(atlas, _sprites, _state);
+    _frameBuilder = FrameBuilder(atlas, _sprites, _state);
     if (_state.rows > 0 && _state.cols > 0) {
       _frameBuilder.configure(_state.rows, _state.cols);
       _frameBuilder.markAllRowsDirty();

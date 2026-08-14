@@ -11,12 +11,12 @@ import 'package:flterm/src/foundation/terminal_theme.dart';
 import 'package:flterm/src/links/link_snapshot.dart';
 import 'package:flterm/src/rendering/atlas/atlas.dart';
 import 'package:flterm/src/rendering/paint_state.dart';
-import 'package:flterm/src/rendering/terminal_render_pipeline.dart';
+import 'package:flterm/src/rendering/render_pipeline.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart';
 
 void main() {
-  group('TerminalRenderPipeline', () {
+  group('RenderPipeline', () {
     const metrics = CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12);
 
     AtlasConfig config({double fontSize = 14}) {
@@ -30,7 +30,7 @@ void main() {
       );
     }
 
-    void paint(TerminalRenderPipeline pipeline) {
+    void paint(RenderPipeline pipeline) {
       final recorder = PictureRecorder();
       final canvas = Canvas(recorder);
       pipeline.paint(canvas);
@@ -43,20 +43,17 @@ void main() {
 
     late Terminal terminal;
     late Atlas atlas;
-    late TerminalPaintState state;
-    late TerminalRenderPipeline pipeline;
+    late PaintState state;
+    late RenderPipeline pipeline;
 
     setUp(() {
       terminal = Terminal(cols: 8, rows: 2);
       atlas = Atlas(config());
-      state = TerminalPaintState(TerminalTheme.dark(), metrics)
+      state = PaintState(TerminalTheme.dark(), metrics)
         ..cols = 8
         ..rows = 2;
-      pipeline = TerminalRenderPipeline(
-        atlas: atlas,
-        state: state,
-        onImageReady: () {},
-      )..configureGrid(2, 8);
+      pipeline = RenderPipeline(atlas: atlas, state: state, onImageReady: () {})
+        ..configureGrid(2, 8);
     });
 
     tearDown(() {

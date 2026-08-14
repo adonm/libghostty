@@ -86,8 +86,8 @@ void main() {
       return out;
     }
 
-    TerminalPaintState stateFor({required int cols, required int rows}) {
-      return TerminalPaintState(
+    PaintState stateFor({required int cols, required int rows}) {
+      return PaintState(
           TerminalTheme.dark(),
           const CellMetrics(cellWidth: 1, cellHeight: 1, baseline: 1),
         )

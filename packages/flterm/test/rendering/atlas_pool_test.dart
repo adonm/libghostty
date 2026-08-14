@@ -2,11 +2,11 @@ import 'dart:ui';
 
 import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/rendering/atlas/atlas_config.dart';
-import 'package:flterm/src/rendering/terminal_render_cache.dart';
+import 'package:flterm/src/rendering/atlas_pool.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('TerminalRenderCache', () {
+  group('AtlasPool', () {
     AtlasConfig key({double fontSize = 14}) {
       return AtlasConfig(
         fontSize: fontSize,
@@ -19,23 +19,23 @@ void main() {
     }
 
     test('shares atlas for matching keys', () {
-      final cache = TerminalRenderCache();
-      addTearDown(cache.dispose);
+      final pool = AtlasPool();
+      addTearDown(pool.dispose);
 
-      final first = cache.acquireAtlas(key());
-      final second = cache.acquireAtlas(key());
+      final first = pool.acquireAtlas(key());
+      final second = pool.acquireAtlas(key());
       addTearDown(second.release);
       addTearDown(first.release);
 
       expect(second.atlas, same(first.atlas));
     });
 
-    test('keeps atlas alive until the last handle is released', () {
-      final cache = TerminalRenderCache();
-      addTearDown(cache.dispose);
+    test('keeps atlas alive until the last lease is released', () {
+      final pool = AtlasPool();
+      addTearDown(pool.dispose);
 
-      final first = cache.acquireAtlas(key());
-      final second = cache.acquireAtlas(key());
+      final first = pool.acquireAtlas(key());
+      final second = pool.acquireAtlas(key());
       final atlas = first.atlas;
 
       first.release();
@@ -46,11 +46,11 @@ void main() {
     });
 
     test('does not share atlas across font-affecting keys', () {
-      final cache = TerminalRenderCache();
-      addTearDown(cache.dispose);
+      final pool = AtlasPool();
+      addTearDown(pool.dispose);
 
-      final first = cache.acquireAtlas(key());
-      final second = cache.acquireAtlas(key(fontSize: 16));
+      final first = pool.acquireAtlas(key());
+      final second = pool.acquireAtlas(key(fontSize: 16));
       addTearDown(second.release);
       addTearDown(first.release);
 

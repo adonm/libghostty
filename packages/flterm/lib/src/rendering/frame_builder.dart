@@ -29,7 +29,7 @@ bool _isOperator(int cp) {
 }
 
 int _resolveColorArgb(
-  TerminalPaintState state,
+  PaintState state,
   CellColor color, {
   required bool isForeground,
   int? defaultForeground,
@@ -46,7 +46,7 @@ int _resolveColorArgb(
 }
 
 (int foreground, int background) _resolveStyleColors(
-  TerminalPaintState state,
+  PaintState state,
   Style style, {
   int? defaultForeground,
   int? defaultBackground,
@@ -89,7 +89,7 @@ int _resolveColorArgb(
 /// Tracks per-row dirtiness from sources outside libghostty's own row-dirty
 /// flag, such as selection, blink, layout, or atlas changes.
 ///
-/// [TerminalFrameBuilder] combines this with [RowIterator.dirty] when deciding
+/// [FrameBuilder] combines this with [RowIterator.dirty] when deciding
 /// whether to re-emit each row, and clears it at the end of every build.
 class RowDirtyTracker {
   var _rows = Uint8List(0);
@@ -145,26 +145,26 @@ class RowDirtyTracker {
 /// built-in sprites, backgrounds, and decorations. The render object owns
 /// lifecycle/layout/paint ordering; this class owns frame state sync, dirty-row
 /// buffer generation, cursor visual resolution, and cell-content routing.
-class TerminalFrameBuilder {
+class FrameBuilder {
   final Atlas _atlas;
+  final PaintState _state;
   final RowIterator _rows;
   final CellIterator _cells;
   final SpriteBuffer _sprites;
   final RenderState _renderState;
-  final TerminalPaintState _state;
   final RowDirtyTracker _dirtyRows;
   final CellContentResolver _content;
 
-  late final _TerminalRowBuilder _rowBuilder;
+  late final _RowBuilder _rowBuilder;
   late final _CursorFrameBuilder _cursorBuilder;
 
-  TerminalFrameBuilder(this._atlas, this._sprites, this._state)
+  FrameBuilder(this._atlas, this._sprites, this._state)
     : _content = CellContentResolver(_atlas),
       _renderState = RenderState(),
       _rows = RowIterator(),
       _cells = CellIterator(),
       _dirtyRows = RowDirtyTracker() {
-    _rowBuilder = _TerminalRowBuilder(
+    _rowBuilder = _RowBuilder(
       atlas: _atlas,
       sprites: _sprites,
       state: _state,
@@ -314,7 +314,7 @@ final class _CursorCellSnapshot {
 
 /// Resolves cursor geometry, colors, and block-cursor glyph state.
 final class _CursorFrameBuilder {
-  final TerminalPaintState _state;
+  final PaintState _state;
   final CellContentResolver _content;
   var _cursor = const Cursor();
   _CursorCellSnapshot? _lastCell;
@@ -439,9 +439,9 @@ final class _CursorFrameBuilder {
 
 /// Emits text, emoji, and built-in sprite foreground channels.
 final class _ForegroundEmitter {
+  final PaintState _state;
   final SpriteBuffer _sprites;
   final _FrameSnapshot _frame;
-  final TerminalPaintState _state;
   final CellContentResolver _content;
   final _AsciiOperatorRun _operators;
   TerminalTheme? _lastTextStyleTheme;
@@ -689,7 +689,7 @@ final class _FrameSnapshot {
     return (newAlpha << 24) | (argb & 0x00FFFFFF);
   }
 
-  void update(TerminalPaintState state, {required Atlas atlas}) {
+  void update(PaintState state, {required Atlas atlas}) {
     final metrics = state.metrics;
     cellWidth = metrics.cellWidth;
     cellHeight = metrics.cellHeight;
@@ -930,7 +930,7 @@ final class _StyleResolver {
   // Covers common 256-color fg/bg animation palettes within one frame.
   static const _maxEntries = 1024;
 
-  final TerminalPaintState _state;
+  final PaintState _state;
   final Int32List _gen;
   final Int32List _foreground;
   final Int32List _background;
@@ -1109,10 +1109,10 @@ RgbColor? _rgbColor(Color? color) {
 }
 
 /// Rebuilds dirty rows into background, foreground, and decoration channels.
-final class _TerminalRowBuilder {
+final class _RowBuilder {
   final Atlas _atlas;
+  final PaintState _state;
   final SpriteBuffer _sprites;
-  final TerminalPaintState _state;
   final _FrameSnapshot _frame;
   final _RowBuildState _row;
   final _StyleResolver _styles;
@@ -1122,7 +1122,7 @@ final class _TerminalRowBuilder {
   LinkSnapshot linkSnapshot = .empty;
   var _hasLinks = false;
 
-  _TerminalRowBuilder({
+  _RowBuilder({
     required this._atlas,
     required this._sprites,
     required this._state,

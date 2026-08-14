@@ -8,38 +8,38 @@ import 'package:libghostty/libghostty.dart'
 import 'package:meta/meta.dart';
 
 import '../foundation.dart';
-import '../interaction/terminal_selection.dart';
+import '../interaction/selection_session.dart';
 import '../links/link_interaction.dart';
 import '../links/link_settings.dart';
-import '../view/terminal_view_attachment.dart';
-import 'terminal_input_event.dart';
-import 'terminal_raw_gesture_detector.dart';
-import 'terminal_scroll_gesture_handler.dart';
+import '../view/view_attachment.dart';
+import 'input_message.dart';
+import 'primitive_gesture_detector.dart';
+import 'scroll_gesture_region.dart';
 
 /// Owns pointer-sequence arbitration for one terminal view.
 ///
 /// It keeps mouse reporting, selection, link activation, and cancellation on
 /// the same pointer identity. Terminal-directed wheel, touch, and trackpad
-/// motion is delegated to [TerminalScrollGestureHandler]. All resulting
-/// terminal actions cross [TerminalViewAttachment] as normalized values.
+/// motion is delegated to [ScrollGestureRegion]. All resulting terminal
+/// actions cross [ViewAttachment] as normalized values.
 ///
 /// Pointer ownership is decided once per sequence. Modifier changes may alter
 /// the shape of an active selection, but they do not transfer the sequence to
 /// link activation or terminal mouse reporting. Cancellation releases every
 /// owned interaction before another pointer can claim it.
 @internal
-final class TerminalGestureDetector extends StatefulWidget {
+final class InteractionRegion extends StatefulWidget {
   final Widget child;
   final CellMetrics metrics;
   final LinkInteraction links;
+  final ViewAttachment attachment;
   final ScrollPhysics scrollPhysics;
+  final ViewInteractionState interaction;
   final TerminalGestureSettings settings;
-  final TerminalViewAttachment attachment;
   final ScrollController? scrollController;
-  final TerminalInteractionState interaction;
   final ValueChanged<ActivatedLink>? onLinkActivate;
 
-  const TerminalGestureDetector({
+  const InteractionRegion({
     super.key,
     required this.child,
     required this.links,
@@ -53,12 +53,10 @@ final class TerminalGestureDetector extends StatefulWidget {
   });
 
   @override
-  State<TerminalGestureDetector> createState() =>
-      _TerminalGestureDetectorState();
+  State<InteractionRegion> createState() => _InteractionRegionState();
 }
 
-final class _TerminalGestureDetectorState
-    extends State<TerminalGestureDetector> {
+final class _InteractionRegionState extends State<InteractionRegion> {
   static const _mouseButtons = <int, MouseButton>{
     kPrimaryMouseButton: .left,
     kMiddleMouseButton: .middle,
@@ -83,7 +81,7 @@ final class _TerminalGestureDetectorState
   var _terminalDragActive = false;
   var _terminalOwnsInteraction = false;
 
-  TerminalViewAttachment get _attachment => widget.attachment;
+  ViewAttachment get _attachment => widget.attachment;
 
   @override
   Widget build(BuildContext context) {
@@ -94,13 +92,13 @@ final class _TerminalGestureDetectorState
       onPointerHover: _handleTrackedHover,
       onPointerUp: _handleTrackedUp,
       onPointerCancel: _handleTrackedCancel,
-      child: TerminalScrollGestureHandler(
+      child: ScrollGestureRegion(
         metrics: widget.metrics,
         attachment: widget.attachment,
         physics: widget.scrollPhysics,
         interaction: widget.interaction,
         onScrollStart: _handleScrollStart,
-        child: TerminalRawGestureDetector(
+        child: PrimitiveGestureDetector(
           onTapDown: _handleTapDown,
           onTapUp: _handleTapUp,
           onDragStart: _handleDragStart,
@@ -116,7 +114,7 @@ final class _TerminalGestureDetectorState
   }
 
   @override
-  void didUpdateWidget(TerminalGestureDetector oldWidget) {
+  void didUpdateWidget(InteractionRegion oldWidget) {
     super.didUpdateWidget(oldWidget);
     final attachmentChanged = widget.attachment != oldWidget.attachment;
     if (attachmentChanged) {
@@ -160,7 +158,7 @@ final class _TerminalGestureDetectorState
     }
 
     _attachment.updateSelectionAutoscroll(
-      TerminalSelectionAutoscrollEvent(
+      SelectionAutoscrollInput(
         cell: drag.cell,
         pixelX: drag.localPosition.dx,
         pixelY: drag.localPosition.dy,
@@ -187,7 +185,7 @@ final class _TerminalGestureDetectorState
   }
 
   void _cancelSelectionInteraction(
-    TerminalViewAttachment attachment, {
+    ViewAttachment attachment, {
     bool clearSelection = false,
   }) {
     if (clearSelection || _drag != null || _pressCell != null) {
@@ -285,7 +283,7 @@ final class _TerminalGestureDetectorState
     final settings = widget.settings;
     final cell = widget.metrics.cellAt(position);
     _attachment.handleSelectionPress(
-      TerminalSelectionPressEvent(
+      SelectionPressInput(
         cell: cell,
         pixelX: position.dx,
         pixelY: position.dy,
@@ -459,7 +457,7 @@ final class _TerminalGestureDetectorState
   void _releaseTrackedPointer(
     int pointerId,
     Offset position, {
-    TerminalViewAttachment? attachment,
+    ViewAttachment? attachment,
   }) {
     final pointer = _activePointers[pointerId];
     if (pointer == null) return;
@@ -487,7 +485,7 @@ final class _TerminalGestureDetectorState
     _activePointers.remove(pointerId);
   }
 
-  void _releaseTrackedPointers(TerminalViewAttachment attachment) {
+  void _releaseTrackedPointers(ViewAttachment attachment) {
     _activePointers.removeWhere((_, pointer) => pointer.kind == .touch);
     while (_activePointers.isNotEmpty) {
       final entry = _activePointers.entries.first;
@@ -503,11 +501,11 @@ final class _TerminalGestureDetectorState
     MouseAction action,
     Offset position, {
     MouseButton? button,
-    TerminalViewAttachment? attachment,
+    ViewAttachment? attachment,
   }) {
     final target = attachment ?? _attachment;
     target.handleMouseEvent(
-      TerminalMouseEvent(
+      MouseInput(
         action: action,
         anyButtonPressed: _activePointers.values.any(
           (pointer) => pointer.buttons != 0,
@@ -594,7 +592,7 @@ final class _TerminalGestureDetectorState
     drag.lastRectangle = rectangle;
 
     _attachment.updateSelectionDrag(
-      TerminalSelectionDragEvent(
+      SelectionDragInput(
         cell: clampedCell,
         pixelX: position.dx,
         pixelY: position.dy,
@@ -607,7 +605,7 @@ final class _TerminalGestureDetectorState
     _TrackedPointer pointer,
     int buttons,
     Offset position, {
-    TerminalViewAttachment? attachment,
+    ViewAttachment? attachment,
   }) {
     final nextButtons = buttons & _supportedMouseButtons;
     final previousButtons = pointer.buttons;
@@ -650,7 +648,7 @@ final class _TerminalGestureDetectorState
     _TrackedPointer pointer,
     int buttons,
     Offset position, {
-    TerminalViewAttachment? attachment,
+    ViewAttachment? attachment,
   }) {
     final previousButton = pointer.buttons == 0 ? null : pointer.button;
     final nextButton = _stylusButtonForMask(buttons);

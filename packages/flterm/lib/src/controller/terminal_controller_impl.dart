@@ -1,6 +1,6 @@
 part of 'terminal_controller.dart';
 
-typedef _TerminalObservation = ({
+typedef _Observation = ({
   TerminalScreen activeScreen,
   MouseTracking mouseTracking,
   bool cursorKeyApplication,
@@ -11,9 +11,8 @@ typedef _TerminalObservation = ({
 ///
 /// Flutter lifecycle and device events reach this implementation only after
 /// view-side adapters normalize them into terminal values. Native encoders,
-/// Terminal selection resources, geometry commitment, and public callback
-/// effects stay
-/// within this session boundary.
+/// terminal selection resources, geometry commitment, and public callback
+/// effects remain inside this session boundary.
 final class TerminalControllerImpl extends TerminalController {
   static const _cr = 0x0d;
   static const _formFeed = 0x0c;
@@ -28,14 +27,14 @@ final class TerminalControllerImpl extends TerminalController {
 
   final Terminal _terminal;
   final _viewportChanges = ChangeNotifier();
-  late final TerminalInputEncoder _inputEncoder;
-  late final TerminalSelection _selection;
+  late final InputEncoder _inputEncoder;
+  late final SelectionSession _selection;
 
   ColorScheme _colorScheme = .dark;
-  TerminalGeometry? _committedGeometry;
+  SurfaceGeometry? _committedGeometry;
   TerminalConfig _config;
   var _disposed = false;
-  late _TerminalObservation _observation;
+  late _Observation _observation;
   ClipboardWriteCallback? _onClipboardWrite;
   ValueChanged<Uint8List>? _onOutput;
   VoidCallback? _onPwdChanged;
@@ -49,8 +48,8 @@ final class TerminalControllerImpl extends TerminalController {
     : _config = config,
       _terminal = Terminal(cols: config.cols, rows: config.rows),
       super.base() {
-    _inputEncoder = TerminalInputEncoder(_terminal);
-    _selection = TerminalSelection(_terminal, notifyListeners);
+    _inputEncoder = InputEncoder(_terminal);
+    _selection = SelectionSession(_terminal, notifyListeners);
     installDefaultKittyPngDecoder();
     _wireTerminalCallbacks();
     _applyModes();
@@ -65,9 +64,22 @@ final class TerminalControllerImpl extends TerminalController {
     return _terminal.activeScreen;
   }
 
-  Terminal get terminal {
+  @override
+  TerminalConfig get config {
     _checkNotDisposed();
-    return _terminal;
+    return _config;
+  }
+
+  @override
+  set config(TerminalConfig value) {
+    _checkNotDisposed();
+    if (_config == value) return;
+    _config = value;
+    _applyModes();
+    _applyTerminalOptions();
+    _wireTerminalCallbacks();
+    _observation = _readObservation();
+    notifyListeners();
   }
 
   bool get cursorBlinking {
@@ -75,23 +87,18 @@ final class TerminalControllerImpl extends TerminalController {
     return _observation.cursorBlinking;
   }
 
+  @override
+  bool get hasSelection {
+    _checkNotDisposed();
+    return _selection.hasSelection;
+  }
+
   bool get isDisposed => _disposed;
 
-  Listenable get viewportChanges {
-    _checkNotDisposed();
-    return _viewportChanges;
-  }
-
-  void setColorScheme(ColorScheme value) {
-    _checkNotDisposed();
-    if (_colorScheme == value) return;
-    _colorScheme = value;
-  }
-
   @override
-  TerminalConfig get config {
+  MouseTracking get mouseTracking {
     _checkNotDisposed();
-    return _config;
+    return _observation.mouseTracking;
   }
 
   @override
@@ -101,10 +108,30 @@ final class TerminalControllerImpl extends TerminalController {
   }
 
   @override
+  set onClipboardWrite(ClipboardWriteCallback? value) {
+    _checkNotDisposed();
+    if (identical(_onClipboardWrite, value)) return;
+    _onClipboardWrite = value;
+    _terminal.onClipboardWrite = value;
+  }
+
+  @override
+  set onDesktopNotification(ValueChanged<DesktopNotification>? value) {
+    _checkNotDisposed();
+    _terminal.onDesktopNotification = value;
+  }
+
+  @override
   set onOutput(ValueChanged<Uint8List>? value) {
     _checkNotDisposed();
     _onOutput = value;
     _terminal.onWritePty = value;
+  }
+
+  @override
+  set onProgressReport(ValueChanged<TerminalProgress>? value) {
+    _checkNotDisposed();
+    _terminal.onProgressReport = value;
   }
 
   @override
@@ -130,50 +157,6 @@ final class TerminalControllerImpl extends TerminalController {
   }
 
   @override
-  set config(TerminalConfig value) {
-    _checkNotDisposed();
-    if (_config == value) return;
-    _config = value;
-    _applyModes();
-    _applyTerminalOptions();
-    _wireTerminalCallbacks();
-    _observation = _readObservation();
-    notifyListeners();
-  }
-
-  @override
-  bool get hasSelection {
-    _checkNotDisposed();
-    return _selection.hasSelection;
-  }
-
-  @override
-  MouseTracking get mouseTracking {
-    _checkNotDisposed();
-    return _observation.mouseTracking;
-  }
-
-  @override
-  set onClipboardWrite(ClipboardWriteCallback? value) {
-    _checkNotDisposed();
-    if (identical(_onClipboardWrite, value)) return;
-    _onClipboardWrite = value;
-    _terminal.onClipboardWrite = value;
-  }
-
-  @override
-  set onDesktopNotification(ValueChanged<DesktopNotification>? value) {
-    _checkNotDisposed();
-    _terminal.onDesktopNotification = value;
-  }
-
-  @override
-  set onProgressReport(ValueChanged<TerminalProgress>? value) {
-    _checkNotDisposed();
-    _terminal.onProgressReport = value;
-  }
-
-  @override
   String get pwd {
     _checkNotDisposed();
     return _pwd;
@@ -191,6 +174,11 @@ final class TerminalControllerImpl extends TerminalController {
     return _terminal.scrollbar;
   }
 
+  Terminal get terminal {
+    _checkNotDisposed();
+    return _terminal;
+  }
+
   @override
   String get title {
     _checkNotDisposed();
@@ -203,15 +191,15 @@ final class TerminalControllerImpl extends TerminalController {
     return _terminal.totalRows;
   }
 
+  Listenable get viewportChanges {
+    _checkNotDisposed();
+    return _viewportChanges;
+  }
+
   @override
   Mods get virtualMods {
     _checkNotDisposed();
     return _virtualMods;
-  }
-
-  void cancelSelectionGesture() {
-    _checkNotDisposed();
-    _selection.cancelGesture();
   }
 
   Object attachView() {
@@ -224,9 +212,9 @@ final class TerminalControllerImpl extends TerminalController {
     return token;
   }
 
-  void detachView(Object token) {
-    if (_disposed) return;
-    if (identical(_viewToken, token)) _viewToken = null;
+  void cancelSelectionGesture() {
+    _checkNotDisposed();
+    _selection.cancelGesture();
   }
 
   @override
@@ -269,6 +257,11 @@ final class TerminalControllerImpl extends TerminalController {
     );
   }
 
+  void detachView(Object token) {
+    if (_disposed) return;
+    if (identical(_viewToken, token)) _viewToken = null;
+  }
+
   @override
   void dispose() {
     if (_disposed) return;
@@ -282,8 +275,52 @@ final class TerminalControllerImpl extends TerminalController {
     super.dispose();
   }
 
-  TerminalKeyDisposition handleTerminalKey(
-    TerminalKeyInput input, {
+  void handleFocusChanged({required bool focused}) {
+    _checkNotDisposed();
+    if (!focused) clearVirtualMods();
+
+    if (_terminal.modeGet(const TerminalMode.focusEvent())) {
+      final event = focused ? FocusEvent.gained : FocusEvent.lost;
+      _emitOutput(utf8.encode(event.encode()));
+    }
+  }
+
+  void handleMouseEvent(MouseInput input) {
+    _checkNotDisposed();
+    final result = _inputEncoder.encodeMouse(
+      input,
+      geometry: _committedGeometry,
+    );
+    if (result.isEmpty) return;
+    _emitOutput(utf8.encode(result));
+  }
+
+  void handleResize(SurfaceMeasurement measurement) {
+    _checkNotDisposed();
+    final geometry = SurfaceGeometry.tryFrom(measurement);
+    if (geometry == null || geometry == _committedGeometry) return;
+
+    final previous = _committedGeometry;
+    _commitGeometry(geometry);
+    if (previous == null ||
+        previous.cols != geometry.cols ||
+        previous.rows != geometry.rows) {
+      _onResize?.call(geometry.cols, geometry.rows);
+    }
+  }
+
+  void handleSelectionPress(SelectionPressInput event) {
+    _checkNotDisposed();
+    _selection.handlePress(event);
+  }
+
+  void handleSelectionRelease(Position cell) {
+    _checkNotDisposed();
+    _selection.handleRelease(cell);
+  }
+
+  KeyDisposition handleTerminalKey(
+    KeyInput input, {
     required bool routeToTextInput,
     required bool forwardDeletionToTextInput,
   }) {
@@ -310,72 +347,23 @@ final class TerminalControllerImpl extends TerminalController {
     return forwardDeletionToTextInput ? .skipRemainingHandlers : .handled;
   }
 
-  void handleMouseEvent(TerminalMouseEvent event) {
+  void handleTerminalScroll(ScrollInput input) {
     _checkNotDisposed();
-    final result = _inputEncoder.encodeMouse(
-      event,
-      geometry: _committedGeometry,
-    );
-    if (result.isEmpty) return;
-    _emitOutput(utf8.encode(result));
-  }
+    if (input.horizontal == 0 && input.vertical == 0) return;
 
-  void handleResize(TerminalResizeEvent event) {
-    _checkNotDisposed();
-    final measurement = TerminalGeometry.tryFrom(event);
-    if (measurement == null || measurement == _committedGeometry) return;
-
-    final previous = _committedGeometry;
-    _commitGeometry(measurement);
-    if (previous == null ||
-        previous.cols != measurement.cols ||
-        previous.rows != measurement.rows) {
-      _onResize?.call(measurement.cols, measurement.rows);
-    }
-  }
-
-  void _commitGeometry(TerminalGeometry geometry) {
-    final current = _terminal.geometry;
-    final gridChanged =
-        current.cols != geometry.cols || current.rows != geometry.rows;
-    final pixelGeometryChanged =
-        current.widthPx != geometry.cols * geometry.cellWidthPx ||
-        current.heightPx != geometry.rows * geometry.cellHeightPx;
-    if (gridChanged || pixelGeometryChanged) {
-      _terminal.resize(
-        cols: geometry.cols,
-        rows: geometry.rows,
-        cellWidthPx: geometry.cellWidthPx,
-        cellHeightPx: geometry.cellHeightPx,
-      );
-    }
-
-    _inputEncoder.updateGeometry(geometry);
-    _selection.updateGeometry(geometry);
-
-    _committedGeometry = geometry;
-  }
-
-  void handleTerminalScroll(TerminalScrollEvent event) {
-    _checkNotDisposed();
-    if (event.horizontal == 0 && event.vertical == 0) return;
-
-    if (event.reportMouse) {
+    if (input.reportMouse) {
       if (_terminal.mouseTracking == .none) return;
-      final position = (x: event.pixelX, y: event.pixelY);
       _sendScrollButtons(
-        event.vertical,
+        input.vertical,
         negativeButton: .four,
         positiveButton: .five,
-        position: position,
-        mods: event.mods,
+        input: input,
       );
       _sendScrollButtons(
-        event.horizontal,
+        input.horizontal,
         negativeButton: .six,
         positiveButton: .seven,
-        position: position,
-        mods: event.mods,
+        input: input,
       );
       return;
     }
@@ -383,7 +371,7 @@ final class TerminalControllerImpl extends TerminalController {
     if (_terminal.mouseTracking != .none ||
         _terminal.activeScreen != .alternate ||
         !_terminal.modeGet(const .alternateScroll()) ||
-        event.vertical == 0) {
+        input.vertical == 0) {
       return;
     }
 
@@ -391,19 +379,58 @@ final class TerminalControllerImpl extends TerminalController {
     final down = _observation.cursorKeyApplication
         ? _appCursorDown
         : _cursorDown;
-    final key = event.vertical < 0 ? up : down;
-    final count = event.vertical.abs();
+    final key = input.vertical < 0 ? up : down;
+    final count = input.vertical.abs();
     _emitOutput(_repeatBytes(key, count));
   }
 
-  void handleSelectionPress(TerminalSelectionPressEvent event) {
+  void handleTextCommitted(String text) {
     _checkNotDisposed();
-    _selection.handlePress(event);
+    if (_virtualMods.isEmpty) {
+      _emitOutput(utf8.encode(text));
+      _onTextInput();
+      return;
+    }
+
+    if (text.length == 1) {
+      final key = keyFromCodepoint(text.codeUnitAt(0));
+      if (key != null) {
+        sendKey(key);
+        return;
+      }
+    }
+
+    _emitOutput(utf8.encode(text));
+    clearVirtualMods();
+    _onTextInput();
   }
 
-  void handleSelectionRelease(Position cell) {
+  void handleTextCompositionChanged({required bool active}) {
     _checkNotDisposed();
-    _selection.handleRelease(cell);
+    if (active) _onTextInput();
+  }
+
+  void handleTextDeleted(int count) {
+    _checkNotDisposed();
+    if (count <= 0) return;
+
+    var emitted = false;
+    for (var i = 0; i < count; i++) {
+      emitted =
+          _emitKeyPress(.backspace, mods: _virtualMods, clearMods: false) ||
+          emitted;
+    }
+    if (!emitted) return;
+
+    clearVirtualMods();
+    _onTextInput();
+  }
+
+  void handleTextNewline() {
+    _checkNotDisposed();
+    _emitOutput(_crBytes);
+    clearVirtualMods();
+    _onTextInput();
   }
 
   void invalidateSelection() {
@@ -509,6 +536,12 @@ final class TerminalControllerImpl extends TerminalController {
     clearVirtualMods();
   }
 
+  void setColorScheme(ColorScheme value) {
+    _checkNotDisposed();
+    if (_colorScheme == value) return;
+    _colorScheme = value;
+  }
+
   @override
   void toggleMod(Mods mod) {
     _checkNotDisposed();
@@ -516,12 +549,12 @@ final class TerminalControllerImpl extends TerminalController {
     notifyListeners();
   }
 
-  void updateSelectionAutoscroll(TerminalSelectionAutoscrollEvent event) {
+  void updateSelectionAutoscroll(SelectionAutoscrollInput event) {
     _checkNotDisposed();
     _selection.handleAutoscroll(event);
   }
 
-  void updateSelectionDrag(TerminalSelectionDragEvent event) {
+  void updateSelectionDrag(SelectionDragInput event) {
     _checkNotDisposed();
     _selection.handleDrag(event);
   }
@@ -550,6 +583,32 @@ final class TerminalControllerImpl extends TerminalController {
     _terminal.defaultCursorBlink = _config.cursorBlink;
   }
 
+  void _checkNotDisposed() {
+    if (_disposed) throw StateError('TerminalController is disposed.');
+  }
+
+  void _commitGeometry(SurfaceGeometry geometry) {
+    final current = _terminal.geometry;
+    final gridChanged =
+        current.cols != geometry.cols || current.rows != geometry.rows;
+    final pixelGeometryChanged =
+        current.widthPx != geometry.cols * geometry.cellWidthPx ||
+        current.heightPx != geometry.rows * geometry.cellHeightPx;
+    if (gridChanged || pixelGeometryChanged) {
+      _terminal.resize(
+        cols: geometry.cols,
+        rows: geometry.rows,
+        cellWidthPx: geometry.cellWidthPx,
+        cellHeightPx: geometry.cellHeightPx,
+      );
+    }
+
+    _inputEncoder.updateGeometry(geometry);
+    _selection.updateGeometry(geometry);
+
+    _committedGeometry = geometry;
+  }
+
   bool _effectiveCursorBlinking() {
     return _config.cursorBlink ?? _terminal.modeGet(const .cursorBlinking());
   }
@@ -569,55 +628,11 @@ final class TerminalControllerImpl extends TerminalController {
 
   void _emitOutput(Uint8List bytes) => _onOutput?.call(bytes);
 
-  void _sendScrollButtons(
-    int steps, {
-    required MouseButton negativeButton,
-    required MouseButton positiveButton,
-    required ({double x, double y}) position,
-    required Mods mods,
-  }) {
-    if (steps == 0) return;
-    final button = steps < 0 ? negativeButton : positiveButton;
-    final result = _inputEncoder.encodeScrollButton(
-      button: button,
-      pixelX: position.x,
-      pixelY: position.y,
-      mods: mods,
-      geometry: _committedGeometry,
-    );
-    if (result.isEmpty) return;
-    _emitOutput(_repeatBytes(utf8.encode(result), steps.abs()));
-  }
-
-  Uint8List _repeatBytes(List<int> value, int count) {
-    final bytes = Uint8List(value.length * count);
-    for (var i = 0; i < count; i++) {
-      bytes.setRange(i * value.length, (i + 1) * value.length, value);
-    }
-    return bytes;
-  }
-
-  void handleTextDeleted(int count) {
-    _checkNotDisposed();
-    if (count <= 0) return;
-
-    var emitted = false;
-    for (var i = 0; i < count; i++) {
-      emitted =
-          _emitKeyPress(.backspace, mods: _virtualMods, clearMods: false) ||
-          emitted;
-    }
-    if (!emitted) return;
-
-    clearVirtualMods();
-    _onTextInput();
-  }
-
-  void handleTextNewline() {
-    _checkNotDisposed();
-    _emitOutput(_crBytes);
-    clearVirtualMods();
-    _onTextInput();
+  void _handlePwdChanged() {
+    // The terminal listener publishes the final state after the write ends.
+    _pwd = _terminal.pwd;
+    _pwdChanged = true;
+    _onPwdChanged?.call();
   }
 
   TerminalSizeInfo _handleSizeQuery() {
@@ -638,42 +653,6 @@ final class TerminalControllerImpl extends TerminalController {
     );
   }
 
-  void handleTextCommitted(String text) {
-    _checkNotDisposed();
-    if (_virtualMods.isEmpty) {
-      _emitOutput(utf8.encode(text));
-      _onTextInput();
-      return;
-    }
-
-    if (text.length == 1) {
-      final key = keyFromCodepoint(text.codeUnitAt(0));
-      if (key != null) {
-        sendKey(key);
-        return;
-      }
-    }
-
-    _emitOutput(utf8.encode(text));
-    clearVirtualMods();
-    _onTextInput();
-  }
-
-  void handleTextCompositionChanged({required bool active}) {
-    _checkNotDisposed();
-    if (active) _onTextInput();
-  }
-
-  void handleFocusChanged({required bool focused}) {
-    _checkNotDisposed();
-    if (!focused) clearVirtualMods();
-
-    if (_terminal.modeGet(const TerminalMode.focusEvent())) {
-      final event = focused ? FocusEvent.gained : FocusEvent.lost;
-      _emitOutput(utf8.encode(event.encode()));
-    }
-  }
-
   void _onTerminalChanged() {
     if (_disposed) return;
     final pwdChanged = _pwdChanged;
@@ -689,16 +668,24 @@ final class TerminalControllerImpl extends TerminalController {
     if (pwdChanged || previous != next) notifyListeners();
   }
 
-  void _handlePwdChanged() {
-    // The terminal listener publishes the final state after the write ends.
-    _pwd = _terminal.pwd;
-    _pwdChanged = true;
-    _onPwdChanged?.call();
-  }
-
   void _onTextInput() {
     if (_config.selectionClearOnTyping) clearSelection();
     _scrollToBottomOnInput();
+  }
+
+  _Observation _readObservation() => (
+    activeScreen: _terminal.activeScreen,
+    mouseTracking: _terminal.mouseTracking,
+    cursorKeyApplication: _terminal.modeGet(const .cursorKeys()),
+    cursorBlinking: _effectiveCursorBlinking(),
+  );
+
+  Uint8List _repeatBytes(List<int> value, int count) {
+    final bytes = Uint8List(value.length * count);
+    for (var i = 0; i < count; i++) {
+      bytes.setRange(i * value.length, (i + 1) * value.length, value);
+    }
+    return bytes;
   }
 
   void _scrollToBottomOnInput() {
@@ -713,6 +700,23 @@ final class TerminalControllerImpl extends TerminalController {
     if (policy == .onOutput || policy == .both) scrollToBottom();
   }
 
+  void _sendScrollButtons(
+    int steps, {
+    required MouseButton negativeButton,
+    required MouseButton positiveButton,
+    required ScrollInput input,
+  }) {
+    if (steps == 0) return;
+    final button = steps < 0 ? negativeButton : positiveButton;
+    final result = _inputEncoder.encodeScrollButton(
+      input,
+      button: button,
+      geometry: _committedGeometry,
+    );
+    if (result.isEmpty) return;
+    _emitOutput(_repeatBytes(utf8.encode(result), steps.abs()));
+  }
+
   void _wireTerminalCallbacks() {
     _terminal.onColorScheme = () => _colorScheme;
     _terminal.onSize = _handleSizeQuery;
@@ -722,16 +726,5 @@ final class TerminalControllerImpl extends TerminalController {
     _terminal.onEnquiry = enquiry.isEmpty
         ? null
         : () => .fromList(utf8.encode(enquiry));
-  }
-
-  _TerminalObservation _readObservation() => (
-    activeScreen: _terminal.activeScreen,
-    mouseTracking: _terminal.mouseTracking,
-    cursorKeyApplication: _terminal.modeGet(const .cursorKeys()),
-    cursorBlinking: _effectiveCursorBlinking(),
-  );
-
-  void _checkNotDisposed() {
-    if (_disposed) throw StateError('TerminalController is disposed.');
   }
 }

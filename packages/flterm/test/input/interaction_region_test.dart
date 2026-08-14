@@ -5,10 +5,10 @@ import 'dart:convert';
 
 import 'package:flterm/src/controller/terminal_controller.dart';
 import 'package:flterm/src/foundation.dart';
-import 'package:flterm/src/input/terminal_gesture_detector.dart';
+import 'package:flterm/src/input/interaction_region.dart';
 import 'package:flterm/src/links/link_interaction.dart';
 import 'package:flterm/src/links/link_settings.dart';
-import 'package:flterm/src/view/terminal_view_attachment.dart';
+import 'package:flterm/src/view/view_attachment.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/gestures.dart';
@@ -51,7 +51,7 @@ extension _SelectionEdges on Selection {
 }
 
 void main() {
-  group('TerminalGestureDetector', () {
+  group('InteractionRegion', () {
     const defaultMetrics = CellMetrics(
       cellWidth: 8,
       cellHeight: 16,
@@ -69,11 +69,11 @@ void main() {
       utf8.encode('\x1b[?1003h\x1b[?1006h'),
     );
 
-    final adapters = <TerminalController, TerminalViewAttachment>{};
+    final adapters = <TerminalController, ViewAttachment>{};
 
-    TerminalViewAttachment bindingFor(TerminalController controller) {
+    ViewAttachment bindingFor(TerminalController controller) {
       return adapters.putIfAbsent(controller, () {
-        final adapter = TerminalViewAttachment(controller);
+        final adapter = ViewAttachment(controller);
         addTearDown(adapter.dispose);
         return adapter;
       });
@@ -93,7 +93,7 @@ void main() {
       int rows = 24,
     }) {
       bindingFor(controller).handleResize(
-        TerminalResizeEvent(
+        SurfaceMeasurement(
           cols: cols,
           rows: rows,
           cellWidth: defaultMetrics.cellWidth,
@@ -109,7 +109,7 @@ void main() {
 
     Widget buildHandler({
       required TerminalController controller,
-      TerminalViewAttachment? attachment,
+      ViewAttachment? attachment,
       CellMetrics metrics = defaultMetrics,
       TerminalGestureSettings gestureSettings = const TerminalGestureSettings(),
       LinkInteraction? links,
@@ -118,15 +118,17 @@ void main() {
       ScrollPhysics scrollPhysics = const ClampingScrollPhysics(),
     }) {
       final resolvedAttachment = attachment ?? bindingFor(controller);
+      final resolvedLinks = links ?? LinkInteraction();
+      if (links == null) addTearDown(resolvedLinks.dispose);
       return Directionality(
         textDirection: TextDirection.ltr,
         child: Align(
           alignment: Alignment.topLeft,
-          child: TerminalGestureDetector(
+          child: InteractionRegion(
             attachment: resolvedAttachment,
             metrics: metrics,
             interaction: resolvedAttachment.interaction.value,
-            links: links ?? LinkInteraction(),
+            links: resolvedLinks,
             onLinkActivate: onLinkActivate,
             settings: gestureSettings,
             scrollController: scrollController,
@@ -139,6 +141,7 @@ void main() {
 
     LinkInteraction linkInteractionFor(TerminalController controller) {
       final links = LinkInteraction();
+      addTearDown(links.dispose);
       links.update(
         context: LinkContext(
           terminal: terminalFor(controller),
@@ -230,9 +233,15 @@ void main() {
 
     late TerminalController controller;
 
-    setUp(() => controller = TerminalController());
+    setUp(() {
+      adapters.clear();
+      controller = TerminalController();
+    });
 
-    tearDown(() => controller.dispose());
+    tearDown(() {
+      controller.dispose();
+      adapters.clear();
+    });
 
     Future<void> tapMouse(
       WidgetTester tester,
@@ -245,445 +254,457 @@ void main() {
       }
     }
 
-    testWidgets('tap leaves selection empty', (tester) async {
-      await tester.pumpWidget(buildHandler(controller: controller));
+    group('selection ownership', () {
+      testWidgets('tap leaves selection empty', (tester) async {
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-      await tapMouse(tester, const Offset(40, 16));
+        await tapMouse(tester, const Offset(40, 16));
 
-      expect(terminalFor(controller).selection, isNull);
-    });
+        expect(terminalFor(controller).selection, isNull);
+      });
 
-    testWidgets('tap activates a link without starting selection', (
-      tester,
-    ) async {
-      final links = <ActivatedLink>[];
-      writeToTerminal(controller, 'https://example.test');
-      final linkInteraction = linkInteractionFor(controller);
+      testWidgets('tap activates a link without starting selection', (
+        tester,
+      ) async {
+        final links = <ActivatedLink>[];
+        writeToTerminal(controller, 'https://example.test');
+        final linkInteraction = linkInteractionFor(controller);
 
-      await tester.pumpWidget(
-        buildHandler(
-          controller: controller,
-          links: linkInteraction,
-          onLinkActivate: links.add,
-        ),
-      );
+        await tester.pumpWidget(
+          buildHandler(
+            controller: controller,
+            links: linkInteraction,
+            onLinkActivate: links.add,
+          ),
+        );
 
-      await tapMouse(tester, const Offset(8, 0));
+        await tapMouse(tester, const Offset(8, 0));
 
-      expect(links, hasLength(1));
-      expect(links.single.text, 'https://example.test');
-      expect(terminalFor(controller).selection, isNull);
-    });
+        expect(links, hasLength(1));
+        expect(links.single.text, 'https://example.test');
+        expect(terminalFor(controller).selection, isNull);
+      });
 
-    testWidgets('tap up activates the press candidate after invalidation', (
-      tester,
-    ) async {
-      final links = <ActivatedLink>[];
-      writeToTerminal(controller, 'https://example.test');
-      final linkInteraction = linkInteractionFor(controller);
+      testWidgets('tap up activates the press candidate after invalidation', (
+        tester,
+      ) async {
+        final links = <ActivatedLink>[];
+        writeToTerminal(controller, 'https://example.test');
+        final linkInteraction = linkInteractionFor(controller);
 
-      await tester.pumpWidget(
-        buildHandler(
-          controller: controller,
-          links: linkInteraction,
-          onLinkActivate: links.add,
-        ),
-      );
+        await tester.pumpWidget(
+          buildHandler(
+            controller: controller,
+            links: linkInteraction,
+            onLinkActivate: links.add,
+          ),
+        );
 
-      final gesture = await mouseDown(tester, const Offset(8, 0));
-      linkInteraction.invalidateContent();
-      await gesture.up();
+        final gesture = await mouseDown(tester, const Offset(8, 0));
+        linkInteraction.invalidateContent();
+        await gesture.up();
 
-      expect(links.single.text, 'https://example.test');
-    });
+        expect(links.single.text, 'https://example.test');
+      });
 
-    testWidgets('replacing link interaction cancels the outgoing press', (
-      tester,
-    ) async {
-      writeToTerminal(controller, 'https://example.test');
-      final outgoing = linkInteractionFor(controller);
-      final incoming = linkInteractionFor(controller);
+      testWidgets('replacing link interaction cancels the outgoing press', (
+        tester,
+      ) async {
+        writeToTerminal(controller, 'https://example.test');
+        final outgoing = linkInteractionFor(controller);
+        final incoming = linkInteractionFor(controller);
 
-      await tester.pumpWidget(
-        buildHandler(controller: controller, links: outgoing),
-      );
-      final gesture = await mouseDown(tester, const Offset(8, 0));
-      await tester.pumpWidget(
-        buildHandler(controller: controller, links: incoming),
-      );
+        await tester.pumpWidget(
+          buildHandler(controller: controller, links: outgoing),
+        );
+        final gesture = await mouseDown(tester, const Offset(8, 0));
+        await tester.pumpWidget(
+          buildHandler(controller: controller, links: incoming),
+        );
 
-      final staleLink = outgoing.handleRelease(
-        localPosition: const Offset(8, 0),
-        metrics: defaultMetrics,
-      );
-      await gesture.up();
+        final staleLink = outgoing.handleRelease(
+          localPosition: const Offset(8, 0),
+          metrics: defaultMetrics,
+        );
+        await gesture.up();
 
-      expect(staleLink, isNull);
-    });
+        expect(staleLink, isNull);
+      });
 
-    testWidgets('drag cancels claimed link tap', (tester) async {
-      final links = <ActivatedLink>[];
-      writeToTerminal(controller, 'https://example.test');
-      final linkInteraction = linkInteractionFor(controller);
+      testWidgets('drag cancels claimed link tap', (tester) async {
+        final links = <ActivatedLink>[];
+        writeToTerminal(controller, 'https://example.test');
+        final linkInteraction = linkInteractionFor(controller);
 
-      await tester.pumpWidget(
-        buildHandler(
-          controller: controller,
-          links: linkInteraction,
-          onLinkActivate: links.add,
-        ),
-      );
+        await tester.pumpWidget(
+          buildHandler(
+            controller: controller,
+            links: linkInteraction,
+            onLinkActivate: links.add,
+          ),
+        );
 
-      final gesture = await mouseDown(tester, const Offset(8, 0));
-      await tester.pump(kPressTimeout);
-      await gesture.moveTo(const Offset(80, 32));
-      await gesture.up();
+        final gesture = await mouseDown(tester, const Offset(8, 0));
+        await tester.pump(kPressTimeout);
+        await gesture.moveTo(const Offset(80, 32));
+        await gesture.up();
 
-      expect(links, isEmpty);
-    });
+        expect(links, isEmpty);
+      });
 
-    testWidgets('touch scroll cancels a claimed link tap', (tester) async {
-      writeToTerminal(controller, '\x1b[?1049hhttps://example.test');
-      final linkInteraction = linkInteractionFor(controller);
+      testWidgets('touch scroll cancels a claimed link tap', (tester) async {
+        writeToTerminal(controller, '\x1b[?1049hhttps://example.test');
+        final linkInteraction = linkInteractionFor(controller);
 
-      await tester.pumpWidget(
-        buildHandler(controller: controller, links: linkInteraction),
-      );
-      final gesture = await tester.startGesture(const Offset(8, 8));
-      await tester.pump(kPressTimeout);
-      await gesture.moveBy(const Offset(0, 64));
-      await gesture.up();
-      final released = linkInteraction.handleRelease(
-        localPosition: const Offset(8, 8),
-        metrics: defaultMetrics,
-      );
+        await tester.pumpWidget(
+          buildHandler(controller: controller, links: linkInteraction),
+        );
+        final gesture = await tester.startGesture(const Offset(8, 8));
+        await tester.pump(kPressTimeout);
+        await gesture.moveBy(const Offset(0, 64));
+        await gesture.up();
+        final released = linkInteraction.handleRelease(
+          localPosition: const Offset(8, 8),
+          metrics: defaultMetrics,
+        );
 
-      expect(released, isNull);
-    });
+        expect(released, isNull);
+      });
 
-    testWidgets('mouse tracking takes priority over link activation', (
-      tester,
-    ) async {
-      final links = <ActivatedLink>[];
-      writeToTerminal(controller, 'https://example.test');
-      final linkInteraction = linkInteractionFor(controller);
-      enableMouseTracking(controller);
+      testWidgets('mouse tracking takes priority over link activation', (
+        tester,
+      ) async {
+        final links = <ActivatedLink>[];
+        writeToTerminal(controller, 'https://example.test');
+        final linkInteraction = linkInteractionFor(controller);
+        enableMouseTracking(controller);
 
-      await tester.pumpWidget(
-        buildHandler(
-          controller: controller,
-          links: linkInteraction,
-          onLinkActivate: links.add,
-        ),
-      );
+        await tester.pumpWidget(
+          buildHandler(
+            controller: controller,
+            links: linkInteraction,
+            onLinkActivate: links.add,
+          ),
+        );
 
-      await tapMouse(tester, const Offset(8, 0));
+        await tapMouse(tester, const Offset(8, 0));
 
-      expect(links, isEmpty);
-    });
+        expect(links, isEmpty);
+      });
 
-    testWidgets('drag creates selection with correct cells', (tester) async {
-      await tester.pumpWidget(buildHandler(controller: controller));
+      testWidgets('drag creates selection with correct cells', (tester) async {
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-      final gesture = await mouseDown(tester, const Offset(8, 0));
-      await gesture.moveTo(const Offset(40, 16));
-      await gesture.up();
+        final gesture = await mouseDown(tester, const Offset(8, 0));
+        await gesture.moveTo(const Offset(40, 16));
+        await gesture.up();
 
-      final selection = terminalFor(controller).selection!;
-      expect(selection.startRow, 0);
-      expect(selection.startCol, 1);
-      expect(selection.endRow, 1);
-      expect(selection.endCol, 5);
-      expect(selection.mode, TerminalSelectionShape.normal);
-    });
+        final selection = terminalFor(controller).selection!;
+        expect(selection.startRow, 0);
+        expect(selection.startCol, 1);
+        expect(selection.endRow, 1);
+        expect(selection.endCol, 5);
+        expect(selection.mode, TerminalSelectionShape.normal);
+      });
 
-    testWidgets('stylus drag creates selection', (tester) async {
-      await tester.pumpWidget(buildHandler(controller: controller));
+      testWidgets('stylus drag creates selection', (tester) async {
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-      final gesture = await tester.startGesture(
-        const Offset(8, 0),
-        kind: .stylus,
-        pointer: 83,
-      );
-      await gesture.moveTo(const Offset(40, 16));
-      await gesture.up();
+        final gesture = await tester.startGesture(
+          const Offset(8, 0),
+          kind: .stylus,
+          pointer: 83,
+        );
+        await gesture.moveTo(const Offset(40, 16));
+        await gesture.up();
 
-      expect(terminalFor(controller).selection, isNotNull);
-    });
+        expect(terminalFor(controller).selection, isNotNull);
+      });
 
-    testWidgets('inverted stylus drag creates selection', (tester) async {
-      await tester.pumpWidget(buildHandler(controller: controller));
+      testWidgets('inverted stylus drag creates selection', (tester) async {
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-      final gesture = await tester.startGesture(
-        const Offset(8, 0),
-        kind: .invertedStylus,
-        pointer: 84,
-      );
-      await gesture.moveTo(const Offset(40, 16));
-      await gesture.up();
+        final gesture = await tester.startGesture(
+          const Offset(8, 0),
+          kind: .invertedStylus,
+          pointer: 84,
+        );
+        await gesture.moveTo(const Offset(40, 16));
+        await gesture.up();
 
-      expect(terminalFor(controller).selection, isNotNull);
-    });
+        expect(terminalFor(controller).selection, isNotNull);
+      });
 
-    testWidgets('mouse up ends selection drag', (tester) async {
-      await tester.pumpWidget(buildHandler(controller: controller));
+      testWidgets('mouse up ends selection drag', (tester) async {
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-      final gesture = await mouseDown(tester, Offset.zero);
-      await gesture.moveTo(const Offset(80, 32));
-      await gesture.up();
+        final gesture = await mouseDown(tester, Offset.zero);
+        await gesture.moveTo(const Offset(80, 32));
+        await gesture.up();
 
-      final selection = terminalFor(controller).selection!;
-      expect(selection.startRow, 0);
-      expect(selection.endRow, 2);
-    });
+        final selection = terminalFor(controller).selection!;
+        expect(selection.startRow, 0);
+        expect(selection.endRow, 2);
+      });
 
-    testWidgets('drag to same cell does not change selection', (tester) async {
-      await tester.pumpWidget(buildHandler(controller: controller));
+      testWidgets('drag to same cell does not change selection', (
+        tester,
+      ) async {
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-      final gesture = await mouseDown(tester, const Offset(8, 0));
-      await gesture.moveTo(const Offset(40, 16));
-      final selAfterFirst = terminalFor(controller).selection;
+        final gesture = await mouseDown(tester, const Offset(8, 0));
+        await gesture.moveTo(const Offset(40, 16));
+        final selAfterFirst = terminalFor(controller).selection;
 
-      await gesture.moveTo(const Offset(41, 17));
-      final selAfterSecond = terminalFor(controller).selection;
+        await gesture.moveTo(const Offset(41, 17));
+        final selAfterSecond = terminalFor(controller).selection;
 
-      expect(selAfterFirst, selAfterSecond);
+        expect(selAfterFirst, selAfterSecond);
 
-      await gesture.up();
-    });
+        await gesture.up();
+      });
 
-    testWidgets('selection autoscroll follows the committed grid', (
-      tester,
-    ) async {
-      final target = TerminalController(
-        config: const TerminalConfig(cols: 10, rows: 2),
-      );
-      addTearDown(target.dispose);
-      final attachment = bindingFor(target);
-      final scrollController = ScrollController();
-      addTearDown(scrollController.dispose);
-      commitGeometry(target, cols: 10, rows: 2);
-      writeToTerminal(target, '0\r\n1\r\n2\r\n3\r\n4\r\n5\r\n6\r\n7\r\n8\r\n9');
-      target.scrollToTop();
-      await tester.pumpWidget(
-        Directionality(
-          textDirection: .ltr,
-          child: Scrollable(
-            controller: scrollController,
-            viewportBuilder: (_, _) => buildHandler(
-              controller: target,
-              attachment: attachment,
-              scrollController: scrollController,
+      testWidgets('selection autoscroll follows the committed grid', (
+        tester,
+      ) async {
+        final target = TerminalController(
+          config: const TerminalConfig(cols: 10, rows: 2),
+        );
+        addTearDown(target.dispose);
+        final attachment = bindingFor(target);
+        final scrollController = ScrollController();
+        addTearDown(scrollController.dispose);
+        commitGeometry(target, cols: 10, rows: 2);
+        writeToTerminal(
+          target,
+          '0\r\n1\r\n2\r\n3\r\n4\r\n5\r\n6\r\n7\r\n8\r\n9',
+        );
+        target.scrollToTop();
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: .ltr,
+            child: Scrollable(
+              controller: scrollController,
+              viewportBuilder: (_, _) => buildHandler(
+                controller: target,
+                attachment: attachment,
+                scrollController: scrollController,
+              ),
             ),
           ),
-        ),
-      );
-      final pointer = await mouseDown(tester, const Offset(8, 8));
+        );
+        final pointer = await mouseDown(tester, const Offset(8, 8));
 
-      await pointer.moveTo(const Offset(8, 64));
-      await tester.pump();
-      final rowAfterMove = attachment.terminal.scrollbar.offset;
-      await tester.pump(const Duration(milliseconds: 120));
-      final viewportRow = attachment.terminal.scrollbar.offset;
-      await pointer.up();
-      await tester.pump(const Duration(milliseconds: 250));
+        await pointer.moveTo(const Offset(8, 64));
+        await tester.pump();
+        final rowAfterMove = attachment.terminal.scrollbar.offset;
+        await tester.pump(const Duration(milliseconds: 120));
+        final viewportRow = attachment.terminal.scrollbar.offset;
+        await pointer.up();
+        await tester.pump(const Duration(milliseconds: 250));
 
-      expect(viewportRow, greaterThan(rowAfterMove));
-    });
+        expect(viewportRow, greaterThan(rowAfterMove));
+      });
 
-    testWidgets('double click selects word', (tester) async {
-      writeToTerminal(controller, 'hello world');
+      testWidgets('double click selects word', (tester) async {
+        writeToTerminal(controller, 'hello world');
 
-      await tester.pumpWidget(buildHandler(controller: controller));
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-      await tapMouse(tester, const Offset(8, 0), count: 2);
+        await tapMouse(tester, const Offset(8, 0), count: 2);
 
-      final selection = terminalFor(controller).selection!;
-      expect(selection.startRow, 0);
-      expect(selection.startCol, 0);
-      expect(selection.endCol, 5);
-    });
+        final selection = terminalFor(controller).selection!;
+        expect(selection.startRow, 0);
+        expect(selection.startCol, 0);
+        expect(selection.endCol, 5);
+      });
 
-    testWidgets('distant pointer timestamps do not form a double click', (
-      tester,
-    ) async {
-      writeToTerminal(controller, 'hello world');
-      await tester.pumpWidget(buildHandler(controller: controller));
-
-      const position = Offset(8, 0);
-      final firstPointer = TestPointer(81, PointerDeviceKind.mouse);
-      await sendPointerEvent(tester, firstPointer.down(position));
-      await sendPointerEvent(
+      testWidgets('distant pointer timestamps do not form a double click', (
         tester,
-        firstPointer.up(timeStamp: const Duration(milliseconds: 10)),
-      );
-      final secondPointer = TestPointer(82, PointerDeviceKind.mouse);
-      await sendPointerEvent(
+      ) async {
+        writeToTerminal(controller, 'hello world');
+        await tester.pumpWidget(buildHandler(controller: controller));
+
+        const position = Offset(8, 0);
+        final firstPointer = TestPointer(81, PointerDeviceKind.mouse);
+        await sendPointerEvent(tester, firstPointer.down(position));
+        await sendPointerEvent(
+          tester,
+          firstPointer.up(timeStamp: const Duration(milliseconds: 10)),
+        );
+        final secondPointer = TestPointer(82, PointerDeviceKind.mouse);
+        await sendPointerEvent(
+          tester,
+          secondPointer.down(position, timeStamp: const Duration(seconds: 1)),
+        );
+        await sendPointerEvent(
+          tester,
+          secondPointer.up(timeStamp: const Duration(milliseconds: 1010)),
+        );
+
+        expect(terminalFor(controller).selection, isNull);
+      });
+
+      testWidgets('double click on second word selects it', (tester) async {
+        writeToTerminal(controller, 'hello world');
+
+        await tester.pumpWidget(buildHandler(controller: controller));
+
+        await tapMouse(tester, const Offset(56, 0), count: 2);
+
+        final selection = terminalFor(controller).selection!;
+        expect(selection.startCol, 6);
+        expect(selection.endCol, 11);
+      });
+
+      testWidgets('double click uses configured word boundaries', (
         tester,
-        secondPointer.down(position, timeStamp: const Duration(seconds: 1)),
-      );
-      await sendPointerEvent(
+      ) async {
+        final boundaryController = TerminalController();
+        addTearDown(boundaryController.dispose);
+        writeToTerminal(boundaryController, 'hello_world');
+
+        await tester.pumpWidget(
+          buildHandler(
+            controller: boundaryController,
+            gestureSettings: const TerminalGestureSettings(wordBoundaries: '_'),
+          ),
+        );
+
+        await tapMouse(tester, const Offset(64, 0), count: 2);
+
+        final selection = terminalFor(boundaryController).selection!;
+        expect(selection.startCol, 6);
+        expect(selection.endCol, 11);
+      });
+
+      testWidgets('triple click selects line content only', (tester) async {
+        writeToTerminal(controller, 'Hello');
+
+        await tester.pumpWidget(buildHandler(controller: controller));
+
+        await tapMouse(tester, const Offset(40, 0), count: 3);
+
+        final selection = terminalFor(controller).selection!;
+        expect(selection.startCol, 0);
+        expect(selection.endCol, 5);
+      });
+
+      testWidgets('triple click on wrapped line selects full terminal line', (
         tester,
-        secondPointer.up(timeStamp: const Duration(milliseconds: 1010)),
+      ) async {
+        final narrowController = TerminalController(
+          config: const TerminalConfig(cols: 10, rows: 5),
+        );
+        addTearDown(narrowController.dispose);
+
+        writeToTerminal(narrowController, 'ABCDEFGHIJKLMNO');
+
+        await tester.pumpWidget(buildHandler(controller: narrowController));
+
+        await tapMouse(tester, const Offset(8, 16), count: 3);
+
+        final selection = terminalFor(narrowController).selection!;
+        expect(selection.startRow, 0);
+        expect(selection.startCol, 0);
+        expect(selection.endRow, 1);
+        expect(selection.endCol, 5);
+      });
+
+      testWidgets('triple click with fullRow mode selects entire row width', (
+        tester,
+      ) async {
+        final wideController = TerminalController(
+          config: const TerminalConfig(cols: 20, rows: 5),
+        );
+        addTearDown(wideController.dispose);
+
+        writeToTerminal(wideController, 'Hello');
+
+        await tester.pumpWidget(
+          buildHandler(
+            controller: wideController,
+            gestureSettings: const TerminalGestureSettings(
+              lineSelectMode: .full,
+            ),
+          ),
+        );
+
+        await tapMouse(tester, const Offset(8, 0), count: 3);
+
+        final selection = terminalFor(wideController).selection!;
+        expect(selection.endCol, 20);
+      });
+
+      testWidgets('tap counting resets on distant clicks', (tester) async {
+        await tester.pumpWidget(buildHandler(controller: controller));
+
+        await tapMouse(tester, const Offset(40, 16));
+        await tapMouse(tester, const Offset(200, 200));
+
+        expect(terminalFor(controller).selection, isNull);
+      });
+
+      testWidgets('touch long press starts normal selection by default', (
+        tester,
+      ) async {
+        await tester.pumpWidget(buildHandler(controller: controller));
+
+        final gesture = await tester.startGesture(const Offset(40, 16));
+
+        await tester.pump(const Duration(milliseconds: 550));
+
+        expect(terminalFor(controller).selection, isNull);
+
+        await gesture.moveTo(const Offset(80, 32));
+        final sel = terminalFor(controller).selection!;
+        expect(sel.mode, TerminalSelectionShape.normal);
+
+        await gesture.up();
+      });
+
+      testWidgets(
+        'touch move cancels long press if distance exceeds threshold',
+        (tester) async {
+          await tester.pumpWidget(buildHandler(controller: controller));
+
+          final gesture = await tester.startGesture(const Offset(40, 16));
+          await gesture.moveTo(const Offset(80, 16));
+
+          await tester.pump(const Duration(milliseconds: 550));
+
+          await gesture.moveTo(const Offset(120, 16));
+          expect(terminalFor(controller).selection, isNull);
+
+          await gesture.up();
+        },
       );
 
-      expect(terminalFor(controller).selection, isNull);
-    });
+      testWidgets('new click clears existing selection', (tester) async {
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-    testWidgets('double click on second word selects it', (tester) async {
-      writeToTerminal(controller, 'hello world');
+        final gesture = await mouseDown(tester, Offset.zero);
+        await gesture.moveTo(const Offset(80, 32));
+        await gesture.up();
 
-      await tester.pumpWidget(buildHandler(controller: controller));
+        expect(terminalFor(controller).selection, isNotNull);
 
-      await tapMouse(tester, const Offset(56, 0), count: 2);
+        final gesture2 = await mouseDown(tester, const Offset(40, 16));
+        await gesture2.up();
 
-      final selection = terminalFor(controller).selection!;
-      expect(selection.startCol, 6);
-      expect(selection.endCol, 11);
-    });
+        expect(terminalFor(controller).selection, isNull);
+      });
 
-    testWidgets('double click uses configured word boundaries', (tester) async {
-      final boundaryController = TerminalController();
-      addTearDown(boundaryController.dispose);
-      writeToTerminal(boundaryController, 'hello_world');
+      testWidgets('click without existing selection keeps selection null', (
+        tester,
+      ) async {
+        await tester.pumpWidget(buildHandler(controller: controller));
 
-      await tester.pumpWidget(
-        buildHandler(
-          controller: boundaryController,
-          gestureSettings: const TerminalGestureSettings(wordBoundaries: '_'),
-        ),
-      );
+        final gesture = await mouseDown(tester, const Offset(40, 16));
+        await gesture.up();
 
-      await tapMouse(tester, const Offset(64, 0), count: 2);
-
-      final selection = terminalFor(boundaryController).selection!;
-      expect(selection.startCol, 6);
-      expect(selection.endCol, 11);
-    });
-
-    testWidgets('triple click selects line content only', (tester) async {
-      writeToTerminal(controller, 'Hello');
-
-      await tester.pumpWidget(buildHandler(controller: controller));
-
-      await tapMouse(tester, const Offset(40, 0), count: 3);
-
-      final selection = terminalFor(controller).selection!;
-      expect(selection.startCol, 0);
-      expect(selection.endCol, 5);
-    });
-
-    testWidgets('triple click on wrapped line selects full terminal line', (
-      tester,
-    ) async {
-      final narrowController = TerminalController(
-        config: const TerminalConfig(cols: 10, rows: 5),
-      );
-      addTearDown(narrowController.dispose);
-
-      writeToTerminal(narrowController, 'ABCDEFGHIJKLMNO');
-
-      await tester.pumpWidget(buildHandler(controller: narrowController));
-
-      await tapMouse(tester, const Offset(8, 16), count: 3);
-
-      final selection = terminalFor(narrowController).selection!;
-      expect(selection.startRow, 0);
-      expect(selection.startCol, 0);
-      expect(selection.endRow, 1);
-      expect(selection.endCol, 5);
-    });
-
-    testWidgets('triple click with fullRow mode selects entire row width', (
-      tester,
-    ) async {
-      final wideController = TerminalController(
-        config: const TerminalConfig(cols: 20, rows: 5),
-      );
-      addTearDown(wideController.dispose);
-
-      writeToTerminal(wideController, 'Hello');
-
-      await tester.pumpWidget(
-        buildHandler(
-          controller: wideController,
-          gestureSettings: const TerminalGestureSettings(lineSelectMode: .full),
-        ),
-      );
-
-      await tapMouse(tester, const Offset(8, 0), count: 3);
-
-      final selection = terminalFor(wideController).selection!;
-      expect(selection.endCol, 20);
-    });
-
-    testWidgets('tap counting resets on distant clicks', (tester) async {
-      await tester.pumpWidget(buildHandler(controller: controller));
-
-      await tapMouse(tester, const Offset(40, 16));
-      await tapMouse(tester, const Offset(200, 200));
-
-      expect(terminalFor(controller).selection, isNull);
-    });
-
-    testWidgets('touch long press starts normal selection by default', (
-      tester,
-    ) async {
-      await tester.pumpWidget(buildHandler(controller: controller));
-
-      final gesture = await tester.startGesture(const Offset(40, 16));
-
-      await tester.pump(const Duration(milliseconds: 550));
-
-      expect(terminalFor(controller).selection, isNull);
-
-      await gesture.moveTo(const Offset(80, 32));
-      final sel = terminalFor(controller).selection!;
-      expect(sel.mode, TerminalSelectionShape.normal);
-
-      await gesture.up();
-    });
-
-    testWidgets('touch move cancels long press if distance exceeds threshold', (
-      tester,
-    ) async {
-      await tester.pumpWidget(buildHandler(controller: controller));
-
-      final gesture = await tester.startGesture(const Offset(40, 16));
-      await gesture.moveTo(const Offset(80, 16));
-
-      await tester.pump(const Duration(milliseconds: 550));
-
-      await gesture.moveTo(const Offset(120, 16));
-      expect(terminalFor(controller).selection, isNull);
-
-      await gesture.up();
-    });
-
-    testWidgets('new click clears existing selection', (tester) async {
-      await tester.pumpWidget(buildHandler(controller: controller));
-
-      final gesture = await mouseDown(tester, Offset.zero);
-      await gesture.moveTo(const Offset(80, 32));
-      await gesture.up();
-
-      expect(terminalFor(controller).selection, isNotNull);
-
-      final gesture2 = await mouseDown(tester, const Offset(40, 16));
-      await gesture2.up();
-
-      expect(terminalFor(controller).selection, isNull);
-    });
-
-    testWidgets('click without existing selection keeps selection null', (
-      tester,
-    ) async {
-      await tester.pumpWidget(buildHandler(controller: controller));
-
-      final gesture = await mouseDown(tester, const Offset(40, 16));
-      await gesture.up();
-
-      expect(terminalFor(controller).selection, isNull);
+        expect(terminalFor(controller).selection, isNull);
+      });
     });
 
     group('gesture settings', () {
@@ -1176,7 +1197,7 @@ void main() {
           addTearDown(replacement.dispose);
           writeToTerminal(replacement, 'selected');
           bindingFor(replacement).handleResize(
-            TerminalResizeEvent(
+            SurfaceMeasurement(
               cols: 80,
               rows: 24,
               cellWidth: defaultMetrics.cellWidth,
@@ -2979,7 +3000,7 @@ void main() {
         expect(events, isNotEmpty);
       });
 
-      testWidgets('disposes active inertia when detector unmounts', (
+      testWidgets('disposes active inertia when region unmounts', (
         tester,
       ) async {
         enableSgrMouseTracking(controller);

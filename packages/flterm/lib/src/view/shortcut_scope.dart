@@ -32,7 +32,7 @@ final class SelectAllIntent extends Intent {
 
 /// Platform-adaptive default shortcut bindings for terminal actions.
 @internal
-abstract final class TerminalShortcuts {
+abstract final class DefaultShortcuts {
   static Map<ShortcutActivator, Intent> defaultsFor([
     TargetPlatform? platform,
   ]) {
@@ -71,14 +71,14 @@ abstract final class TerminalShortcuts {
 /// terminal when no selection is present.
 ///
 /// ```dart
-/// TerminalShortcutScope(
+/// ShortcutScope(
 ///   controller: controller,
 ///   onPaste: handlePaste,
 ///   child: terminalContent,
 /// )
 /// ```
 @internal
-final class TerminalShortcutScope extends StatelessWidget {
+final class ShortcutScope extends StatelessWidget {
   final Widget child;
   final VoidCallback? onPaste;
   final TerminalController controller;
@@ -89,7 +89,7 @@ final class TerminalShortcutScope extends StatelessWidget {
   /// Additional shortcut bindings merged over platform defaults.
   final Map<ShortcutActivator, Intent>? shortcuts;
 
-  const TerminalShortcutScope({
+  const ShortcutScope({
     super.key,
     required this.child,
     required this.controller,
@@ -101,7 +101,7 @@ final class TerminalShortcutScope extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Shortcuts(
-      shortcuts: {...TerminalShortcuts.defaultsFor(), ...?shortcuts},
+      shortcuts: {...DefaultShortcuts.defaultsFor(), ...?shortcuts},
       child: Actions(
         actions: <Type, Action<Intent>>{
           CopyIntent: _ConditionalAction<CopyIntent>(

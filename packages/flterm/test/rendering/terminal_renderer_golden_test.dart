@@ -7,7 +7,7 @@ import 'dart:typed_data';
 import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/links/link_snapshot.dart';
 import 'package:flterm/src/rendering.dart';
-import 'package:flterm/src/rendering/terminal_render_cache.dart';
+import 'package:flterm/src/rendering/atlas_pool.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -59,10 +59,10 @@ void main() {
       return (0.299 * c.r * 255 + 0.587 * c.g * 255 + 0.114 * c.b * 255) < 128;
     }
 
-    TerminalRenderCache renderCache() {
-      final cache = TerminalRenderCache();
-      addTearDown(cache.dispose);
-      return cache;
+    AtlasPool atlasPool() {
+      final pool = AtlasPool();
+      addTearDown(pool.dispose);
+      return pool;
     }
 
     void writeUtf8(Terminal terminal, String text) {
@@ -80,7 +80,7 @@ void main() {
       bool blinkVisible = true,
       String preeditText = '',
       LinkSnapshot linkSnapshot = LinkSnapshot.empty,
-      ValueChanged<TerminalResizeEvent>? onGeometryChanged,
+      ValueChanged<SurfaceMeasurement>? onGeometryChanged,
     }) {
       final resolvedTheme =
           theme ??
@@ -89,7 +89,7 @@ void main() {
           );
       applyTerminalTheme(terminal, resolvedTheme);
       selection?.applyTo(terminal);
-      final frameSource = TerminalFrameSource(terminal);
+      final frameSource = FrameSource(terminal);
       addTearDown(frameSource.dispose);
       final width = maxWidth ?? defaultCols * metrics.cellWidth;
       final height = maxHeight ?? defaultRows * metrics.cellHeight;
@@ -105,7 +105,7 @@ void main() {
                 theme: resolvedTheme,
                 metrics: metrics,
                 offset: ViewportOffset.zero(),
-                renderCache: renderCache(),
+                atlasPool: atlasPool(),
                 focused: focused,
                 blinkVisible: blinkVisible,
                 preeditText: preeditText,

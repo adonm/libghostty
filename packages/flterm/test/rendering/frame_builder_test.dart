@@ -10,13 +10,13 @@ import 'package:flterm/src/foundation/dynamic_color.dart';
 import 'package:flterm/src/foundation/terminal_theme.dart';
 import 'package:flterm/src/rendering/atlas/atlas.dart';
 import 'package:flterm/src/rendering/atlas/sprite_buffer.dart';
+import 'package:flterm/src/rendering/frame_builder.dart';
 import 'package:flterm/src/rendering/paint_state.dart';
-import 'package:flterm/src/rendering/terminal_frame_builder.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart';
 
 void main() {
-  group('TerminalFrameBuilder', () {
+  group('FrameBuilder', () {
     const metrics = CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12);
 
     AtlasConfig config() {
@@ -84,17 +84,17 @@ void main() {
       Terminal terminal,
       Atlas atlas,
       SpriteBuffer sprites,
-      TerminalPaintState state,
-      TerminalFrameBuilder builder,
+      PaintState state,
+      FrameBuilder builder,
     })
     createFrame({required int cols, required int rows}) {
       final terminal = Terminal(cols: cols, rows: rows);
       final atlas = Atlas(config());
       final sprites = SpriteBuffer();
-      final state = TerminalPaintState(TerminalTheme.dark(), metrics)
+      final state = PaintState(TerminalTheme.dark(), metrics)
         ..cols = cols
         ..rows = rows;
-      final builder = TerminalFrameBuilder(atlas, sprites, state)
+      final builder = FrameBuilder(atlas, sprites, state)
         ..configure(rows, cols);
       addTearDown(() {
         builder.dispose();
@@ -114,17 +114,17 @@ void main() {
     late Terminal terminal;
     late Atlas atlas;
     late SpriteBuffer sprites;
-    late TerminalPaintState state;
-    late TerminalFrameBuilder builder;
+    late PaintState state;
+    late FrameBuilder builder;
 
     setUp(() {
       terminal = Terminal(cols: 8, rows: 2);
       atlas = Atlas(config());
       sprites = SpriteBuffer();
-      state = TerminalPaintState(TerminalTheme.dark(), metrics)
+      state = PaintState(TerminalTheme.dark(), metrics)
         ..cols = 8
         ..rows = 2;
-      builder = TerminalFrameBuilder(atlas, sprites, state)..configure(2, 8);
+      builder = FrameBuilder(atlas, sprites, state)..configure(2, 8);
     });
 
     tearDown(() {
@@ -160,14 +160,11 @@ void main() {
       final localTerminal = Terminal(cols: 260, rows: 1);
       final localAtlas = Atlas(config());
       final localSprites = SpriteBuffer();
-      final localState = TerminalPaintState(TerminalTheme.dark(), metrics)
+      final localState = PaintState(TerminalTheme.dark(), metrics)
         ..cols = 260
         ..rows = 1;
-      final localBuilder = TerminalFrameBuilder(
-        localAtlas,
-        localSprites,
-        localState,
-      )..configure(1, 260);
+      final localBuilder = FrameBuilder(localAtlas, localSprites, localState)
+        ..configure(1, 260);
       addTearDown(() {
         localBuilder.dispose();
         localSprites.dispose();

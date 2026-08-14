@@ -13,8 +13,8 @@ import 'terminal_painter.dart';
 /// this painter only clips and draws the snapshots it receives.
 class KittyGraphicsPainter implements TerminalPainter {
   final Paint _paint;
+  final PaintState _state;
   final KittyImageCache _cache;
-  final TerminalPaintState _state;
   final List<KittyPlacementSnapshot> _snapshots;
 
   KittyGraphicsPainter({

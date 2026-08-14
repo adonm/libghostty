@@ -25,7 +25,7 @@ import 'terminal_painter.dart';
 class CursorPainter implements TerminalPainter {
   final Paint _paint;
   final Atlas _atlas;
-  final TerminalPaintState _state;
+  final PaintState _state;
 
   CursorPainter(this._state, this._atlas) : _paint = Paint();
 

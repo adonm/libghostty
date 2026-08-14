@@ -18,12 +18,12 @@ import 'painters/terminal_text_painter.dart';
 import 'painters/underline_painter.dart';
 
 /// Owns paint helpers, paint order, and paint-only terminal resources.
-final class TerminalPainterStack {
+final class PainterStack {
   // The protocol splits negative z values in half at INT32_MIN / 2.
   static const int _kittyBelowBackgroundThreshold = -1 << 30;
 
+  final PaintState _state;
   final SpriteBuffer _sprites;
-  final TerminalPaintState _state;
   final KittyImageCache _kittyImageCache;
   final List<KittyPlacementSnapshot> _kittyBelowBackground = [];
   final List<KittyPlacementSnapshot> _kittyBelowText = [];
@@ -42,7 +42,7 @@ final class TerminalPainterStack {
   late TerminalTextPainter _textPainter;
   late UnderlinePainter _underlinePainter;
 
-  TerminalPainterStack({
+  PainterStack({
     required Atlas atlas,
     required this._sprites,
     required this._state,

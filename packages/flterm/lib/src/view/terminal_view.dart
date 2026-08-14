@@ -5,16 +5,16 @@ import 'package:flutter/widgets.dart';
 
 import '../controller/terminal_controller.dart';
 import '../foundation.dart';
-import '../input/terminal_gesture_detector.dart';
+import '../input/interaction_region.dart';
 import '../links/link_interaction.dart';
 import '../links/link_settings.dart';
 import '../rendering.dart';
-import '../rendering/terminal_render_cache.dart';
-import 'terminal_cursor_blink.dart';
+import '../rendering/atlas_pool.dart';
+import 'cursor_blink.dart';
+import 'shortcut_scope.dart';
 import 'terminal_scope.dart';
 import 'terminal_scroll_controller.dart';
-import 'terminal_shortcut_scope.dart';
-import 'terminal_view_attachment.dart';
+import 'view_attachment.dart';
 
 /// Displays a terminal and handles user interaction.
 ///
@@ -136,14 +136,15 @@ class TerminalView extends StatefulWidget {
   State<TerminalView> createState() => _TerminalViewState();
 }
 
-final class _TerminalViewState extends State<TerminalView> {
+final class _TerminalViewState extends State<TerminalView>
+    with WidgetsBindingObserver {
   final _rendererKey = GlobalKey();
   final _links = LinkInteraction();
-  final _cursorBlink = TerminalCursorBlink();
+  final _cursorBlink = CursorBlink();
   final _mouseCursorHidden = ValueNotifier(false);
   late final _mouseInteraction = Listenable.merge([_links, _mouseCursorHidden]);
 
-  late TerminalViewAttachment _attachment;
+  late ViewAttachment _attachment;
   var _devicePixelRatio = 1.0;
   late FocusNode _focusNode;
   late ScrollPhysics _gestureScrollPhysics;
@@ -159,12 +160,12 @@ final class _TerminalViewState extends State<TerminalView> {
 
   @override
   Widget build(BuildContext context) {
-    final cache = terminalScopeRenderCacheOf(context);
-    if (cache != null) return _build(cache);
+    final atlasPool = terminalScopeAtlasPoolOf(context);
+    if (atlasPool != null) return _build(atlasPool);
 
     return TerminalScope(
       child: Builder(
-        builder: (context) => _build(terminalScopeRenderCacheOf(context)!),
+        builder: (context) => _build(terminalScopeAtlasPoolOf(context)!),
       ),
     );
   }
@@ -182,9 +183,21 @@ final class _TerminalViewState extends State<TerminalView> {
 
     final devicePixelRatio = View.of(context).devicePixelRatio;
     if (_devicePixelRatio == devicePixelRatio) return;
-
     _devicePixelRatio = devicePixelRatio;
     _metrics = _measureMetrics();
+    _links.cancel();
+    _syncLinkInteraction();
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (!mounted) return;
+    final devicePixelRatio = View.of(context).devicePixelRatio;
+    if (_devicePixelRatio == devicePixelRatio) return;
+    setState(() {
+      _devicePixelRatio = devicePixelRatio;
+      _metrics = _measureMetrics();
+    });
     _links.cancel();
     _syncLinkInteraction();
   }
@@ -224,7 +237,7 @@ final class _TerminalViewState extends State<TerminalView> {
     }
 
     if (controllerChanged) {
-      _attachment = TerminalViewAttachment(_controller);
+      _attachment = ViewAttachment(_controller);
       _attachment.addListener(_onControllerChanged);
       _links.invalidateContent();
     }
@@ -271,6 +284,7 @@ final class _TerminalViewState extends State<TerminalView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _cursorBlink.dispose();
     _mouseCursorHidden.dispose();
     _links.dispose();
@@ -285,9 +299,9 @@ final class _TerminalViewState extends State<TerminalView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
-    _attachment = TerminalViewAttachment(_controller);
-
+    _attachment = ViewAttachment(_controller);
     _focusNode = widget.focusNode ?? FocusNode();
     _ownsFocusNode = widget.focusNode == null;
 
@@ -295,20 +309,17 @@ final class _TerminalViewState extends State<TerminalView> {
     _attachment.applyTheme(_theme);
     _metrics = _measureMetrics();
 
-    if (widget.fontData == null) {
-      unawaited(_resolveFontData(_theme.fontFamily));
-    }
+    if (widget.fontData == null) unawaited(_resolveFontData(_theme.fontFamily));
 
     _scrollController = widget.scrollController ?? TerminalScrollController();
     _ownsScrollController = widget.scrollController == null;
     _scrollController.activeScreen = _controller.activeScreen;
     _scrollController.addListener(_onScrollChanged);
-
     _attachment.addListener(_onControllerChanged);
     _syncLinkInteraction();
   }
 
-  Widget _build(TerminalRenderCache cache) {
+  Widget _build(AtlasPool atlasPool) {
     return GestureDetector(
       behavior: .translucent,
       onTap: _attachment.requestFocus,
@@ -318,7 +329,7 @@ final class _TerminalViewState extends State<TerminalView> {
           padding: widget.padding,
           child: Focus(
             onKeyEvent: _handleKeyEvent,
-            child: TerminalShortcutScope(
+            child: ShortcutScope(
               onPaste: _handlePaste,
               controller: _controller,
               shortcuts: widget.shortcuts,
@@ -326,7 +337,7 @@ final class _TerminalViewState extends State<TerminalView> {
               child: ListenableBuilder(
                 listenable: _attachment.interaction,
                 builder: (_, _) =>
-                    _buildInteraction(cache, _gestureScrollPhysics),
+                    _buildInteraction(atlasPool, _gestureScrollPhysics),
               ),
             ),
           ),
@@ -336,7 +347,7 @@ final class _TerminalViewState extends State<TerminalView> {
   }
 
   Widget _buildInteraction(
-    TerminalRenderCache renderCache,
+    AtlasPool atlasPool,
     ScrollPhysics gestureScrollPhysics,
   ) {
     final interaction = _attachment.interaction.value;
@@ -350,7 +361,7 @@ final class _TerminalViewState extends State<TerminalView> {
       child: Scrollable(
         controller: _scrollController,
         physics: scrollPhysics,
-        viewportBuilder: (_, offset) => TerminalGestureDetector(
+        viewportBuilder: (_, offset) => InteractionRegion(
           links: _links,
           metrics: _metrics,
           attachment: _attachment,
@@ -373,7 +384,7 @@ final class _TerminalViewState extends State<TerminalView> {
               metrics: _metrics,
               focused: _focusNode.hasFocus,
               frameSource: _attachment.frameSource,
-              renderCache: renderCache,
+              atlasPool: atlasPool,
               surfacePadding: widget.padding,
               devicePixelRatio: _devicePixelRatio,
               preeditText: _attachment.input.preeditText,
@@ -446,8 +457,8 @@ final class _TerminalViewState extends State<TerminalView> {
     _controller.paste(data.text!);
   }
 
-  void _handleResize(TerminalResizeEvent event) {
-    _attachment.handleResize(event);
+  void _handleResize(SurfaceMeasurement measurement) {
+    _attachment.handleResize(measurement);
     _syncLinkInteraction();
   }
 
@@ -500,13 +511,6 @@ final class _TerminalViewState extends State<TerminalView> {
     setState(() {});
   }
 
-  void _updateGestureScrollPhysics() {
-    final behavior = ScrollConfiguration.of(context);
-    final defaultPhysics = behavior.getScrollPhysics(context);
-    _gestureScrollPhysics =
-        widget.scrollPhysics?.applyTo(defaultPhysics) ?? defaultPhysics;
-  }
-
   void _syncBlink({bool? focused}) {
     _cursorBlink.sync(
       enabled:
@@ -537,6 +541,13 @@ final class _TerminalViewState extends State<TerminalView> {
       settings: widget.linkSettings,
       idleStyle: _theme.hyperlink.idle,
     );
+  }
+
+  void _updateGestureScrollPhysics() {
+    final behavior = ScrollConfiguration.of(context);
+    final defaultPhysics = behavior.getScrollPhysics(context);
+    _gestureScrollPhysics =
+        widget.scrollPhysics?.applyTo(defaultPhysics) ?? defaultPhysics;
   }
 
   void _updateTextInputGeometry() {

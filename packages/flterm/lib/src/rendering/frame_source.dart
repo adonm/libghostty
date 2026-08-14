@@ -7,11 +7,11 @@ import 'package:libghostty/libghostty.dart' hide Listenable;
 /// state or prepare frames. This keeps [TerminalRenderBox] subscribed to one
 /// lifecycle-bound object while preserving synchronous invalidation ordering.
 @internal
-final class TerminalFrameSource extends ChangeNotifier {
+final class FrameSource extends ChangeNotifier {
   final Terminal terminal;
   final Listenable? _viewportChanges;
 
-  TerminalFrameSource(this.terminal, {Listenable? viewportChanges})
+  FrameSource(this.terminal, {Listenable? viewportChanges})
     : _viewportChanges = viewportChanges {
     terminal.addListener(_handleChanged);
     viewportChanges?.addListener(_handleChanged);
