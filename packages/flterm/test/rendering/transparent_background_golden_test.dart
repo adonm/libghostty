@@ -6,7 +6,7 @@ import 'dart:typed_data';
 
 import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/rendering.dart';
-import 'package:flterm/src/rendering/terminal_render_cache.dart';
+import 'package:flterm/src/rendering/atlas_pool.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,10 +25,10 @@ void main() {
     const rows = 5;
     final sceneKey = GlobalKey();
 
-    TerminalRenderCache renderCache() {
-      final cache = TerminalRenderCache();
-      addTearDown(cache.dispose);
-      return cache;
+    AtlasPool atlasPool() {
+      final pool = AtlasPool();
+      addTearDown(pool.dispose);
+      return pool;
     }
 
     void writeUtf8(Terminal terminal, String text) {
@@ -50,7 +50,7 @@ void main() {
       final terminal = Terminal(cols: cols, rows: rows);
       addTearDown(terminal.dispose);
       applyTerminalTheme(terminal, theme);
-      final frameSource = TerminalFrameSource(terminal);
+      final frameSource = FrameSource(terminal);
       addTearDown(frameSource.dispose);
       writeUtf8(terminal, content);
 
@@ -79,7 +79,7 @@ void main() {
                       theme: theme,
                       metrics: metrics,
                       offset: ViewportOffset.zero(),
-                      renderCache: renderCache(),
+                      atlasPool: atlasPool(),
                       focused: true,
                       onGeometryChanged: (_) {},
                       onViewportRowChanged: (_) {},

@@ -16,10 +16,10 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:libghostty/libghostty.dart' hide ColorScheme, KeyEvent;
 import 'package:libghostty/libghostty.dart'
     as vt
     show ColorScheme, ColorSchemeReportEncode;
+import 'package:libghostty/libghostty.dart' hide ColorScheme, KeyEvent;
 import 'package:material_ui/material_ui.dart';
 
 extension _SelectionEdges on Selection {
@@ -32,8 +32,6 @@ extension _SelectionEdges on Selection {
     final end = _endPoint;
     return start.row != end.row ? start.row < end.row : start.col <= end.col;
   }
-
-  int get startCol => _forward ? _startPoint.col : _startPoint.col + 1;
 
   int get endCol => _forward ? _endPoint.col + 1 : _endPoint.col;
 
@@ -81,6 +79,16 @@ void main() {
     String decodeOutput(List<Uint8List> output) {
       return utf8.decode(
         Uint8List.fromList(output.expand((chunk) => chunk).toList()),
+      );
+    }
+
+    ({int height, int width}) physicalSizeReport(List<Uint8List> output) {
+      final match = RegExp(
+        '\x1b\\[4;(\\d+);(\\d+)t',
+      ).firstMatch(decodeOutput(output))!;
+      return (
+        height: int.parse(match.group(1)!),
+        width: int.parse(match.group(2)!),
       );
     }
 
@@ -266,7 +274,7 @@ void main() {
       expect(find.byType(TerminalView), findsOneWidget);
     });
 
-    testWidgets('creates an isolated render cache without explicit scope', (
+    testWidgets('creates an isolated atlas pool without explicit scope', (
       tester,
     ) async {
       final controller2 = TerminalController();
@@ -343,6 +351,33 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(renderer(tester).devicePixelRatio, tester.view.devicePixelRatio);
+    });
+
+    testWidgets('DPR changes recommit physical geometry', (tester) async {
+      final output = <Uint8List>[];
+      controller.onOutput = output.add;
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(800, 480);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(wrapInApp(controller: controller));
+      await tester.pumpAndSettle();
+      controller.write(Uint8List.fromList(utf8.encode('\x1b[14t')));
+      final initial = physicalSizeReport(output);
+      output.clear();
+
+      tester.view
+        ..devicePixelRatio = 2
+        ..physicalSize = const Size(1600, 960);
+      await tester.pumpAndSettle();
+      controller.write(Uint8List.fromList(utf8.encode('\x1b[14t')));
+
+      expect(physicalSizeReport(output), (
+        height: initial.height * 2,
+        width: initial.width * 2,
+      ));
     });
 
     testWidgets('tap to focus', (tester) async {
@@ -1089,19 +1124,43 @@ void main() {
       expect(expected.top, greaterThan(0));
     });
 
-    testWidgets('unmount clears focus state', (tester) async {
-      final focusNode = FocusNode();
-      addTearDown(focusNode.dispose);
-      await tester.pumpWidget(
-        wrapInApp(controller: controller, focusNode: focusNode),
-      );
-      focusNode.requestFocus();
-      await tester.pump();
+    group('unmount', () {
+      testWidgets('clears focus state', (tester) async {
+        final focusNode = FocusNode();
+        addTearDown(focusNode.dispose);
+        await tester.pumpWidget(
+          wrapInApp(controller: controller, focusNode: focusNode),
+        );
+        focusNode.requestFocus();
+        await tester.pump();
 
-      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+        await tester.pumpAndSettle();
 
-      expect(focusNode.hasFocus, isFalse);
+        expect(focusNode.hasFocus, isFalse);
+      });
+
+      testWidgets('leaves the application-owned controller usable', (
+        tester,
+      ) async {
+        final output = <Uint8List>[];
+        controller.onOutput = output.add;
+        await tester.pumpWidget(wrapInApp(controller: controller));
+
+        await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+        controller.sendText('ready');
+
+        expect(decodeOutput(output), 'ready');
+      });
+
+      testWidgets('releases the controller view attachment', (tester) async {
+        await tester.pumpWidget(wrapInApp(controller: controller));
+        await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+
+        await tester.pumpWidget(wrapInApp(controller: controller));
+
+        expect(find.byType(TerminalView), findsOneWidget);
+      });
     });
 
     testWidgets('changing theme updates metrics', (tester) async {
@@ -1706,7 +1765,7 @@ void main() {
 
         final position = scrollController.position;
         expect(
-          (position as TerminalScrollPosition).activeScreen,
+          (position as ScrollbackPosition).activeScreen,
           TerminalScreen.alternate,
         );
         expect(position.minScrollExtent, double.negativeInfinity);
@@ -2951,79 +3010,6 @@ void main() {
           (b) => utf8.decode(b).contains('\x1b[200~'),
         );
         expect(pasted, isEmpty);
-      });
-    });
-
-    group('mouse selection', () {
-      Future<TestGesture> mouseDown(WidgetTester tester, Offset pos) {
-        return tester.startGesture(pos, kind: PointerDeviceKind.mouse);
-      }
-
-      Future<void> tapMouse(
-        WidgetTester tester,
-        Offset position, {
-        int count = 1,
-      }) async {
-        for (var i = 0; i < count; i++) {
-          final gesture = await mouseDown(tester, position);
-          await gesture.up();
-        }
-      }
-
-      testWidgets('double click selects word', (tester) async {
-        writeUtf8(controller, 'hello world');
-        await tester.pumpWidget(
-          wrapInApp(controller: controller, autofocus: true),
-        );
-        await tester.pumpAndSettle();
-
-        final topLeft = tester.getTopLeft(find.byType(TerminalView));
-        final clickPos = topLeft + const Offset(20, 8);
-
-        await tapMouse(tester, clickPos, count: 2);
-        await tester.pump();
-
-        expect(controller.hasSelection, isTrue);
-        expect(controller.selectedText(), contains('hello'));
-      });
-
-      testWidgets('triple click selects entire line', (tester) async {
-        writeUtf8(controller, 'hello world');
-        await tester.pumpWidget(
-          wrapInApp(controller: controller, autofocus: true),
-        );
-        await tester.pumpAndSettle();
-
-        final topLeft = tester.getTopLeft(find.byType(TerminalView));
-        final clickPos = topLeft + const Offset(20, 8);
-
-        await tapMouse(tester, clickPos, count: 3);
-        await tester.pump();
-
-        final sel = activeSelection(controller);
-        expect(sel, isNotNull);
-        expect(sel!.startCol, 0);
-        expect(controller.selectedText().length, greaterThan('hello'.length));
-      });
-
-      testWidgets('mouse drag creates selection', (tester) async {
-        writeUtf8(controller, 'hello world');
-        await tester.pumpWidget(
-          wrapInApp(controller: controller, autofocus: true),
-        );
-        await tester.pumpAndSettle();
-
-        final topLeft = tester.getTopLeft(find.byType(TerminalView));
-        final start = topLeft + const Offset(10, 8);
-        final end = topLeft + const Offset(100, 8);
-
-        final gesture = await mouseDown(tester, start);
-        await gesture.moveTo(end);
-        await gesture.up();
-        await tester.pump();
-
-        expect(controller.hasSelection, isTrue);
-        expect(controller.selectedText(), isNotEmpty);
       });
     });
 

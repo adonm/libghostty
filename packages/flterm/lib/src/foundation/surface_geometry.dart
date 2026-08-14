@@ -8,7 +8,7 @@ import 'package:meta/meta.dart';
 /// can therefore commit every non-null instance without repeating validation.
 @immutable
 @internal
-final class TerminalGeometry {
+final class SurfaceGeometry {
   /// Maximum grid dimension representable by the native terminal geometry.
   static const _maxGridDimension = 0xffff;
 
@@ -33,7 +33,7 @@ final class TerminalGeometry {
   final int screenWidth;
   final int screenHeight;
 
-  const TerminalGeometry._({
+  const SurfaceGeometry._({
     required this.cols,
     required this.rows,
     required this.cellWidth,
@@ -68,7 +68,7 @@ final class TerminalGeometry {
 
   @override
   bool operator ==(Object other) {
-    return other is TerminalGeometry &&
+    return other is SurfaceGeometry &&
         other.cols == cols &&
         other.rows == rows &&
         other.cellWidth == cellWidth &&
@@ -80,29 +80,40 @@ final class TerminalGeometry {
         other.devicePixelRatio == devicePixelRatio;
   }
 
-  /// Creates a validated measurement from a view resize event.
-  static TerminalGeometry? tryFrom(TerminalResizeEvent event) {
-    if (event.cols <= 0 ||
-        event.cols > _maxGridDimension ||
-        event.rows <= 0 ||
-        event.rows > _maxGridDimension ||
-        !_isPositive(event.cellWidth) ||
-        !_isPositive(event.cellHeight) ||
-        !_isNonNegative(event.paddingLeft) ||
-        !_isNonNegative(event.paddingRight) ||
-        !_isNonNegative(event.paddingTop) ||
-        !_isNonNegative(event.paddingBottom) ||
-        !_isPositive(event.devicePixelRatio)) {
+  /// Creates validated geometry from [measurement].
+  ///
+  /// Returns `null` when a logical value is invalid, a cell rounds to zero
+  /// physical pixels, or a derived physical value exceeds its C ABI field.
+  static SurfaceGeometry? tryFrom(SurfaceMeasurement measurement) {
+    if (measurement.cols <= 0 ||
+        measurement.cols > _maxGridDimension ||
+        measurement.rows <= 0 ||
+        measurement.rows > _maxGridDimension ||
+        !_isPositive(measurement.cellWidth) ||
+        !_isPositive(measurement.cellHeight) ||
+        !_isNonNegative(measurement.paddingLeft) ||
+        !_isNonNegative(measurement.paddingRight) ||
+        !_isNonNegative(measurement.paddingTop) ||
+        !_isNonNegative(measurement.paddingBottom) ||
+        !_isPositive(measurement.devicePixelRatio)) {
       return null;
     }
 
-    final dpr = event.devicePixelRatio;
-    final cellWidthPx = _physicalPixels(event.cellWidth, dpr, nonZero: true);
-    final cellHeightPx = _physicalPixels(event.cellHeight, dpr, nonZero: true);
-    final paddingLeftPx = _physicalPixels(event.paddingLeft, dpr);
-    final paddingRightPx = _physicalPixels(event.paddingRight, dpr);
-    final paddingTopPx = _physicalPixels(event.paddingTop, dpr);
-    final paddingBottomPx = _physicalPixels(event.paddingBottom, dpr);
+    final dpr = measurement.devicePixelRatio;
+    final cellWidthPx = _physicalPixels(
+      measurement.cellWidth,
+      dpr,
+      nonZero: true,
+    );
+    final cellHeightPx = _physicalPixels(
+      measurement.cellHeight,
+      dpr,
+      nonZero: true,
+    );
+    final paddingLeftPx = _physicalPixels(measurement.paddingLeft, dpr);
+    final paddingRightPx = _physicalPixels(measurement.paddingRight, dpr);
+    final paddingTopPx = _physicalPixels(measurement.paddingTop, dpr);
+    final paddingBottomPx = _physicalPixels(measurement.paddingBottom, dpr);
     if (cellWidthPx == null ||
         cellHeightPx == null ||
         paddingLeftPx == null ||
@@ -113,23 +124,23 @@ final class TerminalGeometry {
     }
 
     final screenWidth =
-        event.cols * cellWidthPx + paddingLeftPx + paddingRightPx;
+        measurement.cols * cellWidthPx + paddingLeftPx + paddingRightPx;
     final screenHeight =
-        event.rows * cellHeightPx + paddingTopPx + paddingBottomPx;
+        measurement.rows * cellHeightPx + paddingTopPx + paddingBottomPx;
     if (screenWidth > _maxMouseDimension || screenHeight > _maxMouseDimension) {
       return null;
     }
 
-    return TerminalGeometry._(
-      cols: event.cols,
-      rows: event.rows,
-      cellWidth: event.cellWidth,
-      cellHeight: event.cellHeight,
-      paddingLeft: event.paddingLeft,
-      paddingRight: event.paddingRight,
-      paddingTop: event.paddingTop,
-      paddingBottom: event.paddingBottom,
-      devicePixelRatio: event.devicePixelRatio,
+    return SurfaceGeometry._(
+      cols: measurement.cols,
+      rows: measurement.rows,
+      cellWidth: measurement.cellWidth,
+      cellHeight: measurement.cellHeight,
+      paddingLeft: measurement.paddingLeft,
+      paddingRight: measurement.paddingRight,
+      paddingTop: measurement.paddingTop,
+      paddingBottom: measurement.paddingBottom,
+      devicePixelRatio: measurement.devicePixelRatio,
       cellWidthPx: cellWidthPx,
       cellHeightPx: cellHeightPx,
       paddingLeftPx: paddingLeftPx,
@@ -162,39 +173,40 @@ final class TerminalGeometry {
 /// A complete terminal surface measurement in logical pixels.
 ///
 /// The renderer produces this value; the controller validates and commits it
-/// before input and selection consume the resulting [TerminalGeometry]. One
-/// event contains the grid, cell metrics, surface padding, and device scale so
+/// before input and selection consume the resulting [SurfaceGeometry]. One
+/// value contains the grid, cell metrics, surface padding, and device scale so
 /// no consumer can observe a partially updated measurement.
+@internal
 @immutable
-final class TerminalResizeEvent {
-  /// Number of terminal columns.
+final class SurfaceMeasurement {
+  /// Number of measured terminal columns.
   final int cols;
 
-  /// Number of terminal rows.
+  /// Number of measured terminal rows.
   final int rows;
 
-  /// Cell width in logical pixels.
+  /// Logical width of one terminal cell.
   final double cellWidth;
 
-  /// Cell height in logical pixels.
+  /// Logical height of one terminal cell.
   final double cellHeight;
 
-  /// Logical padding on the left side of the terminal surface.
+  /// Logical padding before the grid's horizontal origin.
   final double paddingLeft;
 
-  /// Logical padding on the right side of the terminal surface.
+  /// Logical padding after the grid's horizontal extent.
   final double paddingRight;
 
-  /// Logical padding on the top side of the terminal surface.
+  /// Logical padding before the grid's vertical origin.
   final double paddingTop;
 
-  /// Logical padding on the bottom side of the terminal surface.
+  /// Logical padding after the grid's vertical extent.
   final double paddingBottom;
 
-  /// Device-pixel ratio of the hosting Flutter view.
+  /// Number of physical pixels represented by one logical pixel.
   final double devicePixelRatio;
 
-  const TerminalResizeEvent({
+  const SurfaceMeasurement({
     required this.cols,
     required this.rows,
     required this.cellWidth,
@@ -221,7 +233,7 @@ final class TerminalResizeEvent {
 
   @override
   bool operator ==(Object other) {
-    return other is TerminalResizeEvent &&
+    return other is SurfaceMeasurement &&
         other.cols == cols &&
         other.rows == rows &&
         other.cellWidth == cellWidth &&

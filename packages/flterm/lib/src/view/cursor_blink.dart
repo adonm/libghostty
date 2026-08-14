@@ -8,20 +8,20 @@ import 'package:flutter/foundation.dart';
 /// position, or theme timing changes. Disabling blinking always restores the
 /// visible phase so a paused cursor cannot remain hidden.
 @internal
-final class TerminalCursorBlink extends ValueNotifier<bool> {
+final class CursorBlink extends ValueNotifier<bool> {
   Timer? _timer;
 
-  TerminalCursorBlink() : super(true);
-
-  void sync({required bool enabled, required Duration interval}) {
-    _timer?.cancel();
-    _timer = enabled ? Timer.periodic(interval, (_) => value = !value) : null;
-    if (!value) value = true;
-  }
+  CursorBlink() : super(true);
 
   @override
   void dispose() {
     _timer?.cancel();
     super.dispose();
+  }
+
+  void sync({required bool enabled, required Duration interval}) {
+    _timer?.cancel();
+    _timer = enabled ? Timer.periodic(interval, (_) => value = !value) : null;
+    if (!value) value = true;
   }
 }

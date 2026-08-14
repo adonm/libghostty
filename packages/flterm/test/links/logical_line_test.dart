@@ -1,12 +1,12 @@
 import 'package:flterm/src/foundation.dart' show CellRange;
-import 'package:flterm/src/links/terminal_logical_line.dart';
+import 'package:flterm/src/links/logical_line.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart' show Position;
 
 void main() {
-  group('TerminalLogicalLine', () {
-    TerminalLogicalLine line(String text, List<Position> cells) {
-      return TerminalLogicalLine(
+  group('LogicalLine', () {
+    LogicalLine line(String text, List<Position> cells) {
+      return LogicalLine(
         text,
         cells,
         cells,

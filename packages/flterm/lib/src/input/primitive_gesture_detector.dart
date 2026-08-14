@@ -9,7 +9,7 @@ import 'package:meta/meta.dart';
 /// source timestamp because Flutter's resolved tap details do not expose it.
 /// This widget reports gestures only and owns no selection or terminal state.
 @internal
-final class TerminalRawGestureDetector extends StatelessWidget {
+final class PrimitiveGestureDetector extends StatelessWidget {
   final Widget child;
 
   /// Fires when a tap begins with its source pointer timestamp.
@@ -36,7 +36,7 @@ final class TerminalRawGestureDetector extends StatelessWidget {
   /// Fires when a touch long press ends.
   final VoidCallback? onLongPressUp;
 
-  const TerminalRawGestureDetector({
+  const PrimitiveGestureDetector({
     super.key,
     required this.child,
     this.onTapDown,

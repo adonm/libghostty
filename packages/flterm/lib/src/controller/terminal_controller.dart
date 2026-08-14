@@ -1,12 +1,12 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' hide Key;
-import 'package:libghostty/libghostty.dart' hide Listenable, TerminalGeometry;
+import 'package:libghostty/libghostty.dart' hide Listenable;
 
 import '../foundation.dart';
-import '../input/terminal_input_encoder.dart';
-import '../input/terminal_input_event.dart';
-import '../interaction/terminal_selection.dart';
+import '../input/input_encoder.dart';
+import '../input/input_message.dart';
+import '../interaction/selection_session.dart';
 import 'kitty_png_decoder.dart';
 
 part 'terminal_controller_impl.dart';

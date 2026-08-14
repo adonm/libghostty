@@ -16,7 +16,7 @@ import 'package:meta/meta.dart';
 /// dedupe counters ensure one terminal newline while leaving later input
 /// untouched.
 @internal
-final class TerminalInputClient with DeltaTextInputClient {
+final class TextInputSession with DeltaTextInputClient {
   static const _newlineActionDedupeWindow = Duration(milliseconds: 100);
   static const _sentinel = TextEditingValue(
     selection: .collapsed(offset: 1),
@@ -416,7 +416,7 @@ final class TerminalInputClient with DeltaTextInputClient {
 enum _CommittedCompositionEdit { none, pending, suppressNextDeletionDelta }
 
 /// Extracts terminal-owned text from Flutter's sentinel editing value.
-extension _TerminalEditingValue on TextEditingValue {
+extension _EditingValue on TextEditingValue {
   bool get hasTerminalComposingRange {
     final composing = this.composing;
     return composing.isValid &&
@@ -438,14 +438,14 @@ extension _TerminalEditingValue on TextEditingValue {
     var contentStart = start;
     if (start == 0 &&
         end > 0 &&
-        text.startsWith(TerminalInputClient._sentinel.text)) {
-      contentStart = TerminalInputClient._sentinel.text.length;
+        text.startsWith(TextInputSession._sentinel.text)) {
+      contentStart = TextInputSession._sentinel.text.length;
     }
     if (contentStart >= end) return '';
     return text.substring(contentStart, end);
   }
 }
 
-extension _TerminalInputString on String {
+extension _InputString on String {
   bool get isImeLikeCommit => codeUnits.any((codeUnit) => codeUnit > 0x7f);
 }

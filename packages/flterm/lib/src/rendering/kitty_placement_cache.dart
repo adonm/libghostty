@@ -12,7 +12,7 @@ import 'paint_state.dart';
 /// invalidates resolved placement rectangles. Unchanged inputs avoid placement
 /// iteration, image lookup, sorting, and image eviction.
 final class KittyPlacementCache {
-  final TerminalPaintState _state;
+  final PaintState _state;
   final KittyImageCache _images;
   final List<KittyPlacementSnapshot> _snapshots = [];
   final Set<int> _liveImageIds = {};

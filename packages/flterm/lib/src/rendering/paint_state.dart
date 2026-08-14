@@ -14,7 +14,7 @@ import 'atlas/atlas.dart';
 ///
 /// Contains grid dimensions, device pixel ratio, resolved terminal
 /// colors, cursor state, IME preedit state, and faint text opacity.
-class TerminalPaintState {
+class PaintState {
   TerminalTheme theme;
   CellMetrics metrics;
 
@@ -48,7 +48,7 @@ class TerminalPaintState {
   /// over the active composing range.
   var preeditActive = false;
 
-  TerminalPaintState(this.theme, this.metrics)
+  PaintState(this.theme, this.metrics)
     : faintAlpha = (theme.faintOpacity * 255).ceil() {
     terminalForegroundArgb = theme.foreground.toARGB32();
     terminalBackgroundArgb = theme.background.toARGB32();

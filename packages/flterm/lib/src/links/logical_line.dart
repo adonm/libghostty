@@ -10,7 +10,7 @@ import '../foundation/cell_range.dart';
 /// every text offset has a source cell in [map], and every retained cell has a
 /// text start/end offset used by link detectors.
 @internal
-final class TerminalLogicalLine {
+final class LogicalLine {
   final String text;
   final List<Position> map;
   final List<Position> cells;
@@ -18,11 +18,11 @@ final class TerminalLogicalLine {
   final List<int> _cellStartOffsets;
   final List<int> _cellEndOffsets;
 
-  TerminalLogicalLine(this.text, this.map, this.cells, this.uris)
+  LogicalLine(this.text, this.map, this.cells, this.uris)
     : _cellStartOffsets = _startOffsetsFor(map, cells),
       _cellEndOffsets = _endOffsetsFor(map, cells);
 
-  const TerminalLogicalLine._(
+  const LogicalLine._(
     this.text,
     this.map,
     this.cells,
@@ -70,7 +70,7 @@ final class TerminalLogicalLine {
   }
 
   /// Builds the wrapped logical line containing [position].
-  static TerminalLogicalLine? atPosition(
+  static LogicalLine? atPosition(
     Terminal terminal,
     Position position, {
     required int rows,
@@ -106,14 +106,14 @@ final class TerminalLogicalLine {
   }
 
   /// Builds every visible wrapped logical line in viewport order.
-  static List<TerminalLogicalLine> visible(
+  static List<LogicalLine> visible(
     Terminal terminal, {
     required int rows,
     required int cols,
   }) {
     if (rows <= 0 || cols <= 0) return const [];
 
-    final lines = <TerminalLogicalLine>[];
+    final lines = <LogicalLine>[];
     var current = _LogicalLineBuilder();
 
     for (var row = 0; row < rows; row++) {
@@ -169,7 +169,7 @@ final class _LogicalLineBuilder {
   bool get isEmpty => _cells.isEmpty;
 
   bool? addRow(Terminal terminal, int row, int cols) {
-    final firstCell = TerminalLogicalLine._cellAt(terminal, row, 0);
+    final firstCell = LogicalLine._cellAt(terminal, row, 0);
     if (firstCell == null) return null;
     final rowWrap = firstCell.rowWrap;
 
@@ -177,7 +177,7 @@ final class _LogicalLineBuilder {
       final position = Position(row: row, col: col);
       final cell = col == 0
           ? firstCell
-          : TerminalLogicalLine._cellAt(terminal, row, col);
+          : LogicalLine._cellAt(terminal, row, col);
       if (cell == null) break;
       if (cell.wide == .spacerTail) continue;
 
@@ -201,14 +201,14 @@ final class _LogicalLineBuilder {
     return rowWrap;
   }
 
-  TerminalLogicalLine finish() {
+  LogicalLine finish() {
     final raw = _text.toString();
     final end = raw.trimRight().length;
     final cellCount = _cellStartOffsets.lastIndexWhere(
       (offset) => offset < end,
     );
     final cellsEnd = cellCount + 1;
-    return TerminalLogicalLine._(
+    return LogicalLine._(
       raw.substring(0, end),
       List.unmodifiable(_map.take(end)),
       List.unmodifiable(_cells.take(cellsEnd)),

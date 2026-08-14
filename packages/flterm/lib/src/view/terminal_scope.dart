@@ -1,18 +1,18 @@
 import 'package:flutter/widgets.dart';
 
-import '../rendering/terminal_render_cache.dart';
+import '../rendering/atlas_pool.dart';
 
-/// Returns the shared terminal render cache nearest to [context], if any.
-TerminalRenderCache? terminalScopeRenderCacheOf(BuildContext context) {
+/// Returns the shared terminal atlas pool nearest to [context], if any.
+AtlasPool? terminalScopeAtlasPoolOf(BuildContext context) {
   return context
       .dependOnInheritedWidgetOfExactType<_TerminalScopeInherited>()
-      ?.renderCache;
+      ?.atlasPool;
 }
 
 /// Shares terminal resources across descendant [TerminalView] widgets.
 ///
 /// Wrapping multiple terminals in the same scope lets compatible renderers
-/// reuse expensive internal caches. Terminals outside a scope create an
+/// reuse compatible glyph atlases. Terminals outside a scope create an
 /// isolated local scope automatically.
 class TerminalScope extends StatefulWidget {
   final Widget child;
@@ -24,33 +24,30 @@ class TerminalScope extends StatefulWidget {
 }
 
 final class _TerminalScopeState extends State<TerminalScope> {
-  final _renderCache = TerminalRenderCache();
+  final _atlasPool = AtlasPool();
 
   @override
   Widget build(BuildContext context) {
-    return _TerminalScopeInherited(
-      renderCache: _renderCache,
-      child: widget.child,
-    );
+    return _TerminalScopeInherited(atlasPool: _atlasPool, child: widget.child);
   }
 
   @override
   void dispose() {
-    _renderCache.dispose();
+    _atlasPool.dispose();
     super.dispose();
   }
 }
 
 final class _TerminalScopeInherited extends InheritedWidget {
-  final TerminalRenderCache renderCache;
+  final AtlasPool atlasPool;
 
   const _TerminalScopeInherited({
-    required this.renderCache,
+    required this.atlasPool,
     required super.child,
   });
 
   @override
   bool updateShouldNotify(_TerminalScopeInherited oldWidget) {
-    return !identical(renderCache, oldWidget.renderCache);
+    return !identical(atlasPool, oldWidget.atlasPool);
   }
 }

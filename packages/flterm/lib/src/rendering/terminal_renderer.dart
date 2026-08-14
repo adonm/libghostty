@@ -6,10 +6,10 @@ import 'package:meta/meta.dart';
 import '../foundation.dart';
 import '../links/link_snapshot.dart';
 import 'atlas/atlas_config.dart';
+import 'atlas_pool.dart';
+import 'frame_source.dart';
 import 'paint_state.dart';
-import 'terminal_frame_source.dart';
-import 'terminal_render_cache.dart';
-import 'terminal_render_pipeline.dart';
+import 'render_pipeline.dart';
 
 /// Renders a terminal screen with cell backgrounds, styled text, cursors,
 /// and selection overlays.
@@ -37,7 +37,7 @@ import 'terminal_render_pipeline.dart';
 @internal
 final class TerminalRenderer extends LeafRenderObjectWidget {
   /// Supplies the terminal and publishes frame and viewport changes.
-  final TerminalFrameSource frameSource;
+  final FrameSource frameSource;
 
   /// Visual style applied to the terminal.
   ///
@@ -86,13 +86,13 @@ final class TerminalRenderer extends LeafRenderObjectWidget {
   ///
   /// The callback receives the complete measured geometry. The owner must
   /// apply the transaction before notifying its backend.
-  final ValueChanged<TerminalResizeEvent> onGeometryChanged;
+  final ValueChanged<SurfaceMeasurement> onGeometryChanged;
 
   /// Device pixel ratio of the Flutter view hosting this renderer.
   final double devicePixelRatio;
 
-  /// Internal render cache used to share compatible atlas state.
-  final TerminalRenderCache renderCache;
+  /// Internal atlas pool used to share compatible rendering state.
+  final AtlasPool atlasPool;
 
   /// Requests a terminal viewport row derived from Flutter scroll layout.
   final ValueChanged<int> onViewportRowChanged;
@@ -105,7 +105,7 @@ final class TerminalRenderer extends LeafRenderObjectWidget {
     this.surfacePadding = EdgeInsets.zero,
     required this.offset,
     required this.focused,
-    required this.renderCache,
+    required this.atlasPool,
     this.devicePixelRatio = 1,
     this.blinkVisible = true,
     this.preeditText = '',
@@ -122,7 +122,7 @@ final class TerminalRenderer extends LeafRenderObjectWidget {
       metrics: metrics,
       surfacePadding: surfacePadding,
       frameSource: frameSource,
-      renderCache: renderCache,
+      atlasPool: atlasPool,
       devicePixelRatio: devicePixelRatio,
       onGeometryChanged: onGeometryChanged,
       onViewportRowChanged: onViewportRowChanged,
@@ -159,7 +159,7 @@ final class TerminalRenderer extends LeafRenderObjectWidget {
     renderObject
       ..frameSource = frameSource
       ..theme = theme
-      ..renderCache = renderCache
+      ..atlasPool = atlasPool
       ..offset = offset
       ..metrics = metrics
       ..surfacePadding = surfacePadding
@@ -192,15 +192,15 @@ final class TerminalRenderer extends LeafRenderObjectWidget {
 /// Created and managed by [TerminalRenderer]. Not intended for direct use.
 @internal
 final class TerminalRenderBox extends RenderBox {
-  final TerminalPaintState _paintState;
-  late final TerminalRenderPipeline _pipeline;
+  final PaintState _paintState;
+  late final RenderPipeline _pipeline;
 
   var _applyingViewportIntent = false;
   var _cellHeightPx = 0;
   var _cellWidthPx = 0;
   double _devicePixelRatio;
-  TerminalFrameSource _frameSource;
-  late TerminalAtlasHandle _atlasHandle;
+  FrameSource _frameSource;
+  late AtlasLease _atlasLease;
   var _lastCellHeight = 0.0;
   var _lastCellWidth = 0.0;
   var _lastDevicePixelRatio = 0.0;
@@ -209,13 +209,13 @@ final class TerminalRenderBox extends RenderBox {
   LinkSnapshot _linkSnapshot;
   var _needsFrameSync = false;
   ViewportOffset _offset;
-  ValueChanged<TerminalResizeEvent> _onGeometryChanged;
+  ValueChanged<SurfaceMeasurement> _onGeometryChanged;
   ValueChanged<int> _onViewportRowChanged;
   int? _pendingViewportRow;
   var _performingLayout = false;
   var _preeditText = '';
   bool? _primaryStickToBottom;
-  TerminalRenderCache _renderCache;
+  AtlasPool _atlasPool;
   var _stickToBottom = true;
   var _surfacePadding = EdgeInsets.zero;
 
@@ -226,7 +226,7 @@ final class TerminalRenderBox extends RenderBox {
     EdgeInsets surfacePadding = EdgeInsets.zero,
     required this._offset,
     required bool focused,
-    required this._renderCache,
+    required this._atlasPool,
     required this._devicePixelRatio,
     bool blinkVisible = true,
     this._linkSnapshot = .empty,
@@ -235,18 +235,18 @@ final class TerminalRenderBox extends RenderBox {
     required this._onViewportRowChanged,
   }) : _surfacePadding = surfacePadding,
        _lastSurfacePadding = surfacePadding,
-       _paintState = TerminalPaintState(theme, metrics)
+       _paintState = PaintState(theme, metrics)
          ..blinkVisible = blinkVisible
          ..cursorFocused = focused {
-    _atlasHandle = _renderCache.acquireAtlas(
+    _atlasLease = _atlasPool.acquireAtlas(
       .fromTheme(
         theme: theme,
         metrics: metrics,
         devicePixelRatio: _devicePixelRatio,
       ),
     );
-    final atlas = _atlasHandle.atlas;
-    _pipeline = TerminalRenderPipeline(
+    final atlas = _atlasLease.atlas;
+    _pipeline = RenderPipeline(
       atlas: atlas,
       state: _paintState,
       onImageReady: markNeedsPaint,
@@ -350,7 +350,7 @@ final class TerminalRenderBox extends RenderBox {
     markNeedsLayout();
   }
 
-  set onGeometryChanged(ValueChanged<TerminalResizeEvent> value) =>
+  set onGeometryChanged(ValueChanged<SurfaceMeasurement> value) =>
       _onGeometryChanged = value;
 
   set devicePixelRatio(double value) {
@@ -371,15 +371,15 @@ final class TerminalRenderBox extends RenderBox {
     markNeedsPaint();
   }
 
-  set renderCache(TerminalRenderCache value) {
-    if (identical(value, _renderCache)) return;
+  set atlasPool(AtlasPool value) {
+    if (identical(value, _atlasPool)) return;
 
-    _renderCache = value;
+    _atlasPool = value;
     final atlasChanged = _acquireAtlasForCurrentConfig(force: true);
     if (atlasChanged) _markFrameDirty();
   }
 
-  set frameSource(TerminalFrameSource value) {
+  set frameSource(FrameSource value) {
     if (identical(_frameSource, value)) return;
     if (attached) _frameSource.removeListener(_onFrameChanged);
     final terminalChanged = !identical(_terminal, value.terminal);
@@ -460,7 +460,7 @@ final class TerminalRenderBox extends RenderBox {
     _paintState.rows = 0;
     _paintState.cols = 0;
     _pipeline.dispose();
-    _atlasHandle.release();
+    _atlasLease.release();
     super.dispose();
   }
 
@@ -521,7 +521,7 @@ final class TerminalRenderBox extends RenderBox {
         if (newCols > 0 && newRows > 0) {
           if (gridChanged) _pipeline.configureGrid(newRows, newCols);
           _onGeometryChanged(
-            TerminalResizeEvent(
+            SurfaceMeasurement(
               cols: newCols,
               rows: newRows,
               cellWidth: _paintState.metrics.cellWidth,
@@ -560,12 +560,12 @@ final class TerminalRenderBox extends RenderBox {
       metrics: _paintState.metrics,
       devicePixelRatio: dpr ?? _devicePixelRatio,
     );
-    if (!force && config == _atlasHandle.config) return false;
+    if (!force && config == _atlasLease.config) return false;
 
-    final previousHandle = _atlasHandle;
-    _atlasHandle = _renderCache.acquireAtlas(config);
-    _pipeline.bindAtlas(_atlasHandle.atlas);
-    previousHandle.release();
+    final previousLease = _atlasLease;
+    _atlasLease = _atlasPool.acquireAtlas(config);
+    _pipeline.bindAtlas(_atlasLease.atlas);
+    previousLease.release();
     return true;
   }
 

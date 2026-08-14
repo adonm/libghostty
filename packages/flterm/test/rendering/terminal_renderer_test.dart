@@ -7,7 +7,7 @@ import 'dart:typed_data';
 import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/rendering.dart';
 import 'package:flterm/src/rendering/atlas/atlas_config.dart';
-import 'package:flterm/src/rendering/terminal_render_cache.dart';
+import 'package:flterm/src/rendering/atlas_pool.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,10 +28,10 @@ void main() {
   );
   const defaultRows = 5;
 
-  TerminalRenderCache createRenderCache() {
-    final cache = TerminalRenderCache();
-    addTearDown(cache.dispose);
-    return cache;
+  AtlasPool createAtlasPool() {
+    final pool = AtlasPool();
+    addTearDown(pool.dispose);
+    return pool;
   }
 
   Widget wrap(
@@ -45,14 +45,14 @@ void main() {
     bool focused = true,
     bool blinkVisible = true,
     double devicePixelRatio = 1,
-    ValueChanged<TerminalResizeEvent>? onGeometryChanged,
+    ValueChanged<SurfaceMeasurement>? onGeometryChanged,
     ValueChanged<int>? onViewportRowChanged,
-    TerminalRenderCache? renderCache,
+    AtlasPool? atlasPool,
     ViewportOffset? offset,
   }) {
     selection?.applyTo(terminal);
-    renderCache ??= createRenderCache();
-    final frameSource = TerminalFrameSource(terminal);
+    atlasPool ??= createAtlasPool();
+    final frameSource = FrameSource(terminal);
     addTearDown(frameSource.dispose);
     final width = maxWidth ?? defaultCols * metrics.cellWidth;
     final height = maxHeight ?? defaultRows * metrics.cellHeight;
@@ -68,7 +68,7 @@ void main() {
             metrics: metrics,
             surfacePadding: surfacePadding,
             offset: offset ?? ViewportOffset.zero(),
-            renderCache: renderCache,
+            atlasPool: atlasPool,
             devicePixelRatio: devicePixelRatio,
             focused: focused,
             blinkVisible: blinkVisible,
@@ -139,7 +139,7 @@ void main() {
     testWidgets('geometry callback reports the complete measured surface', (
       tester,
     ) async {
-      TerminalResizeEvent? reportedGeometry;
+      SurfaceMeasurement? reportedGeometry;
       await tester.pumpWidget(
         wrap(
           terminal,
@@ -238,36 +238,36 @@ void main() {
     });
 
     testWidgets('theme change triggers layout', (tester) async {
-      final renderCache = _TrackingRenderCache();
-      addTearDown(renderCache.dispose);
-      await tester.pumpWidget(wrap(terminal, renderCache: renderCache));
+      final atlasPool = _TrackingAtlasPool();
+      addTearDown(atlasPool.dispose);
+      await tester.pumpWidget(wrap(terminal, atlasPool: atlasPool));
       final box = tester.renderObject<TerminalRenderBox>(
         find.byType(TerminalRenderer),
       );
       expect(box.theme, TerminalTheme.dark());
-      final acquisitionsBefore = renderCache.acquiredKeys.length;
+      final acquisitionsBefore = atlasPool.acquiredKeys.length;
 
       final light = TerminalTheme.light();
       await tester.pumpWidget(
-        wrap(terminal, theme: light, renderCache: renderCache),
+        wrap(terminal, theme: light, atlasPool: atlasPool),
       );
       expect(box.theme, light);
-      expect(renderCache.acquiredKeys, hasLength(acquisitionsBefore));
+      expect(atlasPool.acquiredKeys, hasLength(acquisitionsBefore));
     });
 
     testWidgets('font theme change reacquires atlas', (tester) async {
-      final renderCache = _TrackingRenderCache();
-      addTearDown(renderCache.dispose);
-      await tester.pumpWidget(wrap(terminal, renderCache: renderCache));
-      final keyBefore = renderCache.acquiredKeys.last;
+      final atlasPool = _TrackingAtlasPool();
+      addTearDown(atlasPool.dispose);
+      await tester.pumpWidget(wrap(terminal, atlasPool: atlasPool));
+      final keyBefore = atlasPool.acquiredKeys.last;
 
       final larger = TerminalTheme.dark().copyWith(fontSize: 18);
       await tester.pumpWidget(
-        wrap(terminal, theme: larger, renderCache: renderCache),
+        wrap(terminal, theme: larger, atlasPool: atlasPool),
       );
       await tester.pump();
 
-      expect(renderCache.acquiredKeys.last, isNot(keyBefore));
+      expect(atlasPool.acquiredKeys.last, isNot(keyBefore));
     });
 
     testWidgets('selection change does not trigger layout', (tester) async {
@@ -346,11 +346,11 @@ void main() {
   });
 }
 
-class _TrackingRenderCache extends TerminalRenderCache {
+class _TrackingAtlasPool extends AtlasPool {
   final acquiredKeys = <AtlasConfig>[];
 
   @override
-  TerminalAtlasHandle acquireAtlas(AtlasConfig config) {
+  AtlasLease acquireAtlas(AtlasConfig config) {
     acquiredKeys.add(config);
     return super.acquireAtlas(config);
   }

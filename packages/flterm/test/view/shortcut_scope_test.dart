@@ -4,14 +4,14 @@ library;
 import 'dart:convert';
 
 import 'package:flterm/src/controller/terminal_controller.dart';
-import 'package:flterm/src/view/terminal_shortcut_scope.dart';
+import 'package:flterm/src/view/shortcut_scope.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart' show Position, Terminal;
 
 void main() {
-  group('TerminalShortcutScope', () {
+  group('ShortcutScope', () {
     late TerminalControllerImpl controller;
 
     setUp(() {
@@ -35,7 +35,7 @@ void main() {
     }) {
       return Directionality(
         textDirection: TextDirection.ltr,
-        child: TerminalShortcutScope(
+        child: ShortcutScope(
           controller: controller,
           shortcuts: shortcuts,
           onPaste: onPaste,
@@ -202,7 +202,7 @@ void main() {
     });
   });
 
-  group('TerminalShortcuts', () {
+  group('DefaultShortcuts', () {
     group('defaultsFor', () {
       void expectShortcutSet(
         Map<ShortcutActivator, Intent> shortcuts, {
@@ -219,14 +219,14 @@ void main() {
 
       test('uses command shortcuts on Apple platforms', () {
         expectShortcutSet(
-          TerminalShortcuts.defaultsFor(TargetPlatform.macOS),
+          DefaultShortcuts.defaultsFor(TargetPlatform.macOS),
           copy: const SingleActivator(.keyC, meta: true),
           paste: const SingleActivator(.keyV, meta: true),
           selectAll: const SingleActivator(.keyA, meta: true),
           clear: const SingleActivator(.keyK, meta: true),
         );
         expectShortcutSet(
-          TerminalShortcuts.defaultsFor(TargetPlatform.iOS),
+          DefaultShortcuts.defaultsFor(TargetPlatform.iOS),
           copy: const SingleActivator(.keyC, meta: true),
           paste: const SingleActivator(.keyV, meta: true),
           selectAll: const SingleActivator(.keyA, meta: true),
@@ -236,7 +236,7 @@ void main() {
 
       test('uses control-shift shortcuts on Linux', () {
         expectShortcutSet(
-          TerminalShortcuts.defaultsFor(TargetPlatform.linux),
+          DefaultShortcuts.defaultsFor(TargetPlatform.linux),
           copy: const SingleActivator(.keyC, control: true, shift: true),
           paste: const SingleActivator(.keyV, control: true, shift: true),
           selectAll: const SingleActivator(.keyA, control: true, shift: true),
@@ -246,14 +246,14 @@ void main() {
 
       test('uses control shortcuts on Windows and Android', () {
         expectShortcutSet(
-          TerminalShortcuts.defaultsFor(TargetPlatform.windows),
+          DefaultShortcuts.defaultsFor(TargetPlatform.windows),
           copy: const SingleActivator(.keyC, control: true),
           paste: const SingleActivator(.keyV, control: true),
           selectAll: const SingleActivator(.keyA, control: true),
           clear: const SingleActivator(.keyK, control: true),
         );
         expectShortcutSet(
-          TerminalShortcuts.defaultsFor(TargetPlatform.android),
+          DefaultShortcuts.defaultsFor(TargetPlatform.android),
           copy: const SingleActivator(.keyC, control: true),
           paste: const SingleActivator(.keyV, control: true),
           selectAll: const SingleActivator(.keyA, control: true),

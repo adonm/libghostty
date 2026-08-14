@@ -1,8 +1,153 @@
-import 'package:libghostty/libghostty.dart' hide TerminalGeometry;
+import 'package:libghostty/libghostty.dart';
 import 'package:meta/meta.dart';
 
-import '../foundation/terminal_geometry.dart';
+import '../foundation/surface_geometry.dart';
 import 'selection_gesture_driver.dart';
+
+/// A normalized terminal selection autoscroll update.
+@immutable
+final class SelectionAutoscrollInput {
+  /// The grid cell derived from the pointer position.
+  ///
+  /// The selection session clamps this value to the viewport before use.
+  final Position cell;
+
+  /// The horizontal logical pixel offset from the terminal grid origin.
+  final double pixelX;
+
+  /// The vertical logical pixel offset from the terminal grid origin.
+  final double pixelY;
+
+  /// Whether the selection is rectangular.
+  final bool rectangle;
+
+  const SelectionAutoscrollInput({
+    required this.cell,
+    required this.pixelX,
+    required this.pixelY,
+    required this.rectangle,
+  });
+
+  @override
+  int get hashCode => Object.hash(cell, pixelX, pixelY, rectangle);
+
+  @override
+  bool operator ==(Object other) {
+    return other is SelectionAutoscrollInput &&
+        other.cell == cell &&
+        other.pixelX == pixelX &&
+        other.pixelY == pixelY &&
+        other.rectangle == rectangle;
+  }
+}
+
+/// A normalized terminal selection drag.
+@immutable
+final class SelectionDragInput {
+  /// The viewport cell under the pointer.
+  final Position cell;
+
+  /// The horizontal logical pixel offset from the terminal grid origin.
+  final double pixelX;
+
+  /// The vertical logical pixel offset from the terminal grid origin.
+  final double pixelY;
+
+  /// Whether the selection is rectangular.
+  final bool rectangle;
+
+  const SelectionDragInput({
+    required this.cell,
+    required this.pixelX,
+    required this.pixelY,
+    required this.rectangle,
+  });
+
+  @override
+  int get hashCode => Object.hash(cell, pixelX, pixelY, rectangle);
+
+  @override
+  bool operator ==(Object other) {
+    return other is SelectionDragInput &&
+        other.cell == cell &&
+        other.pixelX == pixelX &&
+        other.pixelY == pixelY &&
+        other.rectangle == rectangle;
+  }
+}
+
+/// A normalized terminal selection press.
+@immutable
+final class SelectionPressInput {
+  /// The viewport cell under the pointer.
+  final Position cell;
+
+  /// The horizontal logical pixel offset from the terminal grid origin.
+  final double pixelX;
+
+  /// The vertical logical pixel offset from the terminal grid origin.
+  final double pixelY;
+
+  /// Selection behavior for single, double, and triple presses.
+  final SelectionGestureBehaviors behaviors;
+
+  /// Characters that split words during word selection.
+  ///
+  /// `null` uses the terminal defaults; an empty string supplies an explicit
+  /// empty boundary set.
+  final String? wordBoundaries;
+
+  /// Maximum logical-pixel distance between repeated presses.
+  final double repeatDistance;
+
+  /// Maximum interval between repeated presses.
+  final Duration repeatInterval;
+
+  /// Monotonic source-event time used to classify repeated presses.
+  final Duration timeStamp;
+
+  /// Whether line selection extends across the complete terminal row.
+  final bool fullWidthLine;
+
+  const SelectionPressInput({
+    required this.cell,
+    required this.pixelX,
+    required this.pixelY,
+    required this.behaviors,
+    required this.wordBoundaries,
+    required this.repeatDistance,
+    required this.repeatInterval,
+    required this.timeStamp,
+    required this.fullWidthLine,
+  });
+
+  @override
+  int get hashCode => Object.hash(
+    cell,
+    pixelX,
+    pixelY,
+    behaviors,
+    wordBoundaries,
+    repeatDistance,
+    repeatInterval,
+    timeStamp,
+    fullWidthLine,
+  );
+
+  @override
+  bool operator ==(Object other) {
+    return other is SelectionPressInput &&
+        other.cell == cell &&
+        other.pixelX == pixelX &&
+        other.pixelY == pixelY &&
+        other.behaviors == behaviors &&
+        other.wordBoundaries == wordBoundaries &&
+        other.repeatDistance == repeatDistance &&
+        other.repeatInterval == repeatInterval &&
+        other.timeStamp == timeStamp &&
+        other.fullWidthLine == fullWidthLine;
+  }
+}
 
 /// Owns terminal selection state, measured bounds, and gesture continuation.
 ///
@@ -11,7 +156,7 @@ import 'selection_gesture_driver.dart';
 /// when the effective selection changes. Gesture continuation is delegated to
 /// [SelectionGestureDriver], while this owner remains responsible for storing
 /// the resulting selection on the terminal and suppressing equivalent updates.
-final class TerminalSelection {
+final class SelectionSession {
   final void Function() _notifyChanged;
   final Terminal _terminal;
   late final SelectionGestureDriver _gesture;
@@ -20,7 +165,7 @@ final class TerminalSelection {
   var _columns = 0;
   var _rows = 0;
 
-  TerminalSelection(this._terminal, this._notifyChanged) {
+  SelectionSession(this._terminal, this._notifyChanged) {
     _gesture = SelectionGestureDriver(_terminal);
   }
 
@@ -55,7 +200,7 @@ final class TerminalSelection {
     return true;
   }
 
-  void handleAutoscroll(TerminalSelectionAutoscrollEvent event) {
+  void handleAutoscroll(SelectionAutoscrollInput event) {
     if (_columns <= 0 || _rows <= 0) return;
     _set(
       _gesture.autoscroll(
@@ -68,7 +213,7 @@ final class TerminalSelection {
     );
   }
 
-  void handleDrag(TerminalSelectionDragEvent event) {
+  void handleDrag(SelectionDragInput event) {
     final ref = _viewportRef(event.cell);
     if (ref == null) return;
     _set(
@@ -82,7 +227,7 @@ final class TerminalSelection {
     );
   }
 
-  void handlePress(TerminalSelectionPressEvent event) {
+  void handlePress(SelectionPressInput event) {
     final ref = _viewportRef(event.cell);
     if (ref == null) {
       _set(null, clearIfNull: true);
@@ -141,7 +286,7 @@ final class TerminalSelection {
     );
   }
 
-  void updateGeometry(TerminalGeometry geometry) {
+  void updateGeometry(SurfaceGeometry geometry) {
     _columns = geometry.cols;
     _rows = geometry.rows;
     _cellWidth = geometry.cellWidth;
@@ -212,145 +357,5 @@ final class TerminalSelection {
     _ensureGridSize();
     if (_rows <= 0 || _columns <= 0) return null;
     return .at(_terminal, _clampViewportPoint(position), pointTag: .viewport);
-  }
-}
-
-/// A normalized terminal selection autoscroll update.
-@immutable
-final class TerminalSelectionAutoscrollEvent {
-  /// The viewport cell under the pointer.
-  final Position cell;
-
-  /// The pointer's logical horizontal position.
-  final double pixelX;
-
-  /// The pointer's logical vertical position.
-  final double pixelY;
-
-  /// Whether the selection is rectangular.
-  final bool rectangle;
-
-  const TerminalSelectionAutoscrollEvent({
-    required this.cell,
-    required this.pixelX,
-    required this.pixelY,
-    required this.rectangle,
-  });
-
-  @override
-  int get hashCode => Object.hash(cell, pixelX, pixelY, rectangle);
-
-  @override
-  bool operator ==(Object other) {
-    return other is TerminalSelectionAutoscrollEvent &&
-        other.cell == cell &&
-        other.pixelX == pixelX &&
-        other.pixelY == pixelY &&
-        other.rectangle == rectangle;
-  }
-}
-
-/// A normalized terminal selection drag.
-@immutable
-final class TerminalSelectionDragEvent {
-  /// The viewport cell under the pointer.
-  final Position cell;
-
-  /// The pointer's logical horizontal position.
-  final double pixelX;
-
-  /// The pointer's logical vertical position.
-  final double pixelY;
-
-  /// Whether the selection is rectangular.
-  final bool rectangle;
-
-  const TerminalSelectionDragEvent({
-    required this.cell,
-    required this.pixelX,
-    required this.pixelY,
-    required this.rectangle,
-  });
-
-  @override
-  int get hashCode => Object.hash(cell, pixelX, pixelY, rectangle);
-
-  @override
-  bool operator ==(Object other) {
-    return other is TerminalSelectionDragEvent &&
-        other.cell == cell &&
-        other.pixelX == pixelX &&
-        other.pixelY == pixelY &&
-        other.rectangle == rectangle;
-  }
-}
-
-/// A normalized terminal selection press.
-@immutable
-final class TerminalSelectionPressEvent {
-  /// The viewport cell under the pointer.
-  final Position cell;
-
-  /// The pointer's logical horizontal position.
-  final double pixelX;
-
-  /// The pointer's logical vertical position.
-  final double pixelY;
-
-  /// Selection behavior for single-, double-, and triple-clicks.
-  final SelectionGestureBehaviors behaviors;
-
-  /// Characters treated as word boundaries, or null for the default.
-  final String? wordBoundaries;
-
-  /// Maximum distance between repeated clicks.
-  final double repeatDistance;
-
-  /// Maximum interval between repeated clicks.
-  final Duration repeatInterval;
-
-  /// Timestamp supplied by the pointer event source.
-  final Duration timeStamp;
-
-  /// Whether a line selection expands to the full terminal width.
-  final bool fullWidthLine;
-
-  const TerminalSelectionPressEvent({
-    required this.cell,
-    required this.pixelX,
-    required this.pixelY,
-    required this.behaviors,
-    required this.wordBoundaries,
-    required this.repeatDistance,
-    required this.repeatInterval,
-    required this.timeStamp,
-    required this.fullWidthLine,
-  });
-
-  @override
-  int get hashCode => Object.hash(
-    cell,
-    pixelX,
-    pixelY,
-    behaviors,
-    wordBoundaries,
-    repeatDistance,
-    repeatInterval,
-    timeStamp,
-    fullWidthLine,
-  );
-
-  @override
-  bool operator ==(Object other) {
-    return other is TerminalSelectionPressEvent &&
-        other.cell == cell &&
-        other.pixelX == pixelX &&
-        other.pixelY == pixelY &&
-        other.behaviors == behaviors &&
-        other.wordBoundaries == wordBoundaries &&
-        other.repeatDistance == repeatDistance &&
-        other.repeatInterval == repeatInterval &&
-        other.timeStamp == timeStamp &&
-        other.fullWidthLine == fullWidthLine;
   }
 }

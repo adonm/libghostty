@@ -5,34 +5,35 @@ import 'package:libghostty/libghostty.dart' hide KeyEvent;
 
 import '../controller/terminal_controller.dart';
 import '../foundation.dart';
-import 'terminal_input_client.dart';
-import 'terminal_input_event.dart';
+import 'input_message.dart';
+import 'text_input_session.dart';
 
-/// Adapts one Flutter focus and keyboard lifecycle to terminal input.
+/// Coordinates hardware-key and platform text-input handling for a
+/// [TerminalView].
 ///
-/// The adapter combines physical and virtual modifiers, routes raw key events,
-/// owns the view's [TerminalInputClient], and publishes visible IME preedit
-/// text. Terminal protocol encoding remains controller-owned.
+/// The adapter owns the focus binding and [TextInputSession], combines physical
+/// and virtual modifiers, routes raw key events, and publishes visible IME
+/// preedit text. Terminal protocol encoding remains controller-owned.
 ///
 /// Attachment is view-bound: replacing the focus node or Flutter view ID
 /// detaches the platform text-input connection before rebinding it. Raw keys
 /// and text deltas converge on controller methods, so neither path writes
 /// directly to libghostty or invokes public output callbacks.
 @internal
-final class TerminalInputAdapter extends ChangeNotifier {
+final class KeyboardInputAdapter extends ChangeNotifier {
   static const _space = 0x20;
   static const _delete = 0x7f;
   static const _macFunctionKeyStart = 0xF700;
   static const _macFunctionKeyEnd = 0xF8FF;
 
   final TerminalControllerImpl _controller;
-  final _textInput = TerminalInputClient();
+  final _textInput = TextInputSession();
   FocusNode? _focusNode;
   Brightness _keyboardAppearance = .dark;
   var _preeditText = '';
   var _wasFocused = false;
 
-  TerminalInputAdapter(this._controller) {
+  KeyboardInputAdapter(this._controller) {
     _textInput
       ..onTextCommitted = _controller.handleTextCommitted
       ..onDelete = _controller.handleTextDeleted
@@ -110,10 +111,10 @@ final class TerminalInputAdapter extends ChangeNotifier {
   }
 
   KeyEventResult handleKeyEvent(KeyEvent event) {
-    final KeyAction? action = switch (event) {
-      KeyDownEvent() => .press,
-      KeyUpEvent() => .release,
-      KeyRepeatEvent() => .repeat,
+    final action = switch (event) {
+      KeyDownEvent() => KeyAction.press,
+      KeyUpEvent() => KeyAction.release,
+      KeyRepeatEvent() => KeyAction.repeat,
       _ => null,
     };
     if (action == null) return .ignored;
@@ -130,10 +131,10 @@ final class TerminalInputAdapter extends ChangeNotifier {
     );
     final consumedMods =
         physicalConsumedMods ^ (physicalConsumedMods & virtualMods);
-    final terminalMods = consumedMods.hasCtrl ? mods ^ const .ctrl() : mods;
+    final terminalMods = consumedMods.hasCtrl ? mods ^ const Mods.ctrl() : mods;
     final composing =
         _textInput.hasActiveComposition || _preeditText.isNotEmpty;
-    final input = TerminalKeyInput(
+    final input = KeyInput(
       key: key,
       action: action,
       mods: terminalMods,
@@ -197,14 +198,14 @@ final class TerminalInputAdapter extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool _shouldForwardCompositionKey(TerminalKeyInput input) {
+  bool _shouldForwardCompositionKey(KeyInput input) {
     return input.composing &&
         _textInput.isAttached &&
         _isDesktopPlatform &&
         !_shouldRouteToTextInput(input);
   }
 
-  bool _shouldForwardDeletion(TerminalKeyInput input) {
+  bool _shouldForwardDeletion(KeyInput input) {
     if (!_isDesktopPlatform || !_controller.virtualMods.isEmpty) return false;
     if (input.action != .press && input.action != .repeat) return false;
     if (input.key != .backspace && input.key != .delete) return false;
@@ -215,7 +216,7 @@ final class TerminalInputAdapter extends ChangeNotifier {
     return _textInput.consumeCommittedCompositionEdit();
   }
 
-  bool _shouldRouteToTextInput(TerminalKeyInput input) {
+  bool _shouldRouteToTextInput(KeyInput input) {
     if (input.character == null || input.composing) return false;
     if (!_textInput.isAttached || !_isDesktopPlatform) return false;
     if (input.action != .press && input.action != .repeat) return false;

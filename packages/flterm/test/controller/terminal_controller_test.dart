@@ -5,7 +5,8 @@ import 'dart:convert';
 
 import 'package:flterm/src/controller/terminal_controller.dart';
 import 'package:flterm/src/foundation.dart';
-import 'package:flterm/src/input/terminal_input_event.dart';
+import 'package:flterm/src/input/input_message.dart';
+import 'package:flterm/src/interaction/selection_session.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart' hide KeyEvent;
@@ -31,10 +32,6 @@ void main() {
       controller.write(Uint8List.fromList(utf8.encode(text)));
     }
 
-    TerminalControllerImpl session(TerminalControllerImpl controller) {
-      return controller;
-    }
-
     void writeTerminalUtf8(Terminal terminal, String text) {
       terminal.write(Uint8List.fromList(utf8.encode(text)));
     }
@@ -45,8 +42,8 @@ void main() {
       double devicePixelRatio = 1.0,
     }) {
       writeControllerUtf8(target, sequence);
-      session(target).handleResize(
-        TerminalResizeEvent(
+      target.handleResize(
+        SurfaceMeasurement(
           cols: 80,
           rows: 24,
           cellWidth: 8,
@@ -62,17 +59,17 @@ void main() {
 
     group('constructor', () {
       test('exposes terminal state without a view attachment', () {
-        expect(session(controller).terminal, isA<Terminal>());
+        expect(controller.terminal, isA<Terminal>());
       });
 
-      test('starts without a selection', () {
+      test('starts without selection or selected text', () {
         expect(controller.hasSelection, isFalse);
         expect(controller.selectedText(), '');
       });
     });
 
     group('geometry', () {
-      test('does not notify a resize callback before view geometry exists', () {
+      test('does not notify a resize observer before view geometry exists', () {
         final sizes = <({int cols, int rows})>[];
 
         controller.onResize = (cols, rows) {
@@ -88,8 +85,8 @@ void main() {
           sizes.add((cols: cols, rows: rows));
         };
 
-        session(controller).handleResize(
-          const TerminalResizeEvent(
+        controller.handleResize(
+          const SurfaceMeasurement(
             cols: 80,
             rows: 24,
             cellWidth: 8,
@@ -106,10 +103,10 @@ void main() {
       });
 
       test(
-        'reports committed grid when a callback is assigned after measurement',
+        'reports committed grid when observer is assigned after measurement',
         () {
-          session(controller).handleResize(
-            const TerminalResizeEvent(
+          controller.handleResize(
+            const SurfaceMeasurement(
               cols: 100,
               rows: 40,
               cellWidth: 8,
@@ -131,16 +128,16 @@ void main() {
         },
       );
 
-      test('allows output from a resize callback after geometry commits', () {
-        final binding = session(controller);
+      test('resize callback observes committed physical geometry', () {
+        final binding = controller;
         final output = <Uint8List>[];
         controller.onOutput = output.add;
         controller.onResize = (_, _) {
-          controller.sendText('ready');
+          controller.write(Uint8List.fromList(utf8.encode('\x1b[14t')));
         };
 
         binding.handleResize(
-          const TerminalResizeEvent(
+          const SurfaceMeasurement(
             cols: 80,
             rows: 24,
             cellWidth: 8,
@@ -153,7 +150,7 @@ void main() {
           ),
         );
 
-        expect(utf8.decode(output.single), 'ready');
+        expect(utf8.decode(output.single), '\x1b[4;384;640t');
       });
 
       test('answers size queries without consuming render dirtiness', () {
@@ -163,7 +160,7 @@ void main() {
         controller.write(Uint8List.fromList(utf8.encode('hello')));
         controller.write(Uint8List.fromList(utf8.encode('\x1b[18t')));
 
-        renderState.update(session(controller).terminal);
+        renderState.update(controller.terminal);
 
         expect(renderState.dirty, isNot(DirtyState.clean));
       });
@@ -182,8 +179,8 @@ void main() {
       });
 
       test('applies physical geometry through the resize event', () {
-        session(controller).handleResize(
-          const TerminalResizeEvent(
+        controller.handleResize(
+          const SurfaceMeasurement(
             cols: 80,
             rows: 24,
             cellWidth: 8,
@@ -196,7 +193,7 @@ void main() {
           ),
         );
 
-        expect(session(controller).terminal.geometry, (
+        expect(controller.terminal.geometry, (
           cols: 80,
           rows: 24,
           widthPx: 1280,
@@ -205,9 +202,9 @@ void main() {
       });
 
       test('updates physical geometry when the grid is unchanged', () {
-        final binding = session(controller);
+        final binding = controller;
         binding.handleResize(
-          const TerminalResizeEvent(
+          const SurfaceMeasurement(
             cols: 80,
             rows: 24,
             cellWidth: 8,
@@ -220,7 +217,7 @@ void main() {
           ),
         );
         binding.handleResize(
-          const TerminalResizeEvent(
+          const SurfaceMeasurement(
             cols: 80,
             rows: 24,
             cellWidth: 10,
@@ -242,9 +239,9 @@ void main() {
       });
 
       test('ignores resize events with invalid physical geometry', () {
-        final binding = session(controller);
+        final binding = controller;
         binding.handleResize(
-          const TerminalResizeEvent(
+          const SurfaceMeasurement(
             cols: 80,
             rows: 24,
             cellWidth: 8,
@@ -258,7 +255,7 @@ void main() {
         );
 
         binding.handleResize(
-          const TerminalResizeEvent(
+          const SurfaceMeasurement(
             cols: 100,
             rows: 30,
             cellWidth: 0,
@@ -280,10 +277,10 @@ void main() {
       });
 
       test('ignores resize events beyond the native grid limit', () {
-        final binding = session(controller);
+        final binding = controller;
 
         binding.handleResize(
-          const TerminalResizeEvent(
+          const SurfaceMeasurement(
             cols: 80,
             rows: 24,
             cellWidth: 8,
@@ -297,7 +294,7 @@ void main() {
         );
 
         binding.handleResize(
-          const TerminalResizeEvent(
+          const SurfaceMeasurement(
             cols: 65536,
             rows: 24,
             cellWidth: 8,
@@ -319,7 +316,7 @@ void main() {
       });
 
       test('emits the measured in-band resize report', () {
-        final binding = session(controller);
+        final binding = controller;
         final output = <Uint8List>[];
         controller.onOutput = output.add;
         binding.terminal.modeSet(
@@ -328,7 +325,7 @@ void main() {
         );
 
         binding.handleResize(
-          const TerminalResizeEvent(
+          const SurfaceMeasurement(
             cols: 80,
             rows: 24,
             cellWidth: 8,
@@ -344,8 +341,88 @@ void main() {
         expect(utf8.decode(output.single), '\x1B[48;24;80;384;640t');
       });
 
+      test('resize callback observes committed mouse geometry', () {
+        writeControllerUtf8(controller, '\x1b[?1000h\x1b[?1016h');
+        final output = <Uint8List>[];
+        controller.onOutput = output.add;
+        controller.onResize = (_, _) {
+          controller.handleMouseEvent(
+            const MouseInput(
+              action: .press,
+              anyButtonPressed: true,
+              button: .left,
+              mods: Mods.none(),
+              pixelX: 4,
+              pixelY: 8,
+            ),
+          );
+        };
+
+        controller.handleResize(
+          const SurfaceMeasurement(
+            cols: 80,
+            rows: 24,
+            cellWidth: 8,
+            cellHeight: 16,
+            paddingLeft: 0,
+            paddingRight: 0,
+            paddingTop: 0,
+            paddingBottom: 0,
+            devicePixelRatio: 2,
+          ),
+        );
+
+        expect(utf8.decode(output.single), '\x1b[<0;8;16M');
+      });
+
+      test('resize callback observes committed selection geometry', () {
+        controller.write(Uint8List.fromList(utf8.encode('hello')));
+        var selected = false;
+        controller.onResize = (_, _) {
+          controller.handleSelectionPress(
+            const SelectionPressInput(
+              cell: Position(row: 0, col: 1),
+              pixelX: 8,
+              pixelY: 0,
+              behaviors: SelectionGestureBehaviors.standard,
+              wordBoundaries: null,
+              repeatDistance: 18,
+              repeatInterval: Duration(milliseconds: 300),
+              timeStamp: Duration.zero,
+              fullWidthLine: false,
+            ),
+          );
+          controller.updateSelectionDrag(
+            const SelectionDragInput(
+              cell: Position(row: 0, col: 2),
+              pixelX: 16,
+              pixelY: 0,
+              rectangle: false,
+            ),
+          );
+          controller.handleSelectionRelease(const Position(row: 0, col: 1));
+          selected = controller.hasSelection;
+        };
+
+        controller.handleResize(
+          const SurfaceMeasurement(
+            cols: 80,
+            rows: 24,
+            cellWidth: 8,
+            cellHeight: 16,
+            paddingLeft: 0,
+            paddingRight: 0,
+            paddingTop: 0,
+            paddingBottom: 0,
+            devicePixelRatio: 1,
+          ),
+        );
+
+        expect(selected, isTrue);
+      });
+
       test('emits terminal resize output before the backend callback', () {
-        final binding = session(controller);
+        final binding = controller;
         final events = <String>[];
         controller.onResize = (_, _) => events.add('resize');
         events.clear();
@@ -356,7 +433,7 @@ void main() {
         );
 
         binding.handleResize(
-          const TerminalResizeEvent(
+          const SurfaceMeasurement(
             cols: 81,
             rows: 24,
             cellWidth: 8,
@@ -373,7 +450,7 @@ void main() {
       });
 
       test('allows backend output during an in-band resize report', () {
-        final binding = session(controller);
+        final binding = controller;
         var replied = false;
         controller.onOutput = (_) {
           replied = true;
@@ -385,7 +462,7 @@ void main() {
         );
 
         binding.handleResize(
-          const TerminalResizeEvent(
+          const SurfaceMeasurement(
             cols: 81,
             rows: 24,
             cellWidth: 8,
@@ -408,8 +485,8 @@ void main() {
         final output = <Uint8List>[];
         controller.onOutput = output.add;
 
-        session(controller).handleMouseEvent(
-          const TerminalMouseEvent(
+        controller.handleMouseEvent(
+          const MouseInput(
             action: .press,
             anyButtonPressed: true,
             button: .right,
@@ -418,8 +495,8 @@ void main() {
             pixelY: 8,
           ),
         );
-        session(controller).handleMouseEvent(
-          const TerminalMouseEvent(
+        controller.handleMouseEvent(
+          const MouseInput(
             action: .motion,
             anyButtonPressed: false,
             button: null,
@@ -438,8 +515,8 @@ void main() {
         final output = <Uint8List>[];
         controller.onOutput = output.add;
 
-        session(controller).handleMouseEvent(
-          const TerminalMouseEvent(
+        controller.handleMouseEvent(
+          const MouseInput(
             action: .motion,
             anyButtonPressed: false,
             button: .left,
@@ -449,8 +526,8 @@ void main() {
           ),
         );
 
-        session(controller).handleMouseEvent(
-          const TerminalMouseEvent(
+        controller.handleMouseEvent(
+          const MouseInput(
             action: .motion,
             anyButtonPressed: true,
             button: .left,
@@ -472,8 +549,8 @@ void main() {
         final output = <Uint8List>[];
         controller.onOutput = output.add;
 
-        session(controller).handleMouseEvent(
-          const TerminalMouseEvent(
+        controller.handleMouseEvent(
+          const MouseInput(
             action: .press,
             anyButtonPressed: true,
             button: .left,
@@ -490,8 +567,8 @@ void main() {
         'maps terminal-local pointer coordinates through surface padding',
         () {
           enableMouseTracking(controller, sequence: '\x1b[?1000h\x1b[?1016h');
-          session(controller).handleResize(
-            const TerminalResizeEvent(
+          controller.handleResize(
+            const SurfaceMeasurement(
               cols: 80,
               rows: 24,
               cellWidth: 8,
@@ -506,8 +583,8 @@ void main() {
           final output = <Uint8List>[];
           controller.onOutput = output.add;
 
-          session(controller).handleMouseEvent(
-            const TerminalMouseEvent(
+          controller.handleMouseEvent(
+            const MouseInput(
               action: .press,
               anyButtonPressed: true,
               button: .left,
@@ -525,14 +602,14 @@ void main() {
     group('handleTerminalScroll', () {
       test('uses the last pointer position for tracked scroll', () {
         enableMouseTracking(controller);
-        session(
-          controller,
-        ).terminal.write(Uint8List.fromList(utf8.encode('\x1b[?1049h')));
+        controller.terminal.write(
+          Uint8List.fromList(utf8.encode('\x1b[?1049h')),
+        );
         final output = <Uint8List>[];
         controller.onOutput = output.add;
 
-        session(controller).handleTerminalScroll(
-          const TerminalScrollEvent(
+        controller.handleTerminalScroll(
+          const ScrollInput(
             horizontal: 0,
             mods: Mods.none(),
             pixelX: 24,
@@ -550,8 +627,8 @@ void main() {
         final output = <Uint8List>[];
         controller.onOutput = output.add;
 
-        session(controller).handleTerminalScroll(
-          const TerminalScrollEvent(
+        controller.handleTerminalScroll(
+          const ScrollInput(
             horizontal: 0,
             mods: Mods.none(),
             pixelX: 24,
@@ -567,14 +644,14 @@ void main() {
       test(
         'does not simulate cursor keys when alternate scroll is disabled',
         () {
-          session(controller).terminal.write(
+          controller.terminal.write(
             Uint8List.fromList(utf8.encode('\x1b[?1049h\x1b[?1007l')),
           );
           final output = <Uint8List>[];
           controller.onOutput = output.add;
 
-          session(controller).handleTerminalScroll(
-            const TerminalScrollEvent(
+          controller.handleTerminalScroll(
+            const ScrollInput(
               horizontal: 0,
               mods: Mods.none(),
               pixelX: 24,
@@ -589,15 +666,15 @@ void main() {
       );
 
       test('does not simulate cursor keys while mouse tracking is active', () {
-        session(
-          controller,
-        ).terminal.write(Uint8List.fromList(utf8.encode('\x1b[?1049h')));
+        controller.terminal.write(
+          Uint8List.fromList(utf8.encode('\x1b[?1049h')),
+        );
         enableMouseTracking(controller);
         final output = <Uint8List>[];
         controller.onOutput = output.add;
 
-        session(controller).handleTerminalScroll(
-          const TerminalScrollEvent(
+        controller.handleTerminalScroll(
+          const ScrollInput(
             horizontal: 0,
             mods: Mods.none(),
             pixelX: 24,
@@ -852,8 +929,8 @@ void main() {
 
       int scrollBack(TerminalControllerImpl target) {
         writeNumberedLines(target);
-        session(target).terminal.scrollViewport(-5);
-        return session(target).terminal.scrollbar.offset;
+        target.terminal.scrollViewport(-5);
+        return target.terminal.scrollbar.offset;
       }
 
       test('scrolls to bottom on output when output follow is enabled', () {
@@ -863,10 +940,7 @@ void main() {
 
         writeControllerUtf8(custom, 'tail\r\n');
 
-        expect(
-          session(custom).terminal.scrollbar.offset,
-          custom.scrollbackRows,
-        );
+        expect(custom.terminal.scrollbar.offset, custom.scrollbackRows);
       });
 
       test(
@@ -881,7 +955,7 @@ void main() {
             end: const Position(row: 0, col: 4),
           );
 
-          expect(session(custom).terminal.scrollbar.offset, offset);
+          expect(custom.terminal.scrollbar.offset, offset);
         },
       );
 
@@ -894,13 +968,13 @@ void main() {
             start: const Position(row: 0, col: 0),
             end: const Position(row: 0, col: 4),
           );
-          session(custom).terminal.scrollViewport(-5);
-          final offset = session(custom).terminal.scrollbar.offset;
+          custom.terminal.scrollViewport(-5);
+          final offset = custom.terminal.scrollbar.offset;
           expect(offset, lessThan(custom.scrollbackRows));
 
           custom.clearSelection();
 
-          expect(session(custom).terminal.scrollbar.offset, offset);
+          expect(custom.terminal.scrollbar.offset, offset);
         },
       );
 
@@ -909,8 +983,8 @@ void main() {
         final offset = scrollBack(custom);
         expect(offset, lessThan(custom.scrollbackRows));
 
-        session(custom).handleResize(
-          const TerminalResizeEvent(
+        custom.handleResize(
+          const SurfaceMeasurement(
             cols: 20,
             rows: 3,
             cellWidth: 8,
@@ -923,7 +997,7 @@ void main() {
           ),
         );
 
-        expect(session(custom).terminal.scrollbar.offset, offset);
+        expect(custom.terminal.scrollbar.offset, offset);
       });
 
       test('preserves viewport when a terminal mode changes', () {
@@ -933,7 +1007,7 @@ void main() {
 
         custom.modeSet(const .bracketedPaste(), value: true);
 
-        expect(session(custom).terminal.scrollbar.offset, offset);
+        expect(custom.terminal.scrollbar.offset, offset);
       });
     });
 
@@ -1189,9 +1263,10 @@ void main() {
       });
 
       test('wraps with bracketed paste escape when mode is active', () {
-        session(
-          controller,
-        ).terminal.modeSet(const TerminalMode.bracketedPaste(), value: true);
+        controller.terminal.modeSet(
+          const TerminalMode.bracketedPaste(),
+          value: true,
+        );
         final output = <Uint8List>[];
         controller.onOutput = output.add;
 
@@ -1249,15 +1324,15 @@ void main() {
         addTearDown(custom.dispose);
         addTearDown(renderState.dispose);
 
-        expect(session(custom).terminal.scrollbackMaxBytes, 1024);
-        expect(session(custom).terminal.scrollbackMaxLines, 10);
+        expect(custom.terminal.scrollbackMaxBytes, 1024);
+        expect(custom.terminal.scrollbackMaxLines, 10);
 
         custom.write(transmitRedPixel(id: 91));
 
-        expect(KittyGraphics.of(session(custom).terminal)!.image(91), isNull);
+        expect(KittyGraphics.of(custom.terminal)!.image(91), isNull);
 
-        writeTerminalUtf8(session(custom).terminal, '\x1b[0 q');
-        renderState.update(session(custom).terminal);
+        writeTerminalUtf8(custom.terminal, '\x1b[0 q');
+        renderState.update(custom.terminal);
 
         expect(renderState.cursor.shape, CursorShape.underline);
         expect(renderState.cursor.blinking, isTrue);
@@ -1269,8 +1344,8 @@ void main() {
           scrollbackMaxLines: 20,
         );
 
-        expect(session(controller).terminal.scrollbackMaxBytes, 2048);
-        expect(session(controller).terminal.scrollbackMaxLines, 20);
+        expect(controller.terminal.scrollbackMaxBytes, 2048);
+        expect(controller.terminal.scrollbackMaxLines, 20);
       });
 
       test('setter applies APC buffer limits', () {
@@ -1278,10 +1353,7 @@ void main() {
 
         controller.write(transmitRedPixel(id: 92));
 
-        expect(
-          KittyGraphics.of(session(controller).terminal)!.image(92),
-          isNull,
-        );
+        expect(KittyGraphics.of(controller.terminal)!.image(92), isNull);
       });
 
       test('setter applies cursor reset defaults', () {
@@ -1292,8 +1364,8 @@ void main() {
           cursorStyle: CursorShape.bar,
           cursorBlink: false,
         );
-        writeTerminalUtf8(session(controller).terminal, '\x1b[0 q');
-        renderState.update(session(controller).terminal);
+        writeTerminalUtf8(controller.terminal, '\x1b[0 q');
+        renderState.update(controller.terminal);
 
         expect(renderState.cursor.shape, CursorShape.bar);
         expect(renderState.cursor.blinking, isFalse);
@@ -1316,7 +1388,7 @@ void main() {
       });
 
       test('switches to alternate via escape sequence', () {
-        writeTerminalUtf8(session(controller).terminal, '\x1b[?1049h');
+        writeTerminalUtf8(controller.terminal, '\x1b[?1049h');
         expect(controller.activeScreen, TerminalScreen.alternate);
       });
     });
@@ -1327,10 +1399,7 @@ void main() {
       });
 
       test('updates via OSC 0 escape sequence', () {
-        writeTerminalUtf8(
-          session(controller).terminal,
-          '\x1b]0;my title\x1b\\',
-        );
+        writeTerminalUtf8(controller.terminal, '\x1b]0;my title\x1b\\');
         expect(controller.title, 'my title');
       });
 
@@ -1338,10 +1407,7 @@ void main() {
         var fired = false;
         controller.onTitleChanged = () => fired = true;
 
-        writeTerminalUtf8(
-          session(controller).terminal,
-          '\x1b]0;new title\x1b\\',
-        );
+        writeTerminalUtf8(controller.terminal, '\x1b]0;new title\x1b\\');
 
         expect(fired, isTrue);
       });
@@ -1349,10 +1415,7 @@ void main() {
 
     group('pwd', () {
       test('updates via OSC 7 escape sequence', () {
-        writeTerminalUtf8(
-          session(controller).terminal,
-          '\x1b]7;file:///tmp\x07',
-        );
+        writeTerminalUtf8(controller.terminal, '\x1b]7;file:///tmp\x07');
 
         expect(controller.pwd, 'file:///tmp');
       });
@@ -1361,10 +1424,7 @@ void main() {
         var notifyCount = 0;
         controller.addListener(() => notifyCount++);
 
-        writeTerminalUtf8(
-          session(controller).terminal,
-          '\x1b]7;file:///tmp\x07',
-        );
+        writeTerminalUtf8(controller.terminal, '\x1b]7;file:///tmp\x07');
 
         expect(notifyCount, greaterThan(0));
       });
@@ -1374,10 +1434,7 @@ void main() {
         controller.onPwdChanged = () {};
         controller.addListener(() => notifyCount++);
 
-        writeTerminalUtf8(
-          session(controller).terminal,
-          '\x1b]7;file:///tmp\x07',
-        );
+        writeTerminalUtf8(controller.terminal, '\x1b]7;file:///tmp\x07');
 
         expect(notifyCount, 1);
       });
@@ -1388,10 +1445,7 @@ void main() {
         controller.onPwdChanged = null;
         controller.addListener(() => notifyCount++);
 
-        writeTerminalUtf8(
-          session(controller).terminal,
-          '\x1b]7;file:///tmp\x07',
-        );
+        writeTerminalUtf8(controller.terminal, '\x1b]7;file:///tmp\x07');
 
         expect(notifyCount, 1);
       });
@@ -1400,10 +1454,7 @@ void main() {
         var fired = false;
         controller.onPwdChanged = () => fired = true;
 
-        writeTerminalUtf8(
-          session(controller).terminal,
-          '\x1b]7;file:///tmp\x07',
-        );
+        writeTerminalUtf8(controller.terminal, '\x1b]7;file:///tmp\x07');
 
         expect(fired, isTrue);
       });
@@ -1412,10 +1463,7 @@ void main() {
         var pwd = '';
         controller.onPwdChanged = () => pwd = controller.pwd;
 
-        writeTerminalUtf8(
-          session(controller).terminal,
-          '\x1b]7;file:///tmp\x07',
-        );
+        writeTerminalUtf8(controller.terminal, '\x1b]7;file:///tmp\x07');
 
         expect(pwd, 'file:///tmp');
       });

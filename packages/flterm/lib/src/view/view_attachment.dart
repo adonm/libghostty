@@ -5,10 +5,10 @@ import 'package:libghostty/libghostty.dart' hide Listenable;
 
 import '../controller/terminal_controller.dart';
 import '../foundation.dart';
-import '../input/terminal_input_adapter.dart';
-import '../input/terminal_input_event.dart';
-import '../interaction/terminal_selection.dart';
-import '../rendering/terminal_frame_source.dart';
+import '../input/input_message.dart';
+import '../input/keyboard_input_adapter.dart';
+import '../interaction/selection_session.dart';
+import '../rendering/frame_source.dart';
 import 'compression_scheduler.dart';
 
 /// Terminal modes that must be observed atomically by gesture routing.
@@ -17,17 +17,21 @@ import 'compression_scheduler.dart';
 /// mouse mode, and alternate-scroll flag sampled from different terminal
 /// notifications.
 @immutable
-final class TerminalInteractionState {
-  /// The active primary or alternate terminal screen.
+@internal
+final class ViewInteractionState {
+  /// The active primary or alternate screen governing the interaction.
   final TerminalScreen activeScreen;
 
-  /// The terminal's active mouse-reporting mode.
+  /// The active mouse tracking mode requested by terminal content.
   final MouseTracking mouseTracking;
 
-  /// Whether alternate-screen scrolling is enabled.
+  /// Whether DEC alternate-scroll mode is enabled.
+  ///
+  /// While the alternate screen is active, this mode maps wheel input to
+  /// cursor keys.
   final bool alternateScroll;
 
-  const TerminalInteractionState({
+  const ViewInteractionState({
     required this.activeScreen,
     required this.mouseTracking,
     required this.alternateScroll,
@@ -37,12 +41,11 @@ final class TerminalInteractionState {
   int get hashCode => Object.hash(activeScreen, mouseTracking, alternateScroll);
 
   @override
-  bool operator ==(Object other) {
-    return other is TerminalInteractionState &&
-        other.activeScreen == activeScreen &&
-        other.mouseTracking == mouseTracking &&
-        other.alternateScroll == alternateScroll;
-  }
+  bool operator ==(Object other) =>
+      other is ViewInteractionState &&
+      other.activeScreen == activeScreen &&
+      other.mouseTracking == mouseTracking &&
+      other.alternateScroll == alternateScroll;
 }
 
 /// Owns one Flutter view's attachment to a terminal controller.
@@ -52,23 +55,23 @@ final class TerminalInteractionState {
 /// compression, theme reporting, and normalized event routing. Disposing it
 /// releases the controller's single-view lease and every listener it created.
 @internal
-final class TerminalViewAttachment extends ChangeNotifier {
+final class ViewAttachment extends ChangeNotifier {
   final Object _viewToken;
-  final TerminalInputAdapter input;
+  final KeyboardInputAdapter input;
   final TerminalControllerImpl _controller;
-  late final TerminalFrameSource frameSource;
+  late final FrameSource frameSource;
   late final CompressionScheduler _compressionScheduler;
-  late final ValueNotifier<TerminalInteractionState> _interaction;
+  late final ValueNotifier<ViewInteractionState> _interaction;
   ScrollController? _scrollController;
   var _disposed = false;
 
-  factory TerminalViewAttachment(TerminalController controller) =>
-      TerminalViewAttachment._(controller as TerminalControllerImpl);
+  factory ViewAttachment(TerminalController controller) =>
+      ViewAttachment._(controller as TerminalControllerImpl);
 
-  TerminalViewAttachment._(this._controller)
+  ViewAttachment._(this._controller)
     : _viewToken = _controller.attachView(),
-      input = TerminalInputAdapter(_controller) {
-    frameSource = TerminalFrameSource(
+      input = KeyboardInputAdapter(_controller) {
+    frameSource = FrameSource(
       terminal,
       viewportChanges: _controller.viewportChanges,
     );
@@ -96,7 +99,7 @@ final class TerminalViewAttachment extends ChangeNotifier {
     return position.pixels >= position.maxScrollExtent - 1.0;
   }
 
-  ValueListenable<TerminalInteractionState> get interaction => _interaction;
+  ValueListenable<ViewInteractionState> get interaction => _interaction;
 
   MouseTracking get mouseTracking => _controller.mouseTracking;
 
@@ -164,19 +167,19 @@ final class TerminalViewAttachment extends ChangeNotifier {
     super.dispose();
   }
 
-  void handleMouseEvent(TerminalMouseEvent event) =>
+  void handleMouseEvent(MouseInput event) =>
       _controller.handleMouseEvent(event);
 
-  void handleResize(TerminalResizeEvent event) =>
-      _controller.handleResize(event);
+  void handleResize(SurfaceMeasurement measurement) =>
+      _controller.handleResize(measurement);
 
-  void handleSelectionPress(TerminalSelectionPressEvent event) =>
+  void handleSelectionPress(SelectionPressInput event) =>
       _controller.handleSelectionPress(event);
 
   void handleSelectionRelease(Position cell) =>
       _controller.handleSelectionRelease(cell);
 
-  void handleTerminalScroll(TerminalScrollEvent event) =>
+  void handleTerminalScroll(ScrollInput event) =>
       _controller.handleTerminalScroll(event);
 
   void handleViewportRowChanged(int row) {
@@ -188,12 +191,12 @@ final class TerminalViewAttachment extends ChangeNotifier {
 
   void requestFocus() => input.requestFocus();
 
-  void updateSelectionAutoscroll(TerminalSelectionAutoscrollEvent event) {
+  void updateSelectionAutoscroll(SelectionAutoscrollInput event) {
     _controller.updateSelectionAutoscroll(event);
     _compressionScheduler.notifyActivity();
   }
 
-  void updateSelectionDrag(TerminalSelectionDragEvent event) =>
+  void updateSelectionDrag(SelectionDragInput event) =>
       _controller.updateSelectionDrag(event);
 
   void _handleControllerChanged() {
@@ -204,9 +207,9 @@ final class TerminalViewAttachment extends ChangeNotifier {
 
   void _handleTerminalChanged() => _compressionScheduler.notifyActivity();
 
-  TerminalInteractionState _readInteractionState() {
+  ViewInteractionState _readInteractionState() {
     final activeScreen = _controller.activeScreen;
-    return TerminalInteractionState(
+    return ViewInteractionState(
       activeScreen: activeScreen,
       mouseTracking: _controller.mouseTracking,
       alternateScroll: terminal.modeGet(const .alternateScroll()),

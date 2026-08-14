@@ -4,8 +4,8 @@ import 'package:crypto/crypto.dart' show sha256;
 import 'package:flterm/src/foundation/cell_metrics.dart';
 import 'package:flterm/src/foundation/terminal_theme.dart';
 import 'package:flterm/src/rendering/atlas/atlas_config.dart';
-import 'package:flterm/src/rendering/terminal_frame_source.dart';
-import 'package:flterm/src/rendering/terminal_render_cache.dart';
+import 'package:flterm/src/rendering/atlas_pool.dart';
+import 'package:flterm/src/rendering/frame_source.dart';
 import 'package:flterm/src/rendering/terminal_renderer.dart';
 import 'package:flutter/rendering.dart' show ViewportOffset;
 import 'package:flutter/services.dart';
@@ -71,13 +71,13 @@ String benchmarkFontDigest({
 
 /// Fixed terminal surface shared by every rendering workload.
 final class BenchmarkTerminalSurface extends StatelessWidget {
-  final TerminalFrameSource frameSource;
-  final TerminalRenderCache cache;
+  final FrameSource frameSource;
+  final AtlasPool atlasPool;
 
   const BenchmarkTerminalSurface({
     super.key,
     required this.frameSource,
-    required this.cache,
+    required this.atlasPool,
   });
 
   @override
@@ -95,7 +95,7 @@ final class BenchmarkTerminalSurface extends StatelessWidget {
             metrics: _metrics,
             offset: ViewportOffset.zero(),
             focused: true,
-            renderCache: cache,
+            atlasPool: atlasPool,
             onGeometryChanged: (geometry) => frameSource.terminal.resize(
               cols: geometry.cols,
               rows: geometry.rows,
@@ -113,6 +113,6 @@ final class BenchmarkTerminalSurface extends StatelessWidget {
 }
 
 /// Keeps an already-populated atlas alive after its renderer is detached.
-TerminalAtlasHandle retainBenchmarkAtlas(TerminalRenderCache cache) {
-  return cache.acquireAtlas(_atlasConfig);
+AtlasLease retainBenchmarkAtlas(AtlasPool atlasPool) {
+  return atlasPool.acquireAtlas(_atlasConfig);
 }

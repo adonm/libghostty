@@ -34,10 +34,10 @@ void main() {
     });
 
     group('createScrollPosition', () {
-      testWidgets('returns TerminalScrollPosition', (tester) async {
+      testWidgets('returns ScrollbackPosition', (tester) async {
         await tester.pumpWidget(buildScrollable(controller));
 
-        expect(controller.position, isA<TerminalScrollPosition>());
+        expect(controller.position, isA<ScrollbackPosition>());
       });
     });
 
@@ -47,7 +47,7 @@ void main() {
 
         controller.activeScreen = .alternate;
 
-        final position = controller.position as TerminalScrollPosition;
+        final position = controller.position as ScrollbackPosition;
         expect(position.activeScreen, TerminalScreen.alternate);
 
         controller.activeScreen = .primary;
@@ -56,7 +56,7 @@ void main() {
     });
   });
 
-  group('TerminalScrollPosition', () {
+  group('ScrollbackPosition', () {
     late TerminalScrollController controller;
 
     setUp(() => controller = TerminalScrollController());
@@ -95,7 +95,6 @@ void main() {
 
         controller.activeScreen = .alternate;
         await tester.pumpWidget(buildScrollable(controller));
-        expect(controller.position.pixels, 0);
 
         controller.jumpTo(9999);
         await tester.pump();

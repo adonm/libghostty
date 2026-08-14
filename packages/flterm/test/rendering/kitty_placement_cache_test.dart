@@ -26,13 +26,13 @@ void main() {
     }
 
     late Terminal terminal;
-    late TerminalPaintState state;
+    late PaintState state;
     late KittyImageCache images;
     late KittyPlacementCache placements;
 
     setUp(() {
       terminal = Terminal(cols: 8, rows: 2)..kittyImageStorageLimit = 1 << 20;
-      state = TerminalPaintState(TerminalTheme.dark(), metrics)
+      state = PaintState(TerminalTheme.dark(), metrics)
         ..cols = 8
         ..rows = 2;
       images = KittyImageCache(onImageReady: () {});

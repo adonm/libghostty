@@ -1,15 +1,19 @@
 import 'atlas/atlas.dart';
 
-class TerminalAtlasHandle {
-  final TerminalRenderCache _owner;
+/// Keeps a shared [Atlas] alive until [release] is called.
+class AtlasLease {
+  final AtlasPool _owner;
   final AtlasConfig config;
   final _CachedAtlas _entry;
   var _released = false;
 
-  TerminalAtlasHandle._(this._owner, this.config, this._entry);
+  AtlasLease._(this._owner, this.config, this._entry);
 
   Atlas get atlas => _entry.atlas;
 
+  /// Releases this lease.
+  ///
+  /// Repeated calls have no effect.
   void release() {
     if (_released) return;
     _released = true;
@@ -23,18 +27,23 @@ class TerminalAtlasHandle {
 /// theme/metrics/DPR and use it directly as the sharing key.
 ///
 /// This type is internal; public sharing is exposed through `TerminalScope`.
-class TerminalRenderCache {
+class AtlasPool {
   final _atlases = <AtlasConfig, _CachedAtlas>{};
 
-  TerminalAtlasHandle acquireAtlas(AtlasConfig config) {
+  /// Acquires the atlas for [config], creating it when necessary.
+  ///
+  /// The caller must release the returned lease when it no longer uses the
+  /// atlas.
+  AtlasLease acquireAtlas(AtlasConfig config) {
     final entry = _atlases.putIfAbsent(
       config,
       () => _CachedAtlas(Atlas(config)),
     );
     entry.references++;
-    return TerminalAtlasHandle._(this, config, entry);
+    return AtlasLease._(this, config, entry);
   }
 
+  /// Disposes every pooled atlas, including atlases with outstanding leases.
   void dispose() {
     for (final entry in _atlases.values) {
       entry.atlas.dispose();

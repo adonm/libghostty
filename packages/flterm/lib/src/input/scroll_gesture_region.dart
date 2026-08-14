@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
@@ -6,12 +7,10 @@ import 'package:libghostty/libghostty.dart' show Mods;
 import 'package:meta/meta.dart';
 
 import '../foundation.dart';
-import '../view/terminal_view_attachment.dart';
-import 'terminal_input_event.dart';
+import '../view/view_attachment.dart';
+import 'input_message.dart';
 
 typedef _ScrollTarget = ({Offset position, Mods mods, bool reportMouse});
-
-enum _ScrollGestureMode { pan, vertical }
 
 /// Owns terminal-directed wheel, touch, and trackpad scrolling.
 ///
@@ -21,15 +20,15 @@ enum _ScrollGestureMode { pan, vertical }
 /// recognizer; alternate-screen key scrolling uses a vertical recognizer so
 /// horizontal gestures remain available to ancestor widgets.
 @internal
-final class TerminalScrollGestureHandler extends StatefulWidget {
+final class ScrollGestureRegion extends StatefulWidget {
   final Widget child;
   final CellMetrics metrics;
   final ScrollPhysics physics;
-  final TerminalViewAttachment attachment;
-  final TerminalInteractionState interaction;
+  final ViewAttachment attachment;
+  final ViewInteractionState interaction;
   final ValueChanged<PointerDeviceKind> onScrollStart;
 
-  const TerminalScrollGestureHandler({
+  const ScrollGestureRegion({
     super.key,
     required this.metrics,
     required this.physics,
@@ -40,12 +39,10 @@ final class TerminalScrollGestureHandler extends StatefulWidget {
   });
 
   @override
-  State<TerminalScrollGestureHandler> createState() =>
-      _TerminalScrollGestureState();
+  State<ScrollGestureRegion> createState() => _ScrollGestureRegionState();
 }
 
-final class _TerminalScrollGestureState
-    extends State<TerminalScrollGestureHandler>
+final class _ScrollGestureRegionState extends State<ScrollGestureRegion>
     with SingleTickerProviderStateMixin {
   static const _macOsDiscreteScrollPixels = 40.0;
   static const _macOsDiscreteVerticalMultiplier = 3.0;
@@ -62,18 +59,14 @@ final class _TerminalScrollGestureState
       child: RawGestureDetector(
         behavior: .opaque,
         gestures: <Type, GestureRecognizerFactory>{
-          _TerminalPanGestureRecognizer:
-              GestureRecognizerFactoryWithHandlers<
-                _TerminalPanGestureRecognizer
-              >(
-                () => _TerminalPanGestureRecognizer(debugOwner: this),
+          _TwoAxisScrollRecognizer:
+              GestureRecognizerFactoryWithHandlers<_TwoAxisScrollRecognizer>(
+                () => _TwoAxisScrollRecognizer(debugOwner: this),
                 (recognizer) => _configure(recognizer, .pan),
               ),
-          _TerminalVerticalDragGestureRecognizer:
-              GestureRecognizerFactoryWithHandlers<
-                _TerminalVerticalDragGestureRecognizer
-              >(
-                () => _TerminalVerticalDragGestureRecognizer(debugOwner: this),
+          _VerticalScrollRecognizer:
+              GestureRecognizerFactoryWithHandlers<_VerticalScrollRecognizer>(
+                () => _VerticalScrollRecognizer(debugOwner: this),
                 (recognizer) => _configure(recognizer, .vertical),
               ),
         },
@@ -83,7 +76,7 @@ final class _TerminalScrollGestureState
   }
 
   @override
-  void didUpdateWidget(TerminalScrollGestureHandler oldWidget) {
+  void didUpdateWidget(ScrollGestureRegion oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.attachment != oldWidget.attachment ||
         widget.metrics != oldWidget.metrics ||
@@ -106,8 +99,25 @@ final class _TerminalScrollGestureState
     _ticker = createTicker(_tick);
   }
 
+  void _beginGesture(PointerEvent event) {
+    final carriedVelocity = _activity?.velocity ?? Offset.zero;
+    _stopBallistic();
+    _activity = _ScrollActivity(
+      target: _targetAt(event.localPosition),
+      kind: event.kind,
+      physics: widget.physics,
+      carriedVelocity: carriedVelocity,
+      timeStamp: event.timeStamp,
+    );
+  }
+
+  void _cancelGesture() {
+    _activity = null;
+    _ticker.stop();
+  }
+
   void _configure(DragGestureRecognizer recognizer, _ScrollGestureMode mode) {
-    (recognizer as _TerminalScrollSequence).configureSequence(
+    (recognizer as _ScrollSequence).configureSequence(
       canStart: () => _gestureMode() == mode,
       onPointerStart: _beginGesture,
     );
@@ -125,6 +135,36 @@ final class _TerminalScrollGestureState
       ..maxFlingVelocity = widget.physics.maxFlingVelocity
       ..velocityTrackerBuilder = configuration.velocityTrackerBuilder(context)
       ..gestureSettings = MediaQuery.maybeGestureSettingsOf(context);
+  }
+
+  int _discreteHorizontalTicks(double delta) {
+    if (delta == 0) return 0;
+    final magnitude = (delta.abs() / _macOsDiscreteScrollPixels).round();
+    final ticks = magnitude < 1 ? 1 : magnitude;
+    return delta < 0 ? -ticks : ticks;
+  }
+
+  double _discreteVerticalTicks(double delta) {
+    if (delta == 0) return 0;
+    final ticks = delta / _macOsDiscreteScrollPixels;
+    return ticks.abs() < 1 ? ticks.sign : ticks;
+  }
+
+  void _endGesture(DragEndDetails details) {
+    final activity = _activity;
+    if (activity == null || !activity.isDragging) return;
+    final velocity = -details.velocity.pixelsPerSecond;
+    if (activity.markMoved(velocity)) widget.onScrollStart(activity.kind);
+    if (!activity.startBallistic(
+      physics: widget.physics,
+      velocity: velocity,
+      viewportSize: context.size ?? Size.zero,
+      devicePixelRatio: View.of(context).devicePixelRatio,
+    )) {
+      _activity = null;
+      return;
+    }
+    _ticker.start();
   }
 
   _ScrollGestureMode? _gestureMode() {
@@ -145,54 +185,6 @@ final class _TerminalScrollGestureState
             terminal.modeGet(const .alternateScroll())
         ? .vertical
         : null;
-  }
-
-  void _beginGesture(PointerEvent event) {
-    final carriedVelocity = _activity?.velocity ?? Offset.zero;
-    _stopBallistic();
-    _activity = _ScrollActivity(
-      target: _targetAt(event.localPosition),
-      kind: event.kind,
-      physics: widget.physics,
-      carriedVelocity: carriedVelocity,
-      timeStamp: event.timeStamp,
-    );
-  }
-
-  void _updateGesture(DragUpdateDetails details) {
-    final activity = _activity;
-    if (activity == null || !activity.isDragging) return;
-    final delta = -details.delta;
-    if (activity.markMoved(delta)) widget.onScrollStart(activity.kind);
-    final adjusted = activity.update(delta, details.sourceTimeStamp);
-    if (adjusted != Offset.zero) _route(adjusted, activity.target);
-  }
-
-  void _endGesture(DragEndDetails details) {
-    final activity = _activity;
-    if (activity == null || !activity.isDragging) return;
-    final velocity = -details.velocity.pixelsPerSecond;
-    if (activity.markMoved(velocity)) widget.onScrollStart(activity.kind);
-    if (!activity.startBallistic(
-      physics: widget.physics,
-      velocity: velocity,
-      viewportSize: context.size ?? Size.zero,
-      devicePixelRatio: View.of(context).devicePixelRatio,
-    )) {
-      _activity = null;
-      return;
-    }
-    _ticker.start();
-  }
-
-  void _cancelGesture() {
-    _activity = null;
-    _ticker.stop();
-  }
-
-  void _reset() {
-    _cancelGesture();
-    _remainder = null;
   }
 
   void _handlePointerSignal(PointerSignalEvent event) {
@@ -230,17 +222,10 @@ final class _TerminalScrollGestureState
     event.respond(allowPlatformDefault: false);
   }
 
-  _ScrollTarget _targetAt(Offset position) {
-    final mods = widget.attachment.currentMods;
-    return (
-      mods: mods,
-      position: position,
-      reportMouse: widget.attachment.mouseTracking != .none && !mods.hasShift,
-    );
-  }
-
   Offset _normalizePointerScroll(PointerScrollEvent event) {
-    if (kIsWeb || defaultTargetPlatform != .macOS || event.kind != .mouse) {
+    if (kIsWeb ||
+        defaultTargetPlatform != TargetPlatform.macOS ||
+        event.kind != PointerDeviceKind.mouse) {
       return event.scrollDelta;
     }
 
@@ -254,17 +239,9 @@ final class _TerminalScrollGestureState
     );
   }
 
-  int _discreteHorizontalTicks(double delta) {
-    if (delta == 0) return 0;
-    final magnitude = (delta.abs() / _macOsDiscreteScrollPixels).round();
-    final ticks = magnitude < 1 ? 1 : magnitude;
-    return delta < 0 ? -ticks : ticks;
-  }
-
-  double _discreteVerticalTicks(double delta) {
-    if (delta == 0) return 0;
-    final ticks = delta / _macOsDiscreteScrollPixels;
-    return ticks.abs() < 1 ? ticks.sign : ticks;
+  void _reset() {
+    _cancelGesture();
+    _remainder = null;
   }
 
   void _route(Offset delta, _ScrollTarget target) {
@@ -284,23 +261,15 @@ final class _TerminalScrollGestureState
     if (horizontal == 0 && vertical == 0) return;
 
     widget.attachment.handleTerminalScroll(
-      TerminalScrollEvent(
-        mods: target.mods,
-        vertical: vertical,
+      ScrollInput(
         horizontal: horizontal,
+        mods: target.mods,
         pixelX: target.position.dx,
         pixelY: target.position.dy,
         reportMouse: target.reportMouse,
+        vertical: vertical,
       ),
     );
-  }
-
-  void _tick(Duration elapsed) {
-    final activity = _activity;
-    if (activity == null || activity.isDragging) return;
-    final delta = activity.advance(elapsed);
-    if (delta != Offset.zero) _route(delta, activity.target);
-    if (activity.done) _stopBallistic();
   }
 
   void _stopBallistic() {
@@ -312,6 +281,32 @@ final class _TerminalScrollGestureState
     } else {
       _activity = null;
     }
+  }
+
+  _ScrollTarget _targetAt(Offset position) {
+    final mods = widget.attachment.currentMods;
+    return (
+      position: position,
+      mods: mods,
+      reportMouse: widget.attachment.mouseTracking != .none && !mods.hasShift,
+    );
+  }
+
+  void _tick(Duration elapsed) {
+    final activity = _activity;
+    if (activity == null || activity.isDragging) return;
+    final delta = activity.advance(elapsed);
+    if (delta != Offset.zero) _route(delta, activity.target);
+    if (activity.done) _stopBallistic();
+  }
+
+  void _updateGesture(DragUpdateDetails details) {
+    final activity = _activity;
+    if (activity == null || !activity.isDragging) return;
+    final delta = -details.delta;
+    if (activity.markMoved(delta)) widget.onScrollStart(activity.kind);
+    final adjusted = activity.update(delta, details.sourceTimeStamp);
+    if (adjusted != Offset.zero) _route(adjusted, activity.target);
   }
 
   static Offset _supportedDelta(Offset delta, _ScrollTarget target) {
@@ -383,7 +378,7 @@ final class _ScrollActivity {
   }
 
   bool markMoved(Offset delta) {
-    if (_supported(delta) == .zero || _moved) return false;
+    if (_supported(delta) == Offset.zero || _moved) return false;
     _moved = true;
     return true;
   }
@@ -430,43 +425,8 @@ final class _ScrollActivity {
   }
 }
 
-/// Accumulates sub-cell motion for one compatible terminal scroll target.
-///
-/// Mouse-reporting remainders are tied to their cell and modifier snapshot;
-/// alternate-scroll remainders can continue across positions because only
-/// vertical key steps are emitted.
-final class _ScrollRemainder {
-  final CellMetrics metrics;
-  final _ScrollTarget target;
-  double horizontal;
-  double vertical;
-
-  _ScrollRemainder(this.target, this.metrics) : horizontal = 0, vertical = 0;
-
-  bool shares(_ScrollTarget other, CellMetrics otherMetrics) {
-    if (metrics != otherMetrics || target.reportMouse != other.reportMouse) {
-      return false;
-    }
-    if (!other.reportMouse) return true;
-    return target.mods == other.mods &&
-        metrics.cellAt(target.position) == metrics.cellAt(other.position);
-  }
-}
-
 /// Per-axis motion state matching Flutter's scroll-drag momentum behavior.
 final class _ScrollAxis {
-  /// Finite synthetic extents let Flutter create a ballistic simulation even
-  /// though the terminal routes the resulting deltas rather than using a
-  /// Flutter scroll position.
-  static const _simulationExtent = 1e9;
-
-  /// Prevents zero-sized test or detached surfaces from producing invalid
-  /// scroll metrics for the simulation.
-  static const _minimumViewportDimension = 1.0;
-
-  /// Keeps fallback scroll metrics valid when a platform reports no scale.
-  static const _minimumDevicePixelRatio = 1.0;
-
   static const _largeThresholdBreakDistance = 24.0;
   static const _motionStoppedThreshold = Duration(milliseconds: 50);
 
@@ -487,10 +447,15 @@ final class _ScrollAxis {
 
   bool get done => _simulation == null;
 
-  double update(double delta, Duration? timeStamp) {
-    if (delta != 0) _lastMovement = timeStamp;
-    _updateMomentum(delta, timeStamp);
-    return _applyMotionStartThreshold(delta, timeStamp);
+  double applyMomentumTo(double replacement) {
+    if (!_retainsMomentum ||
+        replacement.sign != carriedVelocity.sign ||
+        replacement.abs() <=
+            carriedVelocity.abs() *
+                ScrollDragController.momentumRetainVelocityThresholdFactor) {
+      return replacement;
+    }
+    return replacement + carriedVelocity;
   }
 
   void dropMomentum() => _retainsMomentum = false;
@@ -513,37 +478,31 @@ final class _ScrollAxis {
     _simulation = velocity == 0
         ? null
         : physics.createBallisticSimulation(
+            // The terminal consumes deltas instead of using a ScrollPosition.
+            // Finite extents and non-zero fallbacks keep Flutter's synthetic
+            // scroll metrics valid for detached or zero-sized surfaces.
             FixedScrollMetrics(
+              minScrollExtent: -1e9,
+              maxScrollExtent: 1e9,
               pixels: 0,
-              maxScrollExtent: _simulationExtent,
-              minScrollExtent: -_simulationExtent,
+              viewportDimension: viewportDimension > 0 ? viewportDimension : 1,
               axisDirection: axis == .horizontal ? .right : .down,
-              devicePixelRatio: devicePixelRatio > 0
-                  ? devicePixelRatio
-                  : _minimumDevicePixelRatio,
-              viewportDimension: viewportDimension > 0
-                  ? viewportDimension
-                  : _minimumViewportDimension,
+              devicePixelRatio: devicePixelRatio > 0 ? devicePixelRatio : 1,
             ),
             velocity,
           );
+  }
+
+  double update(double delta, Duration? timeStamp) {
+    if (delta != 0) _lastMovement = timeStamp;
+    _updateMomentum(delta, timeStamp);
+    return _applyMotionStartThreshold(delta, timeStamp);
   }
 
   double velocityAt(double time) {
     final simulation = _simulation;
     if (simulation == null || simulation.isDone(time)) return 0;
     return simulation.dx(time);
-  }
-
-  double applyMomentumTo(double replacement) {
-    if (!_retainsMomentum ||
-        replacement.sign != carriedVelocity.sign ||
-        replacement.abs() <=
-            carriedVelocity.abs() *
-                ScrollDragController.momentumRetainVelocityThresholdFactor) {
-      return replacement;
-    }
-    return replacement + carriedVelocity;
   }
 
   double _applyMotionStartThreshold(double delta, Duration? timeStamp) {
@@ -581,72 +540,28 @@ final class _ScrollAxis {
   }
 }
 
-final class _TerminalPanGestureRecognizer extends PanGestureRecognizer
-    with _TerminalScrollSequence {
-  _TerminalPanGestureRecognizer({super.debugOwner})
-    : super(supportedDevices: const {.touch, .trackpad});
+enum _ScrollGestureMode { pan, vertical }
 
-  @override
-  void addAllowedPointer(PointerDownEvent event) {
-    startSequence(event);
-    super.addAllowedPointer(event);
-  }
+/// Accumulates sub-cell motion for one compatible terminal scroll target.
+///
+/// Mouse-reporting remainders are tied to their cell and modifier snapshot;
+/// alternate-scroll remainders can continue across positions because only
+/// vertical key steps are emitted.
+final class _ScrollRemainder {
+  final CellMetrics metrics;
+  final _ScrollTarget target;
+  double horizontal;
+  double vertical;
 
-  @override
-  void addAllowedPointerPanZoom(PointerPanZoomStartEvent event) {
-    startSequence(event);
-    super.addAllowedPointerPanZoom(event);
-  }
+  _ScrollRemainder(this.target, this.metrics) : horizontal = 0, vertical = 0;
 
-  @override
-  bool isPointerAllowed(PointerEvent event) {
-    return allowsSequence(event) && super.isPointerAllowed(event);
-  }
-
-  @override
-  bool isPointerPanZoomAllowed(PointerPanZoomStartEvent event) {
-    return allowsSequence(event) && super.isPointerPanZoomAllowed(event);
-  }
-
-  @override
-  void didStopTrackingLastPointer(int pointer) {
-    super.didStopTrackingLastPointer(pointer);
-    stopSequence();
-  }
-}
-
-final class _TerminalVerticalDragGestureRecognizer
-    extends VerticalDragGestureRecognizer
-    with _TerminalScrollSequence {
-  _TerminalVerticalDragGestureRecognizer({super.debugOwner})
-    : super(supportedDevices: const {.touch, .trackpad});
-
-  @override
-  void addAllowedPointer(PointerDownEvent event) {
-    startSequence(event);
-    super.addAllowedPointer(event);
-  }
-
-  @override
-  void addAllowedPointerPanZoom(PointerPanZoomStartEvent event) {
-    startSequence(event);
-    super.addAllowedPointerPanZoom(event);
-  }
-
-  @override
-  bool isPointerAllowed(PointerEvent event) {
-    return allowsSequence(event) && super.isPointerAllowed(event);
-  }
-
-  @override
-  bool isPointerPanZoomAllowed(PointerPanZoomStartEvent event) {
-    return allowsSequence(event) && super.isPointerPanZoomAllowed(event);
-  }
-
-  @override
-  void didStopTrackingLastPointer(int pointer) {
-    super.didStopTrackingLastPointer(pointer);
-    stopSequence();
+  bool shares(_ScrollTarget other, CellMetrics otherMetrics) {
+    if (metrics != otherMetrics || target.reportMouse != other.reportMouse) {
+      return false;
+    }
+    if (!other.reportMouse) return true;
+    return target.mods == other.mods &&
+        metrics.cellAt(target.position) == metrics.cellAt(other.position);
   }
 }
 
@@ -655,10 +570,15 @@ final class _TerminalVerticalDragGestureRecognizer
 /// Eligibility is sampled only at sequence start. This prevents modifier or
 /// terminal-mode changes from transferring an in-flight sequence between the
 /// pan and vertical recognizers.
-mixin _TerminalScrollSequence {
+mixin _ScrollSequence {
   late ValueGetter<bool> _canStart;
   late ValueChanged<PointerEvent> _onPointerStart;
   PointerDeviceKind? _activeKind;
+
+  bool allowsSequence(PointerEvent event) {
+    final activeKind = _activeKind;
+    return activeKind == null ? _canStart() : activeKind == event.kind;
+  }
 
   void configureSequence({
     required ValueGetter<bool> canStart,
@@ -668,11 +588,6 @@ mixin _TerminalScrollSequence {
     _onPointerStart = onPointerStart;
   }
 
-  bool allowsSequence(PointerEvent event) {
-    final activeKind = _activeKind;
-    return activeKind == null ? _canStart() : activeKind == event.kind;
-  }
-
   void startSequence(PointerEvent event) {
     if (_activeKind != null) return;
     _activeKind = event.kind;
@@ -680,4 +595,72 @@ mixin _TerminalScrollSequence {
   }
 
   void stopSequence() => _activeKind = null;
+}
+
+final class _TwoAxisScrollRecognizer extends PanGestureRecognizer
+    with _ScrollSequence {
+  _TwoAxisScrollRecognizer({super.debugOwner})
+    : super(supportedDevices: const {.touch, .trackpad});
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    startSequence(event);
+    super.addAllowedPointer(event);
+  }
+
+  @override
+  void addAllowedPointerPanZoom(PointerPanZoomStartEvent event) {
+    startSequence(event);
+    super.addAllowedPointerPanZoom(event);
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {
+    super.didStopTrackingLastPointer(pointer);
+    stopSequence();
+  }
+
+  @override
+  bool isPointerAllowed(PointerEvent event) {
+    return allowsSequence(event) && super.isPointerAllowed(event);
+  }
+
+  @override
+  bool isPointerPanZoomAllowed(PointerPanZoomStartEvent event) {
+    return allowsSequence(event) && super.isPointerPanZoomAllowed(event);
+  }
+}
+
+final class _VerticalScrollRecognizer extends VerticalDragGestureRecognizer
+    with _ScrollSequence {
+  _VerticalScrollRecognizer({super.debugOwner})
+    : super(supportedDevices: const {.touch, .trackpad});
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    startSequence(event);
+    super.addAllowedPointer(event);
+  }
+
+  @override
+  void addAllowedPointerPanZoom(PointerPanZoomStartEvent event) {
+    startSequence(event);
+    super.addAllowedPointerPanZoom(event);
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {
+    super.didStopTrackingLastPointer(pointer);
+    stopSequence();
+  }
+
+  @override
+  bool isPointerAllowed(PointerEvent event) {
+    return allowsSequence(event) && super.isPointerAllowed(event);
+  }
+
+  @override
+  bool isPointerPanZoomAllowed(PointerPanZoomStartEvent event) {
+    return allowsSequence(event) && super.isPointerPanZoomAllowed(event);
+  }
 }

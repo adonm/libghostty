@@ -35,7 +35,7 @@ class TerminalScrollController extends ScrollController {
     if (_activeScreen == value) return;
     _activeScreen = value;
     for (final position in positions) {
-      (position as TerminalScrollPosition).activeScreen = value;
+      (position as ScrollbackPosition).activeScreen = value;
     }
   }
 
@@ -45,7 +45,7 @@ class TerminalScrollController extends ScrollController {
     ScrollContext context,
     ScrollPosition? oldPosition,
   ) {
-    return TerminalScrollPosition(
+    return ScrollbackPosition(
       physics: physics,
       context: context,
       oldPosition: oldPosition,
@@ -59,11 +59,11 @@ class TerminalScrollController extends ScrollController {
 /// Alternate screens expose unbounded extents because touch and wheel input is
 /// routed to terminal applications rather than moving the Flutter viewport.
 @internal
-final class TerminalScrollPosition extends ScrollPositionWithSingleContext {
+final class ScrollbackPosition extends ScrollPositionWithSingleContext {
   double? _savedPixels;
   TerminalScreen _activeScreen;
 
-  TerminalScrollPosition({
+  ScrollbackPosition({
     required super.physics,
     required super.context,
     required this._activeScreen,
