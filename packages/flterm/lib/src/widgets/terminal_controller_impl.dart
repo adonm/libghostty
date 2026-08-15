@@ -208,11 +208,7 @@ class TerminalControllerImpl extends TerminalController
   }
 
   @override
-  void clearSelection() {
-    if (terminal.selection == null) return;
-    _selectionGesture.reset();
-    _setSelection(null, clearIfNull: true);
-  }
+  void clearSelection() => _clearSelection(notify: true);
 
   @override
   void clearVirtualMods() {
@@ -487,6 +483,9 @@ class TerminalControllerImpl extends TerminalController
   void hideKeyboard() => _updateKeyboardState(.hidden);
 
   @override
+  void invalidateSelection() => _clearSelection(notify: false);
+
+  @override
   bool modeGet(TerminalMode mode) => terminal.modeGet(mode);
 
   @override
@@ -653,6 +652,13 @@ class TerminalControllerImpl extends TerminalController
       row: position.row.clamp(0, _lastRows - 1),
       col: position.col.clamp(0, _lastCols - 1),
     );
+  }
+
+  void _clearSelection({required bool notify}) {
+    if (terminal.selection == null) return;
+    _selectionGesture.reset();
+    _mutateSelection(() => terminal.selection = null);
+    if (notify) super.notifyListeners();
   }
 
   bool _consumeCommittedCompositionEditKey(
