@@ -88,23 +88,24 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
                   ..onLongPressMoveUpdate = _handleLongPressMoveUpdate
                   ..onLongPressUp = _handleLongPressUp,
               ),
-          PanGestureRecognizer:
-              GestureRecognizerFactoryWithHandlers<PanGestureRecognizer>(
-                () => PanGestureRecognizer(
-                  debugOwner: this,
-                  supportedDevices: const {PointerDeviceKind.mouse},
+          if (widget.settings.dragSelection)
+            PanGestureRecognizer:
+                GestureRecognizerFactoryWithHandlers<PanGestureRecognizer>(
+                  () => PanGestureRecognizer(
+                    debugOwner: this,
+                    supportedDevices: const {PointerDeviceKind.mouse},
+                  ),
+                  (recognizer) {
+                    recognizer
+                      ..dragStartBehavior = .down
+                      ..onStart = _handleDragStart
+                      ..onUpdate = _handleDragUpdate
+                      ..onEnd = (_) {
+                        _handleDragEnd();
+                      }
+                      ..onCancel = _handleDragEnd;
+                  },
                 ),
-                (recognizer) {
-                  recognizer
-                    ..dragStartBehavior = .down
-                    ..onStart = _handleDragStart
-                    ..onUpdate = _handleDragUpdate
-                    ..onEnd = (_) {
-                      _handleDragEnd();
-                    }
-                    ..onCancel = _handleDragEnd;
-                },
-              ),
         },
         child: widget.child,
       ),
