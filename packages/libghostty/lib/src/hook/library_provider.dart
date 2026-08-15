@@ -99,11 +99,12 @@ final class CompileFromSource extends LibraryProvider {
   Future<void> _compile(Directory sourceDir, File target) async {
     final os = input.config.code.targetOS;
     final arch = input.config.code.targetArchitecture;
-    final ios = os == OS.iOS ? input.config.code.iOS.targetSdk : null;
+    final ios = os == .iOS ? input.config.code.iOS.targetSdk : null;
+    final iOSVersion = os == .iOS ? input.config.code.iOS.targetVersion : null;
 
     final installDir = target.parent.parent.uri;
     final localCacheDir = Directory.fromUri(installDir.resolve('.zig-cache/'));
-    final zig = zigTarget(os, arch, iOSSdk: ios);
+    final zig = zigTarget(os, arch, iOSSdk: ios, iOSVersion: iOSVersion);
 
     final zigArgs = [
       'build',
