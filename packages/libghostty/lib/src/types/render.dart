@@ -3,78 +3,104 @@ import 'package:meta/meta.dart';
 import '../generated/libghostty_enums.g.dart';
 import 'aliases.dart';
 import 'color.dart';
-import 'geometry.dart';
 
 /// Immutable cursor state from a render-state snapshot.
 ///
-/// When the cursor is outside the viewport, [position] is zero and [wideTail]
-/// is false because libghostty does not report viewport coordinates in that
-/// state.
+/// When [viewportHasValue] is false, [viewportX], [viewportY], and [wideTail]
+/// contain placeholder values and must not be used.
 @immutable
-final class Cursor {
-  /// Position within the viewport.
-  final Position position;
+final class RenderStateCursor {
+  /// Whether the cursor has a position in the visible viewport.
+  final bool viewportHasValue;
 
-  /// Whether the cursor is visible.
-  final bool visible;
+  /// Column within the viewport.
+  final int viewportX;
+
+  /// Row within the viewport.
+  final int viewportY;
 
   /// Whether the cursor is on the tail of a wide character.
   final bool wideTail;
 
-  /// Visual shape of the cursor.
-  final CursorShape shape;
+  /// Whether terminal modes make the cursor visible.
+  final bool visible;
 
-  /// Whether the cursor blinks.
+  /// Whether terminal modes make the cursor blink.
   final bool blinking;
 
-  /// Whether the terminal is in password input mode.
+  /// Whether the cursor is at a password input field.
   final bool passwordInput;
 
-  const Cursor({
-    this.position = const Position(row: 0, col: 0),
-    this.visible = true,
-    this.shape = .block,
+  /// Visual style of the cursor.
+  final CursorShape visualStyle;
+
+  /// Creates an immutable cursor state.
+  ///
+  /// [viewportX], [viewportY], and [wideTail] are meaningful only when
+  /// [viewportHasValue] is true.
+  const RenderStateCursor({
+    this.viewportHasValue = false,
+    this.viewportX = 0,
+    this.viewportY = 0,
     this.wideTail = false,
+    this.visible = true,
     this.blinking = false,
     this.passwordInput = false,
+    this.visualStyle = .block,
   });
 
   @override
-  int get hashCode =>
-      Object.hash(position, visible, shape, blinking, passwordInput, wideTail);
+  int get hashCode => Object.hash(
+    viewportHasValue,
+    viewportX,
+    viewportY,
+    wideTail,
+    visible,
+    blinking,
+    passwordInput,
+    visualStyle,
+  );
 
   @override
   bool operator ==(Object other) =>
-      other is Cursor &&
-      other.position == position &&
+      other is RenderStateCursor &&
+      other.viewportHasValue == viewportHasValue &&
+      other.viewportX == viewportX &&
+      other.viewportY == viewportY &&
+      other.wideTail == wideTail &&
       other.visible == visible &&
-      other.shape == shape &&
       other.blinking == blinking &&
       other.passwordInput == passwordInput &&
-      other.wideTail == wideTail;
+      other.visualStyle == visualStyle;
 
   /// Returns a copy with the given fields replaced.
-  Cursor copyWith({
-    Position? position,
+  RenderStateCursor copyWith({
+    bool? viewportHasValue,
+    int? viewportX,
+    int? viewportY,
+    bool? wideTail,
     bool? visible,
-    CursorShape? shape,
     bool? blinking,
     bool? passwordInput,
-    bool? wideTail,
+    CursorShape? visualStyle,
   }) {
-    return Cursor(
-      position: position ?? this.position,
+    return RenderStateCursor(
+      viewportHasValue: viewportHasValue ?? this.viewportHasValue,
+      viewportX: viewportX ?? this.viewportX,
+      viewportY: viewportY ?? this.viewportY,
+      wideTail: wideTail ?? this.wideTail,
       visible: visible ?? this.visible,
-      shape: shape ?? this.shape,
       blinking: blinking ?? this.blinking,
       passwordInput: passwordInput ?? this.passwordInput,
-      wideTail: wideTail ?? this.wideTail,
+      visualStyle: visualStyle ?? this.visualStyle,
     );
   }
 
   @override
   String toString() =>
-      'Cursor(position: $position, visible: $visible, shape: $shape)';
+      'RenderStateCursor(viewportHasValue: $viewportHasValue, '
+      'viewportX: $viewportX, viewportY: $viewportY, visible: $visible, '
+      'visualStyle: $visualStyle)';
 }
 
 /// A parsed SGR (Select Graphic Rendition) attribute.
@@ -231,8 +257,8 @@ final class Style {
 /// full 256-color palette after applying any OSC overrides.
 @immutable
 final class TerminalColors {
-  /// Cursor color, or null if no explicit cursor color is set. When null,
-  /// the renderer should choose its own cursor color.
+  /// Cursor color, or null if no explicit cursor color is set. When null, the
+  /// renderer should choose its own cursor color.
   final RgbColor? cursor;
 
   /// Effective foreground color.

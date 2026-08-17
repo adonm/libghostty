@@ -19,12 +19,12 @@ final class WasmMouseBindings implements MouseBindings {
 
   @override
   String mouseEncoderEncode(LibGhosttyHandle encoder, LibGhosttyHandle event) {
-    final lengthPointer = _requirePointer(_exports.allocateUsize());
+    final lengthPointer = _requirePointer(_exports.allocateBytes(4));
     var capacity = 128;
     var allocationLength = capacity;
     var buffer = 0;
     try {
-      buffer = _requirePointer(_exports.allocateU8Array(allocationLength));
+      buffer = _requirePointer(_exports.allocateBytes(allocationLength));
       var result = _exports.ghostty_mouse_encoder_encode(
         encoder.value,
         event.value,
@@ -33,11 +33,11 @@ final class WasmMouseBindings implements MouseBindings {
         lengthPointer,
       );
       if (result == Result.outOfSpace.value) {
-        _exports.freeU8Array(buffer, allocationLength);
+        _exports.freeBytes(buffer, allocationLength);
         buffer = 0;
         capacity = _memory.readU32(lengthPointer);
         allocationLength = capacity == 0 ? 1 : capacity;
-        buffer = _requirePointer(_exports.allocateU8Array(allocationLength));
+        buffer = _requirePointer(_exports.allocateBytes(allocationLength));
         result = _exports.ghostty_mouse_encoder_encode(
           encoder.value,
           event.value,
@@ -51,8 +51,8 @@ final class WasmMouseBindings implements MouseBindings {
         _memory.readBytes(buffer, _memory.readU32(lengthPointer)),
       );
     } finally {
-      if (buffer != 0) _exports.freeU8Array(buffer, allocationLength);
-      _exports.freeUsize(lengthPointer);
+      if (buffer != 0) _exports.freeBytes(buffer, allocationLength);
+      _exports.freeBytes(lengthPointer, 4);
     }
   }
 
@@ -67,7 +67,7 @@ final class WasmMouseBindings implements MouseBindings {
     try {
       final result = _exports.ghostty_mouse_encoder_new(0, out);
       checkResultCode(result, operation: 'ghostty_mouse_encoder_new');
-      return .fromAddress(_memory.readPtr(out));
+      return .fromAddress(_exports.ghostty_wasm_take_opaque(out));
     } finally {
       _exports.freeOpaque(out);
     }
@@ -84,7 +84,7 @@ final class WasmMouseBindings implements MouseBindings {
     MouseEncoderOption option, {
     required bool value,
   }) {
-    final pointer = _requirePointer(_exports.allocateU8());
+    final pointer = _requirePointer(_exports.allocateBytes(1));
     try {
       _memory.writeU8(pointer, value ? 1 : 0);
       _exports.ghostty_mouse_encoder_setopt(
@@ -93,7 +93,7 @@ final class WasmMouseBindings implements MouseBindings {
         pointer,
       );
     } finally {
-      _exports.freeU8(pointer);
+      _exports.freeBytes(pointer, 1);
     }
   }
 
@@ -116,10 +116,7 @@ final class WasmMouseBindings implements MouseBindings {
   @override
   void mouseEncoderSetSize(LibGhosttyHandle encoder, MouseEncoderSize size) {
     final pointer = _requirePointer(
-      _exports.allocateAlignedU8Array(
-        _layout.mouseEncoderSizeSize,
-        alignment: _layout.maxAlignment,
-      ),
+      _exports.allocateBytes(_layout.mouseEncoderSizeSize),
     );
     try {
       _memory.writeU32(pointer, _layout.mouseEncoderSizeSize);
@@ -161,7 +158,7 @@ final class WasmMouseBindings implements MouseBindings {
         pointer,
       );
     } finally {
-      _exports.freeU8Array(pointer, _layout.mouseEncoderSizeSize);
+      _exports.freeBytes(pointer, _layout.mouseEncoderSizeSize);
     }
   }
 
@@ -190,14 +187,14 @@ final class WasmMouseBindings implements MouseBindings {
 
   @override
   MouseButton? mouseEventGetButton(LibGhosttyHandle event) {
-    final out = _requirePointer(_exports.allocateUsize());
+    final out = _requirePointer(_exports.allocateBytes(4));
     try {
       final present =
           _exports.ghostty_mouse_event_get_button(event.value, out) != 0;
       if (!present) return null;
       return MouseButton.fromValue(_memory.readU32(out));
     } finally {
-      _exports.freeUsize(out);
+      _exports.freeBytes(out, 4);
     }
   }
 
@@ -209,10 +206,7 @@ final class WasmMouseBindings implements MouseBindings {
   @override
   (double x, double y) mouseEventGetPosition(LibGhosttyHandle event) {
     final pointer = _requirePointer(
-      _exports.allocateAlignedU8Array(
-        _layout.mousePosSize,
-        alignment: _layout.maxAlignment,
-      ),
+      _exports.allocateBytes(_layout.mousePosSize),
     );
     try {
       _exports.ghostty_mouse_event_get_position(pointer, event.value);
@@ -221,7 +215,7 @@ final class WasmMouseBindings implements MouseBindings {
         _memory.readF32(pointer + _layout.mousePosY),
       );
     } finally {
-      _exports.freeU8Array(pointer, _layout.mousePosSize);
+      _exports.freeBytes(pointer, _layout.mousePosSize);
     }
   }
 
@@ -231,7 +225,7 @@ final class WasmMouseBindings implements MouseBindings {
     try {
       final result = _exports.ghostty_mouse_event_new(0, out);
       checkResultCode(result, operation: 'ghostty_mouse_event_new');
-      return .fromAddress(_memory.readPtr(out));
+      return .fromAddress(_exports.ghostty_wasm_take_opaque(out));
     } finally {
       _exports.freeOpaque(out);
     }
@@ -255,17 +249,14 @@ final class WasmMouseBindings implements MouseBindings {
   @override
   void mouseEventSetPosition(LibGhosttyHandle event, double x, double y) {
     final pointer = _requirePointer(
-      _exports.allocateAlignedU8Array(
-        _layout.mousePosSize,
-        alignment: _layout.maxAlignment,
-      ),
+      _exports.allocateBytes(_layout.mousePosSize),
     );
     try {
       _memory.writeF32(pointer, x);
       _memory.writeF32(pointer + _layout.mousePosY, y);
       _exports.ghostty_mouse_event_set_position(event.value, pointer);
     } finally {
-      _exports.freeU8Array(pointer, _layout.mousePosSize);
+      _exports.freeBytes(pointer, _layout.mousePosSize);
     }
   }
 
@@ -279,7 +270,7 @@ final class WasmMouseBindings implements MouseBindings {
     MouseEncoderOption option,
     int value,
   ) {
-    final pointer = _requirePointer(_exports.allocateUsize());
+    final pointer = _requirePointer(_exports.allocateBytes(4));
     try {
       _memory.writeI32(pointer, value);
       _exports.ghostty_mouse_encoder_setopt(
@@ -288,7 +279,7 @@ final class WasmMouseBindings implements MouseBindings {
         pointer,
       );
     } finally {
-      _exports.freeUsize(pointer);
+      _exports.freeBytes(pointer, 4);
     }
   }
 }

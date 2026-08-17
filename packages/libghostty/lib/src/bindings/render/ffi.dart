@@ -8,10 +8,13 @@ import '../../generated/libghostty.g.dart'
         ClipboardContent,
         ClipboardWrite,
         MouseEncoderSize,
+        RenderStateCursor,
         SgrAttribute,
         String,
         Style;
-import '../../generated/libghostty.g.dart' as native show Style;
+import '../../generated/libghostty.g.dart'
+    as native
+    show RenderStateCursor, Style;
 import '../../generated/libghostty_enums.g.dart';
 import '../../types/types.dart';
 import '../result_helpers.dart';
@@ -23,7 +26,7 @@ const RawRenderStateSummary _emptyRenderStateSummary = (
   rows: 0,
   dirty: .false$,
 );
-const _emptyRenderStateCursor = Cursor(visible: false);
+const _emptyRenderStateCursor = RenderStateCursor(visible: false);
 const RawRowIteratorSummary _emptyRowIteratorSummary = (
   dirty: false,
   rawRow: 0,
@@ -57,16 +60,6 @@ const _rowSummaryKeys = <RowData>[
   .hyperlink,
   .semanticPrompt,
   .kittyVirtualPlaceholder,
-];
-const _cursorStateKeys = <RenderStateData>[
-  .cursorVisualStyle,
-  .cursorVisible,
-  .cursorBlinking,
-  .cursorPasswordInput,
-  .cursorViewportHasValue,
-  .cursorViewportX,
-  .cursorViewportY,
-  .cursorViewportWideTail,
 ];
 const _renderStateSummaryKeys = <RenderStateData>[.cols, .rows, .dirty];
 
@@ -124,6 +117,9 @@ final class FfiRenderBindings implements RenderBindings {
       _required(_raw.cellGetWide(h.value), 'ghostty_cell_get');
 
   @override
+  bool decodeRawCell(RawCellsView view, int index, RawCellData output) => false;
+
+  @override
   LibGhosttyHandle gridRefCell(RawGridRef r) =>
       .fromAddress(_required(_raw.gridRefCell(r), 'ghostty_grid_ref_cell'));
 
@@ -150,6 +146,10 @@ final class FfiRenderBindings implements RenderBindings {
   );
 
   @override
+  void renderStateClean(LibGhosttyHandle s) =>
+      _check(_raw.renderStateClean(s.value), 'ghostty_render_state_clean');
+
+  @override
   void renderStateEndUpdate(LibGhosttyHandle s) => _check(
     _raw.renderStateEndUpdate(s.value),
     'ghostty_render_state_end_update',
@@ -160,70 +160,16 @@ final class FfiRenderBindings implements RenderBindings {
       _raw.renderStateFree(state.value);
 
   @override
-  TerminalColors renderStateGetColors(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetColors(s.value),
-    'ghostty_render_state_colors_get',
-  );
+  TerminalColors renderStateGetColors(LibGhosttyHandle s) =>
+      _required(_raw.renderStateGetColors(s.value), 'ghostty_render_state_get');
 
   @override
   int renderStateGetCols(LibGhosttyHandle s) =>
       _required(_raw.renderStateGetCols(s.value), 'ghostty_render_state_get');
 
   @override
-  Cursor renderStateGetCursor(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursor(s.value),
-    'ghostty_render_state_get_multi',
-  );
-
-  @override
-  bool renderStateGetCursorBlinking(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursorBlinking(s.value),
-    'ghostty_render_state_get',
-  );
-
-  @override
-  bool renderStateGetCursorInViewport(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursorInViewport(s.value),
-    'ghostty_render_state_get',
-  );
-
-  @override
-  bool renderStateGetCursorPasswordInput(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursorPasswordInput(s.value),
-    'ghostty_render_state_get',
-  );
-
-  @override
-  bool renderStateGetCursorViewportWideTail(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursorViewportWideTail(s.value),
-    'ghostty_render_state_get',
-  );
-
-  @override
-  int renderStateGetCursorViewportX(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursorViewportX(s.value),
-    'ghostty_render_state_get',
-  );
-
-  @override
-  int renderStateGetCursorViewportY(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursorViewportY(s.value),
-    'ghostty_render_state_get',
-  );
-
-  @override
-  bool renderStateGetCursorVisible(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursorVisible(s.value),
-    'ghostty_render_state_get',
-  );
-
-  @override
-  RenderStateCursorVisualStyle renderStateGetCursorVisualStyle(
-    LibGhosttyHandle s,
-  ) => _required(
-    _raw.renderStateGetCursorVisualStyle(s.value),
-    'ghostty_render_state_get',
-  );
+  RenderStateCursor renderStateGetCursor(LibGhosttyHandle s) =>
+      _required(_raw.renderStateGetCursor(s.value), 'ghostty_render_state_get');
 
   @override
   RenderStateDirty renderStateGetDirty(LibGhosttyHandle s) =>
@@ -416,6 +362,10 @@ final class FfiRenderBindings implements RenderBindings {
   );
 
   @override
+  bool rowIteratorGetRawCells(LibGhosttyHandle h, RawCellsView view) =>
+      _raw.rowIteratorGetRawCells(h.value, view);
+
+  @override
   void rowIteratorInit(LibGhosttyHandle h, LibGhosttyHandle s) => _check(
     _raw.rowIteratorInit(h.value, s.value),
     'ghostty_render_state_get',
@@ -428,6 +378,10 @@ final class FfiRenderBindings implements RenderBindings {
 
   @override
   bool rowIteratorNext(LibGhosttyHandle h) => _raw.rowIteratorNext(h.value);
+
+  @override
+  int? rowIteratorNextDirty(LibGhosttyHandle h) =>
+      _raw.rowIteratorNextDirty(h.value);
 
   @override
   void rowIteratorSetDirty(LibGhosttyHandle h, {required bool dirty}) => _check(
@@ -527,6 +481,7 @@ final class _FfiRenderRaw {
   final _outBool = calloc<Bool>();
   final _outStyle = calloc<native.Style>();
   final _outColors = calloc<RenderStateColors>();
+  final _outCursor = calloc<native.RenderStateCursor>();
   final _outSize = calloc<Size>();
   final _outColorRgb = calloc<ColorRgb>();
   final _graphemeBuf = calloc<Uint32>(32);
@@ -542,9 +497,6 @@ final class _FfiRenderRaw {
   final _renderStateSummaryMultiOut = calloc<Uint64>(
     _renderStateSummaryKeys.length,
   );
-  final _cursorMultiKeys = calloc<UnsignedInt>(_cursorStateKeys.length);
-  final _cursorMultiValues = calloc<Pointer<Void>>(_cursorStateKeys.length);
-  final _cursorMultiOut = calloc<Uint64>(_cursorStateKeys.length);
   final _rowCellsMultiKeys = calloc<UnsignedInt>(_rowCellsSummaryKeys.length);
   final _rowCellsMultiValues = calloc<Pointer<Void>>(
     _rowCellsSummaryKeys.length,
@@ -556,15 +508,12 @@ final class _FfiRenderRaw {
 
   _FfiRenderRaw() {
     _outColors.ref.size = sizeOf<RenderStateColors>();
+    _outCursor.ref.size = sizeOf<native.RenderStateCursor>();
     _outStyle.ref.size = sizeOf<native.Style>();
     for (var i = 0; i < _renderStateSummaryKeys.length; i++) {
       _renderStateSummaryMultiKeys[i] = _renderStateSummaryKeys[i].value;
       _renderStateSummaryMultiValues[i] = (_renderStateSummaryMultiOut + i)
           .cast();
-    }
-    for (var i = 0; i < _cursorStateKeys.length; i++) {
-      _cursorMultiKeys[i] = _cursorStateKeys[i].value;
-      _cursorMultiValues[i] = (_cursorMultiOut + i).cast();
     }
     for (var i = 0; i < _rowCellsSummaryKeys.length; i++) {
       _rowCellsMultiKeys[i] = _rowCellsSummaryKeys[i].value;
@@ -750,6 +699,10 @@ final class _FfiRenderRaw {
     );
   }
 
+  Result renderStateClean(int state) {
+    return ghostty_render_state_clean(Pointer.fromAddress(state));
+  }
+
   Result renderStateEndUpdate(int state) {
     return ghostty_render_state_end_update(Pointer.fromAddress(state));
   }
@@ -759,9 +712,10 @@ final class _FfiRenderRaw {
   }
 
   CResult<TerminalColors> renderStateGetColors(int state) {
-    final result = ghostty_render_state_colors_get(
+    final result = ghostty_render_state_get(
       Pointer.fromAddress(state),
-      _outColors,
+      .colors,
+      _outColors.cast(),
     );
     if (result != .success) return (result, _emptyTerminalColors);
 
@@ -794,92 +748,29 @@ final class _FfiRenderRaw {
     return _renderStateGetU16(state, .cols);
   }
 
-  CResult<Cursor> renderStateGetCursor(int state) {
-    final result = ghostty_render_state_get_multi(
-      Pointer.fromAddress(state),
-      _cursorStateKeys.length,
-      _cursorMultiKeys,
-      _cursorMultiValues,
-      _outSize,
-    );
-    final written = _outSize.value;
-    final cursorOffscreen = result == .invalidValue && written == 5;
-    if (result != .success && !cursorOffscreen) {
-      return (result, _emptyRenderStateCursor);
-    }
-    final visualStyle = RenderStateCursorVisualStyle.fromValue(
-      (_cursorMultiOut + 0).cast<Int32>().value,
-    );
-    final visible = (_cursorMultiOut + 1).cast<Bool>().value;
-    final blinking = (_cursorMultiOut + 2).cast<Bool>().value;
-    final passwordInput = (_cursorMultiOut + 3).cast<Bool>().value;
-    final inViewport = (_cursorMultiOut + 4).cast<Bool>().value;
-    if (!inViewport) {
-      return (
-        .success,
-        Cursor(
-          visible: visible,
-          blinking: blinking,
-          passwordInput: passwordInput,
-          shape: visualStyle,
-        ),
-      );
-    }
-
-    return (
-      result,
-      Cursor(
-        position: Position(
-          row: (_cursorMultiOut + 6).cast<Uint16>().value,
-          col: (_cursorMultiOut + 5).cast<Uint16>().value,
-        ),
-        visible: visible,
-        blinking: blinking,
-        passwordInput: passwordInput,
-        shape: visualStyle,
-        wideTail: (_cursorMultiOut + 7).cast<Bool>().value,
-      ),
-    );
-  }
-
-  CResult<bool> renderStateGetCursorBlinking(int state) {
-    return _renderStateGetBool(state, .cursorBlinking);
-  }
-
-  CResult<bool> renderStateGetCursorInViewport(int state) {
-    return _renderStateGetBool(state, .cursorViewportHasValue);
-  }
-
-  CResult<bool> renderStateGetCursorPasswordInput(int state) {
-    return _renderStateGetBool(state, .cursorPasswordInput);
-  }
-
-  CResult<bool> renderStateGetCursorViewportWideTail(int state) {
-    return _renderStateGetBool(state, .cursorViewportWideTail);
-  }
-
-  CResult<int> renderStateGetCursorViewportX(int state) {
-    return _renderStateGetU16(state, .cursorViewportX);
-  }
-
-  CResult<int> renderStateGetCursorViewportY(int state) {
-    return _renderStateGetU16(state, .cursorViewportY);
-  }
-
-  CResult<bool> renderStateGetCursorVisible(int state) {
-    return _renderStateGetBool(state, .cursorVisible);
-  }
-
-  CResult<RenderStateCursorVisualStyle> renderStateGetCursorVisualStyle(
-    int state,
-  ) {
+  CResult<RenderStateCursor> renderStateGetCursor(int state) {
     final result = ghostty_render_state_get(
       Pointer.fromAddress(state),
-      .cursorVisualStyle,
-      _outI32.cast(),
+      .cursor,
+      _outCursor.cast(),
     );
-    if (result != .success) return (result, .block);
-    return (result, .fromValue(_outI32.value));
+    if (result != .success) {
+      return (result, _emptyRenderStateCursor);
+    }
+    final ref = _outCursor.ref;
+    return (
+      result,
+      RenderStateCursor(
+        viewportHasValue: ref.viewport_has_value,
+        viewportX: ref.viewport_has_value ? ref.viewport_x : 0,
+        viewportY: ref.viewport_has_value ? ref.viewport_y : 0,
+        wideTail: ref.viewport_has_value && ref.wide_tail,
+        visible: ref.visible,
+        blinking: ref.blinking,
+        passwordInput: ref.password_input,
+        visualStyle: ref.visual_style,
+      ),
+    );
   }
 
   CResult<RenderStateDirty> renderStateGetDirty(int state) {
@@ -1261,6 +1152,11 @@ final class _FfiRenderRaw {
     );
   }
 
+  bool rowIteratorGetRawCells(int iterator, RawCellsView view) {
+    view.clear();
+    return false;
+  }
+
   Result rowIteratorInit(int iterator, int renderState) {
     return using((arena) {
       final ptr = arena<Pointer<RenderStateRowIterator>>();
@@ -1285,6 +1181,17 @@ final class _FfiRenderRaw {
     return ghostty_render_state_row_iterator_next(
       Pointer.fromAddress(iterator),
     );
+  }
+
+  int? rowIteratorNextDirty(int iterator) {
+    return using((arena) {
+      final outY = arena<Uint16>();
+      final hasNext = ghostty_render_state_row_iterator_next_dirty(
+        Pointer.fromAddress(iterator),
+        outY,
+      );
+      return hasNext ? outY.value : null;
+    });
   }
 
   Result rowIteratorSetDirty(int iterator, {required bool dirty}) {
@@ -1426,16 +1333,6 @@ final class _FfiRenderRaw {
     final result = ghostty_cell_get(cell, data, _outU32.cast());
     if (result != .success) return (result, 0);
     return (result, _outU32.value);
-  }
-
-  CResult<bool> _renderStateGetBool(int state, RenderStateData data) {
-    final result = ghostty_render_state_get(
-      Pointer.fromAddress(state),
-      data,
-      _outBool.cast(),
-    );
-    if (result != .success) return (result, false);
-    return (result, _outBool.value);
   }
 
   CResult<int> _renderStateGetU16(int state, RenderStateData data) {

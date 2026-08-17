@@ -9,7 +9,6 @@ import '../../generated/libghostty_enums.g.dart';
 import '../../generated/libghostty_wasm.g.dart';
 import '../../types/types.dart';
 import '../wasm/adapter.dart';
-import '../wasm/allocator.dart';
 import '../wasm/layouts.dart';
 import '../wasm/memory.dart';
 import 'sys.dart';
@@ -98,7 +97,7 @@ final class WasmSystemBindings implements SystemBindings {
         final decoded = decoder(bytes);
         if (decoded == null) return 0;
         final rgba = decoded.rgba;
-        final buffer = _exports.allocate(allocator, rgba.length);
+        final buffer = _exports.ghostty_alloc(allocator, rgba.length);
         if (buffer == 0) return 0;
         _memory.writeBytes(buffer, rgba);
         _memory.writeU32(out + _layout.sysImageWidth, decoded.width);

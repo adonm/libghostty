@@ -146,6 +146,17 @@ void main() {
       expect(atlas.emojiImage, isNotNull);
     });
 
+    test('sync rebuilds external and terminal dirty rows together', () {
+      writeUtf8(terminal, 'A\r\nB');
+      builder.sync(terminal, terminalDirty: true);
+      builder.markRowsDirty(1, 2);
+      writeUtf8(terminal, '\x1b[1;1HC');
+
+      builder.sync(terminal, terminalDirty: true);
+
+      expect(sprites.regular.count, 2);
+    });
+
     test('sync emits operator ligatures without adding text atlas entries', () {
       final initialCacheSize = atlas.cacheSize;
       writeUtf8(terminal, '=> !=');
@@ -284,7 +295,7 @@ void main() {
       builder.sync(terminal, terminalDirty: true);
 
       expect(state.cursor.visible, isTrue);
-      expect(state.cursor.position.col, 0);
+      expect(state.cursor.viewportX, 0);
       expect(state.cursorAtlasEntry, isNotNull);
     });
 
@@ -316,7 +327,7 @@ void main() {
       builder.sync(terminal, terminalDirty: true);
 
       expect(state.cursor.visible, isTrue);
-      expect(state.cursor.shape, CursorShape.underline);
+      expect(state.cursor.visualStyle, CursorShape.underline);
       expect(state.cursorAtlasEntry, isNull);
     });
 

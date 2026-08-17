@@ -299,15 +299,15 @@ final class TerminalRenderBox extends RenderBox {
     final metrics = _paintState.metrics;
     final rows = _paintState.rows;
     final cols = _paintState.cols;
-    if (rows <= 0 || cols <= 0) {
+    final cursor = _paintState.cursor;
+    if (rows <= 0 || cols <= 0 || !cursor.viewportHasValue) {
       return Offset.zero & Size(metrics.cellWidth, metrics.cellHeight);
     }
 
-    final cursor = _paintState.cursor;
-    final row = cursor.position.row.clamp(0, rows - 1);
-    final rawCol = cursor.wideTail && cursor.position.col > 0
-        ? cursor.position.col - 1
-        : cursor.position.col;
+    final row = cursor.viewportY.clamp(0, rows - 1);
+    final rawCol = cursor.wideTail && cursor.viewportX > 0
+        ? cursor.viewportX - 1
+        : cursor.viewportX;
     final col = rawCol.clamp(0, cols - 1);
     return metrics.cellRect(Position(row: row, col: col), .zero);
   }

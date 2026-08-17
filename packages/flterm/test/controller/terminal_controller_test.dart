@@ -1349,7 +1349,7 @@ void main() {
         writeTerminalUtf8(custom.terminal, '\x1b[0 q');
         renderState.update(custom.terminal);
 
-        expect(renderState.cursor.shape, CursorShape.underline);
+        expect(renderState.cursor.visualStyle, CursorShape.underline);
         expect(renderState.cursor.blinking, isTrue);
       });
 
@@ -1382,7 +1382,7 @@ void main() {
         writeTerminalUtf8(controller.terminal, '\x1b[0 q');
         renderState.update(controller.terminal);
 
-        expect(renderState.cursor.shape, CursorShape.bar);
+        expect(renderState.cursor.visualStyle, CursorShape.bar);
         expect(renderState.cursor.blinking, isFalse);
       });
     });

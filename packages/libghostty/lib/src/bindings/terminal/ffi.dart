@@ -218,6 +218,10 @@ final class FfiTerminalBindings implements TerminalBindings {
       _getSize(terminal, .continuationMaxBytes, requiredValue: true)!;
 
   @override
+  bool terminalGetCursorAtPrompt(LibGhosttyHandle terminal) =>
+      _getBool(terminal, .cursorAtPrompt, 'ghostty_terminal_get');
+
+  @override
   bool terminalGetCursorPendingWrap(LibGhosttyHandle terminal) =>
       _getBool(terminal, .cursorPendingWrap, 'ghostty_terminal_get');
 
@@ -348,6 +352,10 @@ final class FfiTerminalBindings implements TerminalBindings {
   @override
   bool terminalGetViewportActive(LibGhosttyHandle terminal) =>
       _getBool(terminal, .viewportActive, 'ghostty_terminal_get');
+
+  @override
+  bool terminalGetVtGround(LibGhosttyHandle terminal) =>
+      _getBool(terminal, .vtGround, 'ghostty_terminal_get');
 
   @override
   bool terminalGetVtProcessingError(LibGhosttyHandle terminal) =>
@@ -831,6 +839,40 @@ final class FfiTerminalBindings implements TerminalBindings {
   ) => _setVoidCallback(terminal, .titleChanged, callback);
 
   @override
+  void terminalSetOnUnknownSequence(
+    LibGhosttyHandle terminal,
+    TerminalUnknownSequenceCallback? callback,
+  ) {
+    final callable = callback == null
+        ? null
+        : NativeCallable<
+            Void Function(
+              native.Terminal,
+              Pointer<Void>,
+              Pointer<native.TerminalUnknownSequence>,
+            )
+          >.isolateLocal((
+            native.Terminal terminal,
+            Pointer<Void> userdata,
+            Pointer<native.TerminalUnknownSequence> pointer,
+          ) {
+            try {
+              final sequence = pointer.ref;
+              callback(
+                TerminalUnknownSequence(
+                  tag: sequence.tag,
+                  content: _readBytes(sequence.value.apc.content),
+                  truncated: sequence.value.apc.truncated,
+                ),
+              );
+            } on Object catch (error, stackTrace) {
+              _captureCallbackError(error, stackTrace);
+            }
+          });
+    _replaceCallback(terminal, .unknownSequence, callable);
+  }
+
+  @override
   void terminalSetOnWritePty(
     LibGhosttyHandle terminal,
     ValueSetter<Uint8List>? callback,
@@ -897,6 +939,10 @@ final class FfiTerminalBindings implements TerminalBindings {
       _setSize(terminal, .scrollbackMaxLines, lines);
 
   @override
+  void terminalSetTerminfoName(LibGhosttyHandle terminal, String? name) =>
+      _setString(terminal, .terminfoName, name);
+
+  @override
   void terminalSetTitle(LibGhosttyHandle terminal, String? title) =>
       _setString(terminal, .title, title);
 
@@ -905,6 +951,12 @@ final class FfiTerminalBindings implements TerminalBindings {
     LibGhosttyHandle terminal, {
     required bool enabled,
   }) => _setBool(terminal, .titleReport, enabled);
+
+  @override
+  void terminalSetUnknownSequenceMaxBytes(
+    LibGhosttyHandle terminal,
+    int? bytes,
+  ) => _setSize(terminal, .unknownMaxBytes, bytes);
 
   @override
   void terminalVtWrite(LibGhosttyHandle terminal, Uint8List data) {
@@ -932,6 +984,41 @@ final class FfiTerminalBindings implements TerminalBindings {
     }
     write();
     _rethrowCallbackError();
+  }
+
+  @override
+  int? terminalWriteUntilGround(LibGhosttyHandle terminal, Uint8List data) {
+    int? write() {
+      return using((arena) {
+        final bytes = data.isEmpty
+            ? nullptr.cast<Uint8>()
+            : arena<Uint8>(data.length);
+        if (data.isNotEmpty) bytes.asTypedList(data.length).setAll(0, data);
+        final consumed = arena<Size>();
+        final result = native.ghostty_terminal_vt_write_until_ground(
+          .fromAddress(terminal.value),
+          bytes,
+          data.length,
+          consumed,
+        );
+        if (result == .noValue) return null;
+        checkResultCode(
+          result.value,
+          operation: 'ghostty_terminal_vt_write_until_ground',
+        );
+        return consumed.value;
+      });
+    }
+
+    if (_callbacks[terminal.value]?.isEmpty ?? true) {
+      return write();
+    }
+    if (_callbackError != null) {
+      return _runNestedCallbackOperation<int?>(write);
+    }
+    final result = write();
+    _rethrowCallbackError();
+    return result;
   }
 
   void _captureCallbackError(Object error, StackTrace stackTrace) {
@@ -1252,6 +1339,11 @@ final class FfiTerminalBindings implements TerminalBindings {
       native.String.$allocate(calloc, ptr: nullptr.cast(), len: 0),
       nullptr.cast(),
     );
+  }
+
+  static Uint8List _readBytes(native.String value) {
+    if (value.ptr == nullptr || value.len == 0) return Uint8List(0);
+    return Uint8List.fromList(value.ptr.cast<Uint8>().asTypedList(value.len));
   }
 
   static RawColor _readColor(native.StyleColor color) => (

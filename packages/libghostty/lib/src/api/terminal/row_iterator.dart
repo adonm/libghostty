@@ -22,8 +22,8 @@ typedef RowSelectionRange = ({int startCol, int endCol});
 /// final rows = RowIterator();
 ///
 /// rows.reset(renderState);
-/// while (rows.next()) {
-///   if (rows.dirty) print('row ${rows.index} changed');
+/// while (rows.nextDirty()) {
+///   renderRow(rows.index);
 /// }
 /// ```
 final class RowIterator {
@@ -149,6 +149,27 @@ final class RowIterator {
       _positioned = false;
     }
     return hasNext;
+  }
+
+  /// Advances to the next row requiring a redraw.
+  ///
+  /// Rows are visited in ascending viewport order. A clean render state
+  /// produces no rows, a partially dirty state skips clean rows, and a fully
+  /// dirty state visits every remaining row. The iterator remains positioned
+  /// on the returned row, just like [next].
+  bool nextDirty() {
+    _ensureCurrent();
+    final index = bindings.render.rowIteratorNextDirty(_handle);
+    _positionGeneration++;
+    if (index case final value?) {
+      _rowSummaryValid = false;
+      _index = value;
+      _positioned = true;
+      return true;
+    }
+    _rowSummaryValid = false;
+    _positioned = false;
+    return false;
   }
 
   /// Rebinds this iterator to [renderState] and rewinds to the start.

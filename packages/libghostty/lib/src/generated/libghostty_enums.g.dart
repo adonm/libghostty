@@ -1451,7 +1451,10 @@ enum OscCommandType {
   conemuOutputEnvironmentVariable(19),
   conemuXtermEmulation(20),
   conemuComment(21),
-  kittyTextSizing(22);
+  kittyTextSizing(22),
+  kittyClipboardProtocol(23),
+  kittyDndProtocol(24),
+  contextSignal(25);
 
   final int value;
   const OscCommandType(this.value);
@@ -1480,6 +1483,9 @@ enum OscCommandType {
     20 => conemuXtermEmulation,
     21 => conemuComment,
     22 => kittyTextSizing,
+    23 => kittyClipboardProtocol,
+    24 => kittyDndProtocol,
+    25 => contextSignal,
     _ => throw ArgumentError('Unknown value for OscCommandType: $value'),
   };
 }
@@ -1609,7 +1615,15 @@ enum RenderStateData {
 
   /// Whether the cursor is on the tail of a wide character (bool).
   /// Only valid when CURSOR_VIEWPORT_HAS_VALUE is true.
-  cursorViewportWideTail(17);
+  cursorViewportWideTail(17),
+
+  /// All cursor state in one sized struct (RenderStateCursor).
+  /// Initialize the output with GHOSTTY_INIT_SIZED before querying.
+  cursor(18),
+
+  /// All render-state colors in one sized struct (RenderStateColors).
+  /// Initialize the output with GHOSTTY_INIT_SIZED before querying.
+  colors(19);
 
   final int value;
   const RenderStateData(this.value);
@@ -1633,6 +1647,8 @@ enum RenderStateData {
     15 => cursorViewportX,
     16 => cursorViewportY,
     17 => cursorViewportWideTail,
+    18 => cursor,
+    19 => colors,
     _ => throw ArgumentError('Unknown value for RenderStateData: $value'),
   };
 }
@@ -1783,7 +1799,22 @@ enum RenderStateRowData {
   cells(3),
 
   /// Row-local selected cell range (RenderStateRowSelection).
-  selection(4);
+  selection(4),
+
+  /// A borrowed view of the raw cell values for the current row
+  /// (CellsView). One value per column, identical to querying
+  /// GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW for each cell. The view
+  /// is only valid as long as the underlying render state is not
+  /// updated; it is unsafe to use after updating the render state.
+  ///
+  /// This is the bulk alternative to iterating cells one at a time.
+  /// It lets callers with expensive call boundaries (e.g. WebAssembly
+  /// embedders) read an entire row with a single call.
+  ///
+  /// Bit positions aren't protected by ABI, so callers should parse them
+  /// out of the manifest from `ghostty_type_json`. Callers with access
+  /// to the C header or without high FFI costs should use `ghostty_cell_get`.
+  cellsRaw(5);
 
   final int value;
   const RenderStateRowData(this.value);
@@ -1794,6 +1825,7 @@ enum RenderStateRowData {
     2 => raw,
     3 => cells,
     4 => selection,
+    5 => cellsRaw,
     _ => throw ArgumentError('Unknown value for RenderStateRowData: $value'),
   };
 }
@@ -2724,9 +2756,9 @@ enum TerminalData {
 
   /// The terminal title as set by escape sequences (e.g. OSC 0/2).
   ///
-  /// Returns a borrowed string. The pointer is valid until the next call
-  /// to ghostty_terminal_vt_write() or ghostty_terminal_reset(). An empty
-  /// string (len=0) is returned when no title has been set.
+  /// Returns a borrowed string. The pointer is valid until the next mutating
+  /// terminal call. An empty string (len=0) is returned when no title has been
+  /// set.
   ///
   /// Output type: String *
   title(12),
@@ -2734,9 +2766,9 @@ enum TerminalData {
   /// The terminal's current working directory as set by escape sequences
   /// (e.g. OSC 7).
   ///
-  /// Returns a borrowed string. The pointer is valid until the next call
-  /// to ghostty_terminal_vt_write() or ghostty_terminal_reset(). An empty
-  /// string (len=0) is returned when no pwd has been set.
+  /// Returns a borrowed string. The pointer is valid until the next mutating
+  /// terminal call. An empty string (len=0) is returned when no pwd has been
+  /// set.
   ///
   /// Output type: String *
   pwd(13),
@@ -2932,7 +2964,29 @@ enum TerminalData {
   /// GHOSTTY_INVALID_VALUE.
   ///
   /// Input/output type: TerminalModeConfig *
-  mode(37);
+  mode(37),
+
+  /// Whether VT processing is at ground.
+  ///
+  /// Ground is when the stream isn't in the middle of any type of sequence:
+  /// UTF-8, ESC, CSI, OSC, etc. It is the stateless point of the stream.
+  ///
+  /// This is useful to know because it is a point at which you can
+  /// safely insert out-of-band VT sequences. For example, while reading
+  /// from a pty if you want to make your own changes, you can wait until
+  /// the pty input reaches ground, then write yours.
+  ///
+  /// Output type: bool *
+  vtGround(38),
+
+  /// Whether the cursor is currently at a semantic shell prompt or input area.
+  ///
+  /// This depends on semantic prompt markers such as OSC 133. Returns false
+  /// when semantic prompt information is unavailable or the alternate screen
+  /// is active.
+  ///
+  /// Output type: bool *
+  cursorAtPrompt(39);
 
   final int value;
   const TerminalData(this.value);
@@ -2976,6 +3030,8 @@ enum TerminalData {
     35 => scrollbackMaxLines,
     36 => continuationMaxBytes,
     37 => mode,
+    38 => vtGround,
+    39 => cursorAtPrompt,
     _ => throw ArgumentError('Unknown value for TerminalData: $value'),
   };
 }
@@ -3254,8 +3310,8 @@ enum TerminalOption {
   ///
   /// Continuation bytes reconstruct an escape sequence or UTF-8 codepoint
   /// which was unfinished at the end of the most recent
-  /// ghostty_terminal_vt_write() call. They are used automatically by terminal
-  /// snapshots and may also be exported directly with the continuation APIs.
+  /// VT write call. They are used automatically by terminal snapshots and may
+  /// also be exported directly with the continuation APIs.
   ///
   /// Tracking is disabled by default. A nonzero value enables tracking and
   /// sets its byte limit. Passing NULL or a pointer to zero disables tracking.
@@ -3297,7 +3353,38 @@ enum TerminalOption {
   /// A NULL value pointer or unknown mode returns GHOSTTY_INVALID_VALUE.
   ///
   /// Input type: TerminalModeConfig*
-  mode(34);
+  mode(34),
+
+  /// Callback invoked for unsupported terminal sequence identifiers. Set to
+  /// NULL to ignore unsupported sequences. Capture must also be enabled with
+  /// GHOSTTY_TERMINAL_OPT_UNKNOWN_MAX_BYTES.
+  ///
+  /// Input type: TerminalUnknownSequenceFn
+  unknownSequence(35),
+
+  /// Set the maximum content bytes retained for each unsupported terminal
+  /// sequence. A NULL value pointer or zero disables capture and prevents
+  /// unknown-sequence callbacks.
+  ///
+  /// When this limit is hit, the unknown sequence callback will still
+  /// be invoked but `truncated` will be set to true.
+  ///
+  /// Input type: size_t*
+  unknownMaxBytes(36),
+
+  /// Set the name of the terminfo entry this terminal runs as, reported
+  /// in response to an XTGETTCAP query for "TN" (e.g. "xterm-256color").
+  ///
+  /// The string data is copied into the terminal. A NULL value pointer
+  /// clears the name (equivalent to setting an empty string). A name
+  /// longer than 128 bytes returns GHOSTTY_INVALID_VALUE.
+  ///
+  /// If this is unset then we don't report anything for an XTGETTCAP
+  /// TN query, because we don't know what the embedding terminal around
+  /// libghostty is advertising itself as.
+  ///
+  /// Input type: String*
+  terminfoName(37);
 
   final int value;
   const TerminalOption(this.value);
@@ -3338,6 +3425,9 @@ enum TerminalOption {
     32 => titleReport,
     33 => modeDefault,
     34 => mode,
+    35 => unknownSequence,
+    36 => unknownMaxBytes,
+    37 => terminfoName,
     _ => throw ArgumentError('Unknown value for TerminalOption: $value'),
   };
 }
@@ -3432,6 +3522,27 @@ enum TerminalScrollViewportTag {
     3 => row,
     _ => throw ArgumentError(
       'Unknown value for TerminalScrollViewportTag: $value',
+    ),
+  };
+}
+
+/// Unsupported terminal sequence tags.
+///
+/// Only APC sequences are currently reported. Additional sequence types may
+/// be added without changing the callback shape.
+///
+/// @ingroup terminal
+enum TerminalUnknownSequenceTag {
+  /// Application Program Command (APC).
+  apc(0);
+
+  final int value;
+  const TerminalUnknownSequenceTag(this.value);
+
+  static TerminalUnknownSequenceTag fromValue(int value) => switch (value) {
+    0 => apc,
+    _ => throw ArgumentError(
+      'Unknown value for TerminalUnknownSequenceTag: $value',
     ),
   };
 }

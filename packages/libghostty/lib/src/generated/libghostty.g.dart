@@ -2463,33 +2463,27 @@ Result ghostty_render_state_begin_update(RenderState state, Terminal terminal) {
   return Result.fromValue(_ghostty_render_state_begin_update(state, terminal));
 }
 
-/// Get the current color information from a render state.
+/// Mark all dirty render-state data as consumed.
 ///
-/// This writes as many fields as fit in the caller-provided sized struct.
-/// `out_colors->size` must be set by the caller (typically via
-/// GHOSTTY_INIT_SIZED(RenderStateColors)).
+/// This sets the global dirty state to GHOSTTY_RENDER_STATE_DIRTY_FALSE and
+/// clears every per-row dirty flag. It is idempotent and does not modify cell
+/// contents or dirty state owned by the terminal. Call this only after a
+/// complete frame has been rendered successfully; partial consumers should
+/// use ghostty_render_state_set() and ghostty_render_state_row_set() instead.
 ///
 /// @param state The render state handle (NULL returns GHOSTTY_INVALID_VALUE)
-/// @param[out] out_colors Sized output struct to receive render-state colors
-/// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` or
-/// `out_colors` is NULL, or if `out_colors->size` is smaller than
-/// `sizeof(size_t)`
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` is
+/// NULL
 ///
 /// @ingroup render
-@ffi.Native<ffi.Int Function(RenderState, ffi.Pointer<RenderStateColors>)>(
-  symbol: 'ghostty_render_state_colors_get',
+@ffi.Native<ffi.Int Function(RenderState)>(
+  symbol: 'ghostty_render_state_clean',
   isLeaf: true,
 )
-external int _ghostty_render_state_colors_get(
-  RenderState state,
-  ffi.Pointer<RenderStateColors> out_colors,
-);
+external int _ghostty_render_state_clean(RenderState state);
 
-Result ghostty_render_state_colors_get(
-  RenderState state,
-  ffi.Pointer<RenderStateColors> out_colors,
-) {
-  return Result.fromValue(_ghostty_render_state_colors_get(state, out_colors));
+Result ghostty_render_state_clean(RenderState state) {
+  return Result.fromValue(_ghostty_render_state_clean(state));
 }
 
 /// Complete a prior ghostty_render_state_begin_update call by performing any
@@ -2533,8 +2527,9 @@ external void ghostty_render_state_free(RenderState state);
 /// @param state The render state handle (NULL returns GHOSTTY_INVALID_VALUE)
 /// @param data The data kind to query
 /// @param[out] out Pointer to receive the queried value
-/// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` is
-/// NULL or `data` is not a recognized enum value
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` or
+/// `out` is NULL, `data` is not a recognized enum value, or a sized
+/// output struct is smaller than `sizeof(size_t)`
 ///
 /// @ingroup render
 @ffi.Native<
@@ -2796,7 +2791,8 @@ Result ghostty_render_state_row_cells_select(RenderStateRowCells cells, int x) {
 ///
 /// The `out` pointer must point to a value of the type corresponding to the
 /// requested data kind (see RenderStateRowData).
-/// Call ghostty_render_state_row_iterator_next() at least once before
+/// Call ghostty_render_state_row_iterator_next() or
+/// ghostty_render_state_row_iterator_next_dirty() at least once before
 /// calling this function.
 ///
 /// @param iterator The iterator handle to query (NULL returns GHOSTTY_INVALID_VALUE)
@@ -2924,7 +2920,8 @@ Result ghostty_render_state_row_iterator_new(
 
 /// Move a render-state row iterator to the next row.
 ///
-/// Returns true if the iterator moved successfully and row data is
+/// Rows are visited contiguously in ascending viewport order, starting at
+/// y = 0. Returns true if the iterator moved successfully and row data is
 /// available to read at the new position.
 ///
 /// @param iterator The iterator handle to advance (may be NULL)
@@ -2937,11 +2934,37 @@ external bool ghostty_render_state_row_iterator_next(
   RenderStateRowIterator iterator,
 );
 
+/// Move a render-state row iterator to the next row requiring a redraw.
+///
+/// If the global dirty state is GHOSTTY_RENDER_STATE_DIRTY_FALSE, this returns
+/// false. If it is GHOSTTY_RENDER_STATE_DIRTY_PARTIAL, clean rows are skipped.
+/// If it is GHOSTTY_RENDER_STATE_DIRTY_FULL, every remaining row is returned
+/// regardless of its per-row dirty flag. Rows are returned in ascending
+/// viewport order. This function does not clear any dirty state.
+///
+/// @param iterator The iterator handle to advance (NULL returns false)
+/// @param[out] out_y Receives the viewport y coordinate when true is returned
+/// (NULL returns false); it is not modified when false is
+/// returned
+/// @return true if advanced to a row requiring a redraw, false if an argument
+/// is NULL or the iterator has reached the end of the effective dirty
+/// rows
+///
+/// @ingroup render
+@ffi.Native<ffi.Bool Function(RenderStateRowIterator, ffi.Pointer<ffi.Uint16>)>(
+  isLeaf: true,
+)
+external bool ghostty_render_state_row_iterator_next_dirty(
+  RenderStateRowIterator iterator,
+  ffi.Pointer<ffi.Uint16> out_y,
+);
+
 /// Set an option on the current row in a render-state row iterator.
 ///
 /// The `value` pointer must point to a value of the type corresponding to the
 /// requested option kind (see RenderStateRowOption).
-/// Call ghostty_render_state_row_iterator_next() at least once before
+/// Call ghostty_render_state_row_iterator_next() or
+/// ghostty_render_state_row_iterator_next_dirty() at least once before
 /// calling this function.
 ///
 /// @param iterator The iterator handle to update (NULL returns GHOSTTY_INVALID_VALUE)
@@ -4382,8 +4405,8 @@ Result ghostty_terminal_continuation_buf(
 /// GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES to a nonzero value before the
 /// input that produced the continuation was written.
 ///
-/// The caller must serialize this operation with ghostty_terminal_vt_write()
-/// and all other access to the same terminal.
+/// The caller must serialize this operation with both VT write functions and
+/// all other access to the same terminal.
 ///
 /// @param terminal Terminal to read from (must not be NULL)
 /// @param writer Destination writer whose write callback must not be NULL
@@ -5314,9 +5337,10 @@ Result ghostty_terminal_selection_ordered(
 /// The behavior of a NULL value is specific to each option and is
 /// documented by the corresponding TerminalOption value.
 ///
-/// Callbacks are invoked synchronously during ghostty_terminal_vt_write().
-/// Callbacks must not call ghostty_terminal_vt_write() on the same
-/// terminal (no reentrancy).
+/// Callbacks are invoked synchronously during VT writes. Callbacks must not
+/// call ghostty_terminal_vt_write() or
+/// ghostty_terminal_vt_write_until_ground() on the same terminal
+/// (no reentrancy).
 ///
 /// @param terminal The terminal handle (may be NULL, in which case this is a no-op)
 /// @param option The option to set
@@ -5366,6 +5390,56 @@ external void ghostty_terminal_vt_write(
   ffi.Pointer<ffi.Uint8> data,
   int len,
 );
+
+/// Write VT-encoded data, but only the shortest prefix needed to reach ground.
+///
+/// Ground is when the stream isn't in the middle of any type of sequence:
+/// UTF-8, ESC, CSI, OSC, etc. It is the stateless point of the stream.
+///
+/// This is useful to know because it is a point at which you can
+/// safely insert out-of-band VT sequences. For example, while reading
+/// from a pty if you want to make your own changes, you can wait until
+/// the pty input reaches ground, then write yours.
+///
+/// If the stream is already at ground then this consumes nothing and returns
+/// GHOSTTY_SUCCESS. On success, out_consumed is the number of bytes consumed
+/// before reaching ground, including the byte that reaches it.
+/// GHOSTTY_NO_VALUE means the full slice was consumed without reaching ground.
+///
+/// @param terminal The terminal handle (must not be NULL)
+/// @param data Pointer to the data to write, or NULL when len is zero
+/// @param len Length of the data in bytes
+/// @param[out] out_consumed Number of bytes consumed (must not be NULL)
+/// @return GHOSTTY_SUCCESS if ground was reached, GHOSTTY_NO_VALUE if all input
+/// was consumed without reaching ground, or GHOSTTY_INVALID_VALUE if
+/// an argument is invalid
+///
+/// @ingroup terminal
+@ffi.Native<
+  ffi.Int Function(
+    Terminal,
+    ffi.Pointer<ffi.Uint8>,
+    ffi.Size,
+    ffi.Pointer<ffi.Size>,
+  )
+>(symbol: 'ghostty_terminal_vt_write_until_ground', isLeaf: true)
+external int _ghostty_terminal_vt_write_until_ground(
+  Terminal terminal,
+  ffi.Pointer<ffi.Uint8> data,
+  int len,
+  ffi.Pointer<ffi.Size> out_consumed,
+);
+
+Result ghostty_terminal_vt_write_until_ground(
+  Terminal terminal,
+  ffi.Pointer<ffi.Uint8> data,
+  int len,
+  ffi.Pointer<ffi.Size> out_consumed,
+) {
+  return Result.fromValue(
+    _ghostty_terminal_vt_write_until_ground(terminal, data, len, out_consumed),
+  );
+}
 
 /// Free a tracked grid reference.
 ///
@@ -5509,29 +5583,51 @@ Result ghostty_tracked_grid_ref_snapshot(
   return Result.fromValue(_ghostty_tracked_grid_ref_snapshot(ref, out_ref));
 }
 
-/// Return a pointer to a null-terminated JSON string describing the
-/// layout of every C API struct for the current target.
+/// Return the versioned libghostty-vt C type manifest for the current target.
 ///
-/// This is primarily useful for language bindings that can't easily
-/// set C struct fields and need to do so via byte offsets. For example,
-/// WebAssembly modules can't share struct definitions with the host.
+/// The manifest defines all the public types available in the linked
+/// build. The types contain their layouts, enum values, union fields, and more.
+///
+/// Language bindings, such as WebAssembly hosts, should obtain offsets,
+/// sizes, alignments, array shapes, enum constants, and tagged-union arms from
+/// this manifest rather than hardcoding them. Consumers should reject unknown
+/// schema versions and verify the descriptors they require at initialization.
+///
+/// Packed type descriptors define fields using `lsb` and `width`. `lsb` is
+/// relative to bit zero of the containing numerical value; for nested packed
+/// layouts it is relative to the immediate containing field. Tagged packed
+/// unions select an inline arm layout using the named tag field. These layouts
+/// describe the current linked build and are not a cross-version stability
+/// promise.
+///
+/// The formal format is defined by the
+/// <a href="types.schema.json">libghostty-vt ABI manifest JSON Schema</a>.
 ///
 /// Example (abbreviated):
 /// @code{.json}
 /// {
-/// "MouseEncoderSize": {
-/// "size": 40,
-/// "align": 8,
+/// "schema": 1,
+/// "abi": {
+/// "target": "wasm32", "os": "freestanding", "environment": "none",
+/// "pointer_size": 4, "usize_size": 4, "max_alignment": 16,
+/// "endian": "little"
+/// },
+/// "types": {
+/// "RenderStateData": {
+/// "kind": "enum", "size": 4, "align": 4,
+/// "underlying": "i32", "prefix": "GHOSTTY_RENDER_STATE_DATA_",
+/// "values": { "INVALID": 0, "DIRTY": 3, "MAX_VALUE": 2147483647 }
+/// },
+/// "StyleColor": {
+/// "kind": "struct", "size": 16, "align": 8,
 /// "fields": {
-/// "size":           { "offset": 0,  "size": 8, "type": "u64" },
-/// "screen_width":   { "offset": 8,  "size": 4, "type": "u32" },
-/// "screen_height":  { "offset": 12, "size": 4, "type": "u32" },
-/// "cell_width":     { "offset": 16, "size": 4, "type": "u32" },
-/// "cell_height":    { "offset": 20, "size": 4, "type": "u32" },
-/// "padding_top":    { "offset": 24, "size": 4, "type": "u32" },
-/// "padding_bottom": { "offset": 28, "size": 4, "type": "u32" },
-/// "padding_right":  { "offset": 32, "size": 4, "type": "u32" },
-/// "padding_left":   { "offset": 36, "size": 4, "type": "u32" }
+/// "tag": { "offset": 0, "size": 4,
+/// "type": "StyleColorTag" },
+/// "value": { "offset": 8, "size": 8,
+/// "type": "StyleColorValue", "tag": "tag",
+/// "arms": { "NONE": null, "PALETTE": "palette",
+/// "RGB": "rgb" } }
+/// }
 /// }
 /// }
 /// }
@@ -5920,15 +6016,42 @@ final class Buffer extends ffi.Struct {
     ..ref.len = len;
 }
 
-/// Opaque cell value.
+/// Packed cell value.
 ///
-/// Represents a single terminal cell. The internal layout is opaque and
-/// must be queried via ghostty_cell_get(). Obtain cell values from
-/// terminal query APIs.
+/// Represents a single terminal cell. Portable callers can query fields via
+/// ghostty_cell_get(). Boundary-sensitive callers can decode the packed value
+/// using the Cell descriptor returned by ghostty_type_json(). The
+/// manifest is authoritative for the linked build; hardcoding bit positions
+/// is unsupported.
 ///
 /// @ingroup screen
 typedef Cell = ffi.Uint64;
 typedef DartCell = int;
+
+/// A borrowed view of contiguous raw cell values.
+///
+/// The memory is not owned by this struct. The pointer is only valid
+/// for the lifetime documented by the API that produces it. Each value
+/// can be queried via ghostty_cell_get() or decoded using the Cell
+/// packed descriptor returned by ghostty_type_json().
+///
+/// @ingroup screen
+final class CellsView extends ffi.Struct {
+  /// Pointer to len contiguous cell values.
+  external ffi.Pointer<Cell> ptr;
+
+  /// Number of cells.
+  @ffi.Size()
+  external int len;
+
+  static ffi.Pointer<CellsView> $allocate(
+    ffi.Allocator $allocator, {
+    required ffi.Pointer<Cell> ptr,
+    required int len,
+  }) => $allocator<CellsView>()
+    ..ref.ptr = ptr
+    ..ref.len = len;
+}
 
 /// One MIME representation in a clipboard write.
 ///
@@ -6724,13 +6847,14 @@ typedef RenderState = ffi.Pointer<RenderStateImpl>;
 /// Render-state color information.
 ///
 /// This struct uses the sized-struct ABI pattern. Initialize with
-/// GHOSTTY_INIT_SIZED(RenderStateColors) before calling
-/// ghostty_render_state_colors_get().
+/// GHOSTTY_INIT_SIZED(RenderStateColors) before querying
+/// GHOSTTY_RENDER_STATE_DATA_COLORS.
 ///
 /// Example:
 /// @code
 /// RenderStateColors colors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
-/// Result result = ghostty_render_state_colors_get(state, &colors);
+/// Result result = ghostty_render_state_get(
+/// state, GHOSTTY_RENDER_STATE_DATA_COLORS, &colors);
 /// @endcode
 ///
 /// @ingroup render
@@ -6757,6 +6881,81 @@ final class RenderStateColors extends ffi.Struct {
   /// The active 256-color palette for this render state.
   @ffi.Array.multi([256])
   external ffi.Array<ColorRgb> palette;
+}
+
+/// Render-state cursor information.
+///
+/// This struct uses the sized-struct ABI pattern. Initialize with
+/// GHOSTTY_INIT_SIZED(RenderStateCursor) before querying
+/// GHOSTTY_RENDER_STATE_DATA_CURSOR.
+///
+/// When viewport_has_value is false, viewport_x, viewport_y, and wide_tail
+/// contain undefined data and must not be read.
+///
+/// @ingroup render
+final class RenderStateCursor extends ffi.Struct {
+  /// Size of this struct in bytes. Must be set to sizeof(RenderStateCursor).
+  @ffi.Size()
+  external int size;
+
+  /// Whether the cursor is visible within the viewport.
+  @ffi.Bool()
+  external bool viewport_has_value;
+
+  /// Cursor viewport x position in cells.
+  @ffi.Uint16()
+  external int viewport_x;
+
+  /// Cursor viewport y position in cells.
+  @ffi.Uint16()
+  external int viewport_y;
+
+  /// Whether the cursor is on the tail of a wide character.
+  @ffi.Bool()
+  external bool wide_tail;
+
+  /// Whether the cursor is visible based on terminal modes.
+  @ffi.Bool()
+  external bool visible;
+
+  /// Whether the cursor should blink based on terminal modes.
+  @ffi.Bool()
+  external bool blinking;
+
+  /// Whether the cursor is at a password input field.
+  @ffi.Bool()
+  external bool password_input;
+
+  /// The visual style of the cursor.
+  @ffi.UnsignedInt()
+  external int visual_styleAsInt;
+
+  RenderStateCursorVisualStyle get visual_style =>
+      RenderStateCursorVisualStyle.fromValue(visual_styleAsInt);
+  set visual_style(RenderStateCursorVisualStyle value) =>
+      visual_styleAsInt = value.value;
+
+  static ffi.Pointer<RenderStateCursor> $allocate(
+    ffi.Allocator $allocator, {
+    required int size,
+    required bool viewport_has_value,
+    required int viewport_x,
+    required int viewport_y,
+    required bool wide_tail,
+    required bool visible,
+    required bool blinking,
+    required bool password_input,
+    required RenderStateCursorVisualStyle visual_style,
+  }) => $allocator<RenderStateCursor>()
+    ..ref.size = size
+    ..ref.viewport_has_value = viewport_has_value
+    ..ref.viewport_x = viewport_x
+    ..ref.viewport_y = viewport_y
+    ..ref.wide_tail = wide_tail
+    ..ref.visible = visible
+    ..ref.blinking = blinking
+    ..ref.password_input = password_input
+    ..ref.visual_style = visual_style;
 }
 
 final class RenderStateImpl extends ffi.Opaque {}
@@ -7821,6 +8020,78 @@ typedef TerminalTitleChangedFn =
         ffi.Void Function(Terminal terminal, ffi.Pointer<ffi.Void> userdata)
       >
     >;
+
+/// An unsupported terminal sequence.
+///
+/// @ingroup terminal
+final class TerminalUnknownSequence extends ffi.Struct {
+  @ffi.UnsignedInt()
+  external int tagAsInt;
+
+  TerminalUnknownSequenceTag get tag =>
+      TerminalUnknownSequenceTag.fromValue(tagAsInt);
+  set tag(TerminalUnknownSequenceTag value) => tagAsInt = value.value;
+
+  external TerminalUnknownSequenceValue value;
+}
+
+/// Callback function type for unsupported terminal sequences.
+///
+/// Called synchronously for normally terminated sequences whose identifier is
+/// not supported by the active terminal handler. Aborted sequences, malformed
+/// recognized commands, and explicitly disabled known protocols are ignored.
+///
+/// Capture must also be enabled with a nonzero
+/// GHOSTTY_TERMINAL_OPT_UNKNOWN_MAX_BYTES value. Installing this callback alone
+/// does not retain sequence content or allocate memory.
+///
+/// @param terminal The terminal handle
+/// @param userdata The userdata pointer set via GHOSTTY_TERMINAL_OPT_USERDATA
+/// @param sequence Borrowed unsupported sequence
+///
+/// @ingroup terminal
+typedef TerminalUnknownSequenceFn =
+    ffi.Pointer<
+      ffi.NativeFunction<
+        ffi.Void Function(
+          Terminal terminal,
+          ffi.Pointer<ffi.Void> userdata,
+          ffi.Pointer<TerminalUnknownSequence> sequence,
+        )
+      >
+    >;
+
+/// Unsupported terminal sequence value.
+///
+/// @ingroup terminal
+final class TerminalUnknownSequenceValue extends ffi.Union {
+  /// Application Program Command (APC).
+  external TerminalUnknownStringSequence apc;
+
+  /// Padding for ABI compatibility. Do not use.
+  ///
+  /// 128 bytes leaves room for future structured sequence payloads, such as
+  /// CSI with borrowed parameter, separator, and intermediate arrays, without
+  /// changing the tagged union's ABI.
+  @ffi.Array.multi([16])
+  external ffi.Array<ffi.Uint64> _padding;
+}
+
+/// An unsupported string terminal sequence.
+///
+/// The content is borrowed and valid only for the callback duration. It
+/// contains the bytes between the sequence introducer and terminator, may
+/// contain arbitrary binary data, and is not null-terminated.
+///
+/// @ingroup terminal
+final class TerminalUnknownStringSequence extends ffi.Struct {
+  /// Whether content was shortened by the byte limit or allocation failure.
+  @ffi.Bool()
+  external bool truncated;
+
+  /// Retained sequence content.
+  external String content;
+}
 
 /// Callback function type for write_pty.
 ///

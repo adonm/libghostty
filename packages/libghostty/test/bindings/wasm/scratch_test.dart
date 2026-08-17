@@ -142,6 +142,21 @@ void main() {
       pool.dispose();
     });
 
+    test('returns an empty region for a zero-length variable request', () {
+      final allocator = _TestScratchAllocator();
+      final pool = WasmScratchPool(allocator, maxVariableLength: 64);
+      final frame = pool.acquire(const []);
+
+      final region = frame.variable(0, 0);
+
+      expect(region.address, 0);
+      expect(region.length, 0);
+      expect(region.capacity, 0);
+      expect(allocator.allocations, 0);
+      frame.release();
+      pool.dispose();
+    });
+
     test('releases the old variable allocation before replacing it', () {
       final allocator = _TestScratchAllocator();
       final pool = WasmScratchPool(allocator, maxVariableLength: 64);

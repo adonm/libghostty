@@ -246,7 +246,7 @@ class FrameBuilder {
     if (terminalDirty) {
       if (dirty != .clean || hasDirtyRows) {
         _build(dirty == .clean ? .partial : dirty);
-        _renderState.dirty = .clean;
+        _renderState.clean();
       }
     } else if (hasDirtyRows) {
       _build(.partial);
@@ -257,16 +257,26 @@ class FrameBuilder {
     _rowBuilder.beginFrame();
 
     final rebuildAll = dirty != DirtyState.partial;
+    final useDirtyIterator =
+        dirty == _renderState.dirty &&
+        dirty != .clean &&
+        (dirty != .partial || !_dirtyRows.anyDirty);
     _rows.reset(_renderState);
 
-    var row = 0;
-    while (_rows.next()) {
-      if (row >= _state.rows) break;
-      if (rebuildAll || _rows.dirty || _dirtyRows.isDirty(row)) {
+    if (useDirtyIterator) {
+      while (_rows.nextDirty()) {
+        final row = _rows.index;
+        if (row >= _state.rows) break;
         _rowBuilder.rebuildRow(row, _rows, _cells);
-        _rows.dirty = false;
       }
-      row++;
+    } else {
+      while (_rows.next()) {
+        final row = _rows.index;
+        if (row >= _state.rows) break;
+        if (rebuildAll || _rows.dirty || _dirtyRows.isDirty(row)) {
+          _rowBuilder.rebuildRow(row, _rows, _cells);
+        }
+      }
     }
 
     _dirtyRows._clear();
@@ -316,7 +326,7 @@ final class _CursorCellSnapshot {
 final class _CursorFrameBuilder {
   final PaintState _state;
   final CellContentResolver _content;
-  var _cursor = const Cursor();
+  var _cursor = const RenderStateCursor();
   _CursorCellSnapshot? _lastCell;
 
   _CursorFrameBuilder(this._state, this._content);
@@ -350,27 +360,29 @@ final class _CursorFrameBuilder {
     final cursor = renderState.cursor;
     final scrollbackLen = scrollbar.total - scrollbar.visible;
     final inViewport =
+        cursor.viewportHasValue &&
         cursor.visible &&
         (scrollbackLen <= 0 || scrollbar.offset >= scrollbackLen) &&
-        cursor.position.row >= 0 &&
-        cursor.position.row < _state.rows &&
-        cursor.position.col >= 0 &&
-        cursor.position.col < _state.cols;
+        cursor.viewportY >= 0 &&
+        cursor.viewportY < _state.rows &&
+        cursor.viewportX >= 0 &&
+        cursor.viewportX < _state.cols;
 
     if (!inViewport) {
       _hide(cursor);
       return;
     }
 
-    final adjustedCursor = cursor.wideTail && cursor.position.col > 0
-        ? cursor.copyWith(
-            position: cursor.position.copyWith(col: cursor.position.col - 1),
-          )
+    final adjustedCursor = cursor.wideTail && cursor.viewportX > 0
+        ? cursor.copyWith(viewportX: cursor.viewportX - 1)
         : cursor;
-    final effectiveCursor = adjustedCursor.shape == CursorShape.block
-        ? adjustedCursor.copyWith(shape: _state.theme.cursor.shape)
+    final effectiveCursor = adjustedCursor.visualStyle == CursorShape.block
+        ? adjustedCursor.copyWith(visualStyle: _state.theme.cursor.shape)
         : adjustedCursor;
-    final ref = GridRef.at(terminal, effectiveCursor.position);
+    final ref = GridRef.at(
+      terminal,
+      Position(row: effectiveCursor.viewportY, col: effectiveCursor.viewportX),
+    );
     final cell = _CursorCellSnapshot(ref.content, ref.style, wide: ref.isWide);
 
     _cursor = effectiveCursor;
@@ -381,7 +393,7 @@ final class _CursorFrameBuilder {
     refreshGlyph();
   }
 
-  void _hide(Cursor cursor) {
+  void _hide(RenderStateCursor cursor) {
     _cursor = cursor;
     _lastCell = null;
     _state.cursor = cursor.copyWith(visible: false);
@@ -416,7 +428,7 @@ final class _CursorFrameBuilder {
     final cell = _lastCell;
     if (cell == null ||
         !_state.cursorFocused ||
-        _cursor.shape != CursorShape.block) {
+        _cursor.visualStyle != CursorShape.block) {
       return null;
     }
     final style = cell.style;
@@ -767,15 +779,16 @@ final class _PreeditRange {
 
   static _PreeditRange? resolve({
     required String text,
-    required Cursor cursor,
+    required RenderStateCursor cursor,
     required int rows,
     required int cols,
   }) {
-    if (!cursor.visible ||
-        cursor.position.row < 0 ||
-        cursor.position.row >= rows ||
-        cursor.position.col < 0 ||
-        cursor.position.col >= cols ||
+    if (!cursor.viewportHasValue ||
+        !cursor.visible ||
+        cursor.viewportY < 0 ||
+        cursor.viewportY >= rows ||
+        cursor.viewportX < 0 ||
+        cursor.viewportX >= cols ||
         rows <= 0 ||
         cols <= 0) {
       return null;
@@ -784,14 +797,14 @@ final class _PreeditRange {
     final preedit = _PreeditText.parse(text);
     if (preedit.isEmpty) return null;
 
-    final startCol = preedit.startCol(cursor.position.col, cols);
+    final startCol = preedit.startCol(cursor.viewportX, cols);
     final visible = preedit.visibleSuffix(cols - startCol);
     final visibleWidth = visible.width;
     final endCol = startCol + visibleWidth;
     if (startCol >= endCol) return null;
 
     return _PreeditRange(
-      row: cursor.position.row,
+      row: cursor.viewportY,
       startCol: startCol,
       endCol: endCol,
       clusterOffset: visible.clusterOffset,
@@ -1157,7 +1170,7 @@ final class _RowBuilder {
 
   ({int? previous, int? current}) updatePreedit(
     String text, {
-    required Cursor cursor,
+    required RenderStateCursor cursor,
   }) {
     final previous = _preeditRange;
     final previousText = _preeditText;

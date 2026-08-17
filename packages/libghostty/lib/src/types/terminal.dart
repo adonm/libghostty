@@ -37,6 +37,28 @@ final class ClipboardWrite {
   const ClipboardWrite({required this.location, required this.contents});
 }
 
+/// An image decoded from PNG into top-to-bottom RGBA pixel bytes.
+///
+/// Return this from the PNG decoder callback. The binding copies [rgba] into
+/// memory owned by libghostty before returning from the callback.
+@immutable
+final class DecodedImage {
+  /// Image width in pixels.
+  final int width;
+
+  /// Image height in pixels.
+  final int height;
+
+  /// RGBA bytes in row-major order.
+  final Uint8List rgba;
+
+  const DecodedImage({
+    required this.width,
+    required this.height,
+    required this.rgba,
+  });
+}
+
 /// A desktop notification requested by terminal content through OSC 9 or
 /// OSC 777.
 ///
@@ -62,46 +84,21 @@ final class DesktopNotification {
       other.body == body;
 }
 
-/// A progress report requested by terminal content through OSC 9;4.
-@immutable
-final class TerminalProgress {
-  /// Literal state reported by the running program.
-  final TerminalProgressState state;
-
-  /// Percentage from 0 through 100, or null when the protocol omits it.
-  final int? progress;
-
-  const TerminalProgress({required this.state, this.progress});
-
-  @override
-  int get hashCode => Object.hash(state, progress);
-
-  @override
-  bool operator ==(Object other) =>
-      other is TerminalProgress &&
-      other.state == state &&
-      other.progress == progress;
-}
-
-/// An image decoded from PNG into top-to-bottom RGBA pixel bytes.
+/// Primary device attributes (DA1) response data.
 ///
-/// Return this from the PNG decoder callback. The binding copies [rgba] into
-/// memory owned by libghostty before returning from the callback.
+/// Response format: CSI ? Pp ; Ps... c
+/// where Pp is the conformance level and Ps are feature codes.
 @immutable
-final class DecodedImage {
-  /// Image width in pixels.
-  final int width;
+final class DeviceAttributesPrimary {
+  /// Conformance level (Pp parameter). For example, 62 for VT220.
+  final int conformanceLevel;
 
-  /// Image height in pixels.
-  final int height;
+  /// DA1 feature codes (Ps parameters).
+  final List<int> features;
 
-  /// RGBA bytes in row-major order.
-  final Uint8List rgba;
-
-  const DecodedImage({
-    required this.width,
-    required this.height,
-    required this.rgba,
+  const DeviceAttributesPrimary({
+    this.conformanceLevel = 62,
+    this.features = const [],
   });
 }
 
@@ -125,24 +122,6 @@ final class DeviceAttributesResponse {
     this.primary = const DeviceAttributesPrimary(),
     this.secondary = const DeviceAttributesSecondary(),
     this.tertiary = const DeviceAttributesTertiary(),
-  });
-}
-
-/// Primary device attributes (DA1) response data.
-///
-/// Response format: CSI ? Pp ; Ps... c
-/// where Pp is the conformance level and Ps are feature codes.
-@immutable
-final class DeviceAttributesPrimary {
-  /// Conformance level (Pp parameter). For example, 62 for VT220.
-  final int conformanceLevel;
-
-  /// DA1 feature codes (Ps parameters).
-  final List<int> features;
-
-  const DeviceAttributesPrimary({
-    this.conformanceLevel = 62,
-    this.features = const [],
   });
 }
 
@@ -193,4 +172,47 @@ final class DeviceAttributesTertiary {
   @override
   bool operator ==(Object other) =>
       other is DeviceAttributesTertiary && other.unitId == unitId;
+}
+
+/// A progress report requested by terminal content through OSC 9;4.
+@immutable
+final class TerminalProgress {
+  /// Literal state reported by the running program.
+  final TerminalProgressState state;
+
+  /// Percentage from 0 through 100, or null when the protocol omits it.
+  final int? progress;
+
+  const TerminalProgress({required this.state, this.progress});
+
+  @override
+  int get hashCode => Object.hash(state, progress);
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalProgress &&
+      other.state == state &&
+      other.progress == progress;
+}
+
+/// An unsupported terminal string sequence captured by the terminal parser.
+///
+/// [content] is copied into Dart-owned memory and may contain arbitrary binary
+/// data. [truncated] is true when the configured capture limit shortened it.
+@immutable
+final class TerminalUnknownSequence {
+  /// The protocol sequence family.
+  final TerminalUnknownSequenceTag tag;
+
+  /// The captured sequence content, excluding its protocol delimiters.
+  final Uint8List content;
+
+  /// Whether the byte limit or an allocation failure shortened the content.
+  final bool truncated;
+
+  const TerminalUnknownSequence({
+    required this.tag,
+    required this.content,
+    required this.truncated,
+  });
 }

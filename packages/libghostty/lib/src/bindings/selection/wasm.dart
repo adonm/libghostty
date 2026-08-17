@@ -39,13 +39,10 @@ final class WasmSelectionBindings implements SelectionBindings {
       ) {
     _formatBuffer = _allocateBytes(_formatBufferCapacity);
     _outSize = _allocateSize();
-    _multiKeys = _allocateBytes(5 * _wasmEnumSize, alignment: _wasmEnumSize);
-    _multiValues = _allocateBytes(
-      5 * _wasmPointerSize,
-      alignment: _wasmPointerSize,
-    );
-    _multiOut = _allocateBytes(5 * _wasmOutputSlotSize, alignment: 8);
-    _multiGridRef = _allocateBytes(_layout.gridRefSize, alignment: 4);
+    _multiKeys = _allocateBytes(5 * _wasmEnumSize);
+    _multiValues = _allocateBytes(5 * _wasmPointerSize);
+    _multiOut = _allocateBytes(5 * _wasmOutputSlotSize);
+    _multiGridRef = _allocateBytes(_layout.gridRefSize);
   }
 
   @override
@@ -91,7 +88,7 @@ final class WasmSelectionBindings implements SelectionBindings {
         _exports.ghostty_selection_gesture_event_new(0, out, type.value),
       );
       _check(result, 'ghostty_selection_gesture_event_new');
-      return .fromAddress(_memory.readPtr(out));
+      return .fromAddress(_exports.ghostty_wasm_take_opaque(out));
     } finally {
       _exports.freeOpaque(out);
     }
@@ -341,7 +338,7 @@ final class WasmSelectionBindings implements SelectionBindings {
         _exports.ghostty_selection_gesture_new(0, out),
       );
       _check(result, 'ghostty_selection_gesture_new');
-      return .fromAddress(_memory.readPtr(out));
+      return .fromAddress(_exports.ghostty_wasm_take_opaque(out));
     } finally {
       _exports.freeOpaque(out);
     }
@@ -527,7 +524,7 @@ final class WasmSelectionBindings implements SelectionBindings {
     RawSelection selection,
   ) {
     final sel = _allocSelection(selection);
-    final out = _allocateBytes(4, alignment: 4);
+    final out = _allocateBytes(4);
     try {
       final result = Result.fromValue(
         _exports.ghostty_terminal_selection_order(terminal.value, sel, out),
@@ -730,23 +727,17 @@ final class WasmSelectionBindings implements SelectionBindings {
     }
   }
 
-  int _allocateBytes(int size, {int alignment = 1}) {
-    final requiredAlignment = alignment < _layout.maxAlignment
-        ? _layout.maxAlignment
-        : alignment;
-    final ptr = _exports.allocateAlignedU8Array(
-      size,
-      alignment: requiredAlignment,
-    );
+  int _allocateBytes(int size) {
+    final ptr = _exports.allocateBytes(size);
     if (ptr == 0) throw const OutOfMemoryException();
     return ptr;
   }
 
   int _allocateSize() {
-    final ptr = _exports.allocateUsize();
+    final ptr = _exports.allocateBytes(4);
     if (ptr == 0) throw const OutOfMemoryException();
     if (ptr % 4 != 0) {
-      _exports.freeUsize(ptr);
+      _exports.freeBytes(ptr, 4);
       throw StateError('libghostty WASM allocator returned misaligned memory.');
     }
     return ptr;
@@ -755,7 +746,7 @@ final class WasmSelectionBindings implements SelectionBindings {
   ({int ptr, int bytes}) _allocCodepoints(List<int>? codepoints) {
     if (codepoints == null) return (ptr: 0, bytes: 0);
     final bytes = (codepoints.isEmpty ? 1 : codepoints.length) * 4;
-    final ptr = _allocateBytes(bytes, alignment: 4);
+    final ptr = _allocateBytes(bytes);
     for (var i = 0; i < codepoints.length; i++) {
       _memory.writeU32(ptr + i * 4, codepoints[i]);
     }
@@ -781,7 +772,7 @@ final class WasmSelectionBindings implements SelectionBindings {
   }
 
   void _freeBytes(int ptr, int size) {
-    if (ptr != 0) _exports.freeU8Array(ptr, size);
+    if (ptr != 0) _exports.freeBytes(ptr, size);
   }
 
   void _freeCodepoints(({int ptr, int bytes}) value) {

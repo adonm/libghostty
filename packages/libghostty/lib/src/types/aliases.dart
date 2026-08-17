@@ -44,6 +44,9 @@ typedef DesktopNotificationCallback = void Function(DesktopNotification value);
 /// Handles a progress report requested synchronously by terminal content.
 typedef TerminalProgressCallback = void Function(TerminalProgress value);
 
+/// Handles an unsupported terminal string sequence synchronously.
+typedef TerminalUnknownSequenceCallback = ValueSetter<TerminalUnknownSequence>;
+
 /// Callback invoked for each internal libghostty log message.
 ///
 /// Scope and message bytes are decoded and copied before invocation.

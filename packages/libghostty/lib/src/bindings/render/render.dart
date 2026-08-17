@@ -15,6 +15,7 @@ abstract interface class RenderBindings {
   int cellGetStyleId(LibGhosttyHandle cell);
   RawCellSummary cellGetSummary(LibGhosttyHandle cell);
   CellWide cellGetWide(LibGhosttyHandle cell);
+  bool decodeRawCell(RawCellsView view, int index, RawCellData output);
 
   LibGhosttyHandle gridRefCell(RawGridRef ref);
   List<int> gridRefGraphemes(RawGridRef ref);
@@ -26,23 +27,13 @@ abstract interface class RenderBindings {
     LibGhosttyHandle state,
     LibGhosttyHandle terminal,
   );
+  void renderStateClean(LibGhosttyHandle state);
   void renderStateEndUpdate(LibGhosttyHandle state);
   void renderStateFree(LibGhosttyHandle state);
   TerminalColors renderStateGetColors(LibGhosttyHandle state);
   int renderStateGetCols(LibGhosttyHandle state);
 
-  Cursor renderStateGetCursor(LibGhosttyHandle state);
-  bool renderStateGetCursorBlinking(LibGhosttyHandle state);
-  bool renderStateGetCursorInViewport(LibGhosttyHandle state);
-  bool renderStateGetCursorPasswordInput(LibGhosttyHandle state);
-  bool renderStateGetCursorViewportWideTail(LibGhosttyHandle state);
-  int renderStateGetCursorViewportX(LibGhosttyHandle state);
-  int renderStateGetCursorViewportY(LibGhosttyHandle state);
-
-  bool renderStateGetCursorVisible(LibGhosttyHandle state);
-  RenderStateCursorVisualStyle renderStateGetCursorVisualStyle(
-    LibGhosttyHandle state,
-  );
+  RenderStateCursor renderStateGetCursor(LibGhosttyHandle state);
   RenderStateDirty renderStateGetDirty(LibGhosttyHandle state);
   int renderStateGetRows(LibGhosttyHandle state);
   RawRenderStateSummary renderStateGetSummary(LibGhosttyHandle state);
@@ -88,9 +79,11 @@ abstract interface class RenderBindings {
   );
 
   RawRowIteratorSummary rowIteratorGetSummary(LibGhosttyHandle iterator);
+  bool rowIteratorGetRawCells(LibGhosttyHandle iterator, RawCellsView view);
   void rowIteratorInit(LibGhosttyHandle iterator, LibGhosttyHandle state);
   LibGhosttyHandle rowIteratorNew();
   bool rowIteratorNext(LibGhosttyHandle iterator);
+  int? rowIteratorNextDirty(LibGhosttyHandle iterator);
   void rowIteratorSetDirty(LibGhosttyHandle iterator, {required bool dirty});
 
   RawGridRef terminalGridRef(

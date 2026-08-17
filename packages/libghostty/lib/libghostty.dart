@@ -88,7 +88,8 @@ export 'src/generated/libghostty_enums.g.dart'
         TerminalCompressionMode,
         TerminalCompressionResult,
         TerminalProgressState,
-        TerminalScreen;
+        TerminalScreen,
+        TerminalUnknownSequenceTag;
 export 'src/listenable.dart' show Listenable;
 export 'src/types/aliases.dart'
     show
@@ -99,6 +100,7 @@ export 'src/types/aliases.dart'
         SysLogCallback,
         TerminalCursorShape,
         TerminalProgressCallback,
+        TerminalUnknownSequenceCallback,
         ValueGetter,
         ValueSetter,
         VoidCallback;
@@ -108,7 +110,6 @@ export 'src/types/types.dart'
         CellWidth,
         ClipboardContent,
         ClipboardWrite,
-        Cursor,
         CursorShape,
         DecodedImage,
         DefaultColor,
@@ -134,6 +135,7 @@ export 'src/types/types.dart'
         OutOfSpaceException,
         PaletteColor,
         Position,
+        RenderStateCursor,
         RgbColor,
         Scrollbar,
         SemanticContent,
@@ -144,6 +146,7 @@ export 'src/types/types.dart'
         TerminalGeometry,
         TerminalProgress,
         TerminalSizeInfo,
+        TerminalUnknownSequence,
         UnderlineStyle,
         UnknownResultException,
         X11ColorName;

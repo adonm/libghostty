@@ -300,7 +300,7 @@ void main() {
       });
     });
 
-    group('Cursor on emoji', () {
+    group('RenderStateCursor on emoji', () {
       testWidgets('block cursor on standard wide emoji', (tester) async {
         final terminal = Terminal(cols: defaultCols, rows: defaultRows);
         addTearDown(terminal.dispose);

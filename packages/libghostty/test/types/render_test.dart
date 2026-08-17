@@ -18,20 +18,21 @@ void main() {
     });
   });
 
-  group('Cursor', () {
-    Cursor create({int row = 5, bool visible = true}) => Cursor(
-      position: Position(row: row, col: 10),
-      shape: CursorShape.bar,
-      visible: visible,
-    );
+  group('RenderStateCursor', () {
+    RenderStateCursor create({int viewportY = 5, bool visible = true}) =>
+        RenderStateCursor(
+          viewportHasValue: true,
+          viewportX: 10,
+          viewportY: viewportY,
+          visible: visible,
+          visualStyle: .bar,
+        );
 
     group('constructor', () {
-      test('initializes default state', () {
-        const cursor = Cursor();
-        expect(cursor.position.row, 0);
-        expect(cursor.position.col, 0);
-        expect(cursor.visible, isTrue);
-        expect(cursor.shape, CursorShape.block);
+      test('retains viewport presence independently of its coordinates', () {
+        const cursor = RenderStateCursor();
+
+        expect(cursor.viewportHasValue, isFalse);
       });
     });
 
@@ -53,24 +54,25 @@ void main() {
       test('distinguishes changed properties', () {
         final base = create();
 
-        expect(base, isNot(create(row: 6)));
+        expect(base, isNot(create(viewportY: 6)));
         expect(base, isNot(create(visible: false)));
       });
     });
 
     group('copyWith', () {
       test('overrides selected fields', () {
-        const cursor = Cursor(
-          position: Position(row: 5, col: 10),
-          shape: CursorShape.bar,
+        const cursor = RenderStateCursor(
+          viewportHasValue: true,
+          viewportX: 10,
+          viewportY: 5,
+          visualStyle: .bar,
         );
 
-        final moved = cursor.copyWith(
-          position: const Position(row: 6, col: 11),
-        );
+        final moved = cursor.copyWith(viewportX: 11, viewportY: 6);
 
-        expect(moved.position, const Position(row: 6, col: 11));
-        expect(moved.shape, CursorShape.bar);
+        expect(moved.viewportX, 11);
+        expect(moved.viewportY, 6);
+        expect(moved.visualStyle, CursorShape.bar);
         expect(moved.visible, isTrue);
       });
     });

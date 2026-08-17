@@ -68,13 +68,29 @@ void main() {
     });
 
     group('cursor', () {
+      test('reports an active cursor in the viewport', () {
+        renderState.update(terminal);
+
+        expect(renderState.cursor.viewportHasValue, isTrue);
+      });
+
+      test('reports a cursor outside a scrolled viewport', () {
+        terminal.resize(cols: 5, rows: 2);
+        terminal.write(Uint8List.fromList('one\r\ntwo\r\nthree'.codeUnits));
+        terminal.scrollViewport(-1);
+
+        renderState.update(terminal);
+
+        expect(renderState.cursor.viewportHasValue, isFalse);
+      });
+
       test('tracks write position', () {
         terminal.write(Uint8List.fromList('Hi'.codeUnits));
 
         renderState.update(terminal);
 
-        expect(renderState.cursor.position.col, 2);
-        expect(renderState.cursor.position.row, 0);
+        expect(renderState.cursor.viewportX, 2);
+        expect(renderState.cursor.viewportY, 0);
       });
 
       test('tracks visibility mode', () {
@@ -95,7 +111,7 @@ void main() {
 
         renderState.update(terminal);
 
-        expect(renderState.cursor.shape, CursorShape.underline);
+        expect(renderState.cursor.visualStyle, CursorShape.underline);
       });
 
       test('uses the default cursor blink for a reset sequence', () {
@@ -173,6 +189,17 @@ void main() {
         renderState.update(terminal);
 
         expect(renderState.dirty, DirtyState.full);
+      });
+
+      test('clean clears global and row dirty state', () {
+        terminal.write(Uint8List.fromList('A'.codeUnits));
+        renderState.update(terminal);
+
+        renderState.clean();
+        rows.reset(renderState);
+
+        expect(renderState.dirty, DirtyState.clean);
+        expect(rows.nextDirty(), isFalse);
       });
     });
 

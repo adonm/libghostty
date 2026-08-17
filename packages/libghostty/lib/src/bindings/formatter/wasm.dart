@@ -28,9 +28,9 @@ final class WasmFormatterBindings implements FormatterBindings {
       ) {
     _formatBufferCapacity = 4096;
     _formatBuffer = _requirePointer(
-      _exports.allocateU8Array(_formatBufferCapacity),
+      _exports.allocateBytes(_formatBufferCapacity),
     );
-    _written = _requirePointer(_exports.allocateUsize());
+    _written = _requirePointer(_exports.allocateBytes(4));
   }
 
   @override
@@ -175,7 +175,7 @@ final class WasmFormatterBindings implements FormatterBindings {
         options,
       );
       checkResultCode(result, operation: 'ghostty_formatter_terminal_new');
-      return .fromAddress(_memory.readPtr(out));
+      return .fromAddress(_exports.ghostty_wasm_take_opaque(out));
     } finally {
       frame.release();
     }
@@ -183,8 +183,8 @@ final class WasmFormatterBindings implements FormatterBindings {
 
   void _growFormatBuffer(int required) {
     if (required <= _formatBufferCapacity) return;
-    final replacement = _requirePointer(_exports.allocateU8Array(required));
-    _exports.freeU8Array(_formatBuffer, _formatBufferCapacity);
+    final replacement = _requirePointer(_exports.allocateBytes(required));
+    _exports.freeBytes(_formatBuffer, _formatBufferCapacity);
     _formatBuffer = replacement;
     _formatBufferCapacity = required;
   }
