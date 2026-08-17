@@ -92,7 +92,7 @@ Future<void> _initialize(Uri wasmUri) async {
 
     platform.bindings = registry.Bindings(
       key: key.WasmKeyBindings(exports),
-      parser: parser.WasmParserBindings(exports),
+      parser: parser.WasmParserBindings(exports, layout),
       mouse: mouse.WasmMouseBindings(exports, layout),
       render: render.WasmRenderBindings(exports, layout),
       system: system.WasmSystemBindings(exports, layout),

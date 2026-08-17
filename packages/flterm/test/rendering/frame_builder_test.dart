@@ -284,7 +284,7 @@ void main() {
       builder.sync(terminal, terminalDirty: true);
 
       expect(state.cursor.visible, isTrue);
-      expect(state.cursor.position.col, 0);
+      expect(state.cursor.viewportX, 0);
       expect(state.cursorAtlasEntry, isNotNull);
     });
 
@@ -316,7 +316,7 @@ void main() {
       builder.sync(terminal, terminalDirty: true);
 
       expect(state.cursor.visible, isTrue);
-      expect(state.cursor.shape, CursorShape.underline);
+      expect(state.cursor.visualStyle, CursorShape.underline);
       expect(state.cursorAtlasEntry, isNull);
     });
 

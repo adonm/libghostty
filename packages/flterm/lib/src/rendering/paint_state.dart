@@ -1,7 +1,8 @@
 import 'dart:typed_data';
 import 'dart:ui';
 
-import 'package:libghostty/libghostty.dart' show Cursor, TerminalColors;
+import 'package:libghostty/libghostty.dart'
+    show RenderStateCursor, TerminalColors;
 
 import '../foundation.dart' show CellMetrics, TerminalTheme;
 import 'atlas/atlas.dart';
@@ -35,7 +36,7 @@ class PaintState {
 
   var viewportOffset = 0;
 
-  var cursor = const Cursor();
+  var cursor = const RenderStateCursor();
   var cursorWide = false;
   var cursorFocused = true;
   var cursorColorArgb = 0xFFFFFFFF;

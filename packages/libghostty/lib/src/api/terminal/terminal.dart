@@ -49,18 +49,18 @@ part 'tracked_grid_ref.dart';
 /// ## Effects
 ///
 /// Effects are callbacks invoked synchronously by terminal operations. Most
-/// respond to VT sequences during [write], while [onWritePty] can also fire
-/// during a callback-emitting [resize]. Register them by assigning the callback
-/// setters ([onWritePty], [onBell], [onTitleChanged], etc.). Set to null to
-/// disable.
+/// respond to VT sequences during [write] or [writeUntilGround], while
+/// [onWritePty] can also fire during a callback-emitting [resize]. Register
+/// them by assigning the callback setters ([onWritePty], [onBell],
+/// [onTitleChanged], etc.). Set to null to disable.
 ///
-/// Callbacks run synchronously. An effect invoked while [write] is processing
-/// VT input must not call [write] for the same terminal. The [onWritePty]
-/// callback emitted by an in-band [resize] report may call [write]. Callbacks
-/// should avoid blocking or expensive operations since they block further I/O
-/// processing. Callback exceptions do not interrupt terminal processing. After
-/// the initiating operation finishes, the first exception is rethrown with its
-/// original stack trace.
+/// Callbacks run synchronously. An effect invoked while [write] or
+/// [writeUntilGround] is processing VT input must not call either method for
+/// the same terminal. The [onWritePty] callback emitted by an in-band [resize]
+/// report may call [write]. Callbacks should avoid blocking or expensive
+/// operations since they block further I/O processing. Callback exceptions do
+/// not interrupt terminal processing. After the initiating operation finishes,
+/// the first exception is rethrown with its original stack trace.
 ///
 /// Title query responses are disabled by default. Enable them with
 /// [setTitleReports] in addition to registering [onWritePty].
@@ -282,6 +282,14 @@ final class Terminal with Listenable {
   /// Total terminal height in pixels (rows * cell height).
   int get heightPx => bindings.terminal.terminalGetHeightPx(_terminalHandle);
 
+  /// Whether the cursor is at the semantic prompt boundary.
+  ///
+  /// The value is false when prompt tracking is unavailable or when the
+  /// cursor is on the alternate screen.
+  bool get isCursorAtPrompt {
+    return bindings.terminal.terminalGetCursorAtPrompt(_terminalHandle);
+  }
+
   /// Whether the file medium is enabled for Kitty image loading.
   /// Returns null when Kitty graphics are not compiled in.
   bool? get isKittyFileMedium {
@@ -304,6 +312,12 @@ final class Terminal with Listenable {
   bool get isViewportActive {
     return bindings.terminal.terminalGetViewportActive(_terminalHandle);
   }
+
+  /// Whether the VT parser is in its ground state.
+  ///
+  /// This is true when no escape, control, or UTF-8 sequence is pending and
+  /// the next byte can be processed from a stateless boundary.
+  bool get isVtGround => bindings.terminal.terminalGetVtGround(_terminalHandle);
 
   /// Kitty image storage limit in bytes for the active screen.
   ///
@@ -446,6 +460,28 @@ final class Terminal with Listenable {
     bindings.terminal.terminalSetOnTitleChanged(_terminalHandle, value);
   }
 
+  /// Registers a callback for unsupported string sequences.
+  ///
+  /// Capture must be enabled with [unknownSequenceMaxBytes]. The callback
+  /// receives copied, binary-safe content and runs synchronously during
+  /// [write] or [writeUntilGround]. Only normally terminated sequences with
+  /// unsupported identifiers are reported. Aborted sequences, malformed
+  /// recognized commands, and disabled known protocols are ignored. The
+  /// callback must not call [write] or [writeUntilGround] for this terminal.
+  /// Set to null to ignore captured sequences.
+  ///
+  /// ```dart
+  /// terminal.unknownSequenceMaxBytes = 4096;
+  /// terminal.onUnknownSequence = (sequence) {
+  ///   if (sequence.tag == TerminalUnknownSequenceTag.apc) {
+  ///     inspectApc(sequence.content, truncated: sequence.truncated);
+  ///   }
+  /// };
+  /// ```
+  set onUnknownSequence(TerminalUnknownSequenceCallback? value) {
+    bindings.terminal.terminalSetOnUnknownSequence(_terminalHandle, value);
+  }
+
   /// Registers a callback for PTY write-back data.
   ///
   /// Invoked when the terminal needs to send data back to the PTY, for
@@ -574,6 +610,15 @@ final class Terminal with Listenable {
     notifyListeners();
   }
 
+  /// Sets the terminfo name used to answer XTGETTCAP `TN` queries.
+  ///
+  /// The name is copied by libghostty. Set to null or an empty string to
+  /// leave `TN` queries unanswered. Names longer than 128 UTF-8 bytes throw
+  /// [InvalidValueException].
+  set terminfoName(String? value) {
+    bindings.terminal.terminalSetTerminfoName(_terminalHandle, value);
+  }
+
   /// Terminal title as set by OSC 0 or OSC 2 sequences.
   ///
   /// The returned string is a Dart-owned snapshot and remains valid after
@@ -587,6 +632,19 @@ final class Terminal with Listenable {
 
   /// Total number of rows: active grid rows plus scrollback rows.
   int get totalRows => bindings.terminal.terminalGetTotalRows(_terminalHandle);
+
+  /// Maximum bytes captured for unsupported string sequences.
+  ///
+  /// Set to null or zero to disable capture. The limit applies to sequence
+  /// content. The callback reports truncation when the limit is exceeded or
+  /// the complete content cannot be allocated.
+  set unknownSequenceMaxBytes(int? value) {
+    if (value != null) RangeError.checkNotNegative(value, 'value');
+    bindings.terminal.terminalSetUnknownSequenceMaxBytes(
+      _terminalHandle,
+      value,
+    );
+  }
 
   /// Total terminal width in pixels (cols * cell width).
   int get widthPx => bindings.terminal.terminalGetWidthPx(_terminalHandle);
@@ -902,9 +960,10 @@ final class Terminal with Listenable {
   /// Feeds raw VT-encoded bytes into the terminal for processing.
   ///
   /// Malformed input is logged internally but does not corrupt state or throw.
-  /// Callbacks fire synchronously during this call and must not call [write]
-  /// for this terminal. Writes to another terminal are allowed when that
-  /// terminal's own concurrency rules permit them. If one or more callbacks
+  /// Callbacks fire synchronously during this call and must not call [write] or
+  /// [writeUntilGround] for this terminal. Writes to another terminal are
+  /// allowed when that terminal's own concurrency rules permit them. If one or
+  /// more callbacks
   /// throw, processing finishes and listeners are notified before the first
   /// exception is rethrown with its original stack trace.
   ///
@@ -945,6 +1004,40 @@ final class Terminal with Listenable {
   /// operation completes.
   void writeContinuation(ContinuationWriter writer) {
     bindings.terminal.terminalContinuationWrite(_terminalHandle, writer);
+  }
+
+  /// Writes bytes until the parser reaches the ground state.
+  ///
+  /// Returns the number of bytes consumed when ground is reached, including
+  /// zero when the parser was already in ground. When the returned count is
+  /// less than `data.length`, the remaining suffix was not processed. Returns
+  /// null when all bytes were consumed without reaching ground. Callbacks and
+  /// listener notifications follow the same rules as [write]. Callbacks must
+  /// not call [write] or [writeUntilGround] on this terminal.
+  ///
+  /// ```dart
+  /// final consumed = terminal.writeUntilGround(data);
+  /// if (consumed != null) {
+  ///   handleGroundBoundary();
+  ///   terminal.write(Uint8List.sublistView(data, consumed));
+  /// }
+  /// ```
+  int? writeUntilGround(Uint8List data) {
+    late final int? consumed;
+    try {
+      consumed = bindings.terminal.terminalWriteUntilGround(
+        _terminalHandle,
+        data,
+      );
+    } on Object catch (error, stackTrace) {
+      try {
+        notifyListeners();
+      } finally {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+    }
+    notifyListeners();
+    return consumed;
   }
 
   RawGridRef _checkedRef(GridRef ref, [String name = 'ref']) {

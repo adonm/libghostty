@@ -2,6 +2,7 @@ import 'dart:typed_data' show Uint8List;
 
 import 'package:libghostty/libghostty.dart'
     show
+        DirtyState,
         GridRef,
         Position,
         RenderState,
@@ -151,6 +152,37 @@ void main() {
         final second = rowCount();
 
         expect(second, first);
+      });
+    });
+
+    group('nextDirty', () {
+      test('visits every remaining row when fully dirty', () {
+        renderState.update(terminal);
+        renderState.clean();
+        renderState.dirty = DirtyState.full;
+        rows.reset(renderState);
+
+        final indexes = <int>[];
+        while (rows.nextDirty()) {
+          indexes.add(rows.index);
+        }
+
+        expect(indexes, [0, 1, 2]);
+      });
+
+      test('skips clean rows and reports the viewport index', () {
+        terminal.write(Uint8List.fromList('\x1b[2;1H'.codeUnits));
+        renderState.update(terminal);
+        renderState.clean();
+        terminal.write(Uint8List.fromList('B'.codeUnits));
+        renderState.update(terminal);
+        rows.reset(renderState);
+
+        final hasRow = rows.nextDirty();
+
+        expect(hasRow, isTrue);
+        expect(rows.index, 1);
+        expect(rows.nextDirty(), isFalse);
       });
     });
 

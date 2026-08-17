@@ -1,5 +1,6 @@
 import '../../generated/libghostty_wasm.g.dart';
 import '../../types/types.dart';
+import 'allocator.dart';
 
 /// Size and natural alignment of a pointer-sized scalar in the wasm32 ABI.
 const wasm32PointerSize = 4;
@@ -63,7 +64,7 @@ final class ScratchSlotSpec {
   const ScratchSlotSpec({required this.size, required this.alignment});
 }
 
-/// Uses the artifact's byte-array allocator for scratch storage.
+/// Uses the artifact's generic byte allocator for scratch storage.
 final class WasmExportScratchAllocator implements ScratchAllocator {
   final GhosttyExports _exports;
 
@@ -73,7 +74,7 @@ final class WasmExportScratchAllocator implements ScratchAllocator {
   ScratchAllocation allocate({required int length, required int alignment}) {
     if (length == 0) return const ScratchAllocation(address: 0, capacity: 0);
     final allocationLength = length + alignment - 1;
-    final baseAddress = _exports.ghostty_wasm_alloc_u8_array(allocationLength);
+    final baseAddress = _exports.allocateBytes(allocationLength);
     if (baseAddress == 0) throw const OutOfMemoryException();
     final address = (baseAddress + alignment - 1) ~/ alignment * alignment;
     return ScratchAllocation(
@@ -87,10 +88,7 @@ final class WasmExportScratchAllocator implements ScratchAllocator {
   @override
   void free(ScratchAllocation allocation) {
     if (allocation.capacity == 0) return;
-    _exports.ghostty_wasm_free_u8_array(
-      allocation.releaseAddress,
-      allocation.releaseCapacity,
-    );
+    _exports.freeBytes(allocation.releaseAddress, allocation.releaseCapacity);
   }
 }
 

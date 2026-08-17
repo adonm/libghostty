@@ -33,11 +33,12 @@ class CursorPainter implements TerminalPainter {
   void paint(Canvas canvas) {
     final cursor = _state.cursor;
     if (_state.preeditActive) return;
-    if (!cursor.visible ||
-        cursor.position.row < 0 ||
-        cursor.position.row >= _state.rows ||
-        cursor.position.col < 0 ||
-        cursor.position.col >= _state.cols ||
+    if (!cursor.viewportHasValue ||
+        !cursor.visible ||
+        cursor.viewportY < 0 ||
+        cursor.viewportY >= _state.rows ||
+        cursor.viewportX < 0 ||
+        cursor.viewportX >= _state.cols ||
         !_state.blinkVisible) {
       return;
     }
@@ -49,19 +50,22 @@ class CursorPainter implements TerminalPainter {
       (opacity << 24) | (_state.cursorColorArgb & 0x00FFFFFF),
     );
 
-    final endCol = (cursor.position.col + (_state.cursorWide ? 2 : 1)).clamp(
+    final endCol = (cursor.viewportX + (_state.cursorWide ? 2 : 1)).clamp(
       0,
       _state.cols,
     );
     final rect = metrics.cellRangeRect(
-      cursor.position.row,
-      cursor.position.col,
+      cursor.viewportY,
+      cursor.viewportX,
       endCol,
       .zero,
     );
     final CursorShape shape = switch (cursor.passwordInput && focused) {
       true => .block,
-      false => !focused && cursor.shape == .block ? .blockHollow : cursor.shape,
+      false =>
+        !focused && cursor.visualStyle == .block
+            ? .blockHollow
+            : cursor.visualStyle,
     };
 
     _paint.style = PaintingStyle.fill;
@@ -99,8 +103,8 @@ class CursorPainter implements TerminalPainter {
                 entry.srcBottom,
               ),
               Rect.fromLTWH(
-                cursor.position.col * metrics.cellWidth + sourceBearingX,
-                cursor.position.row * metrics.cellHeight + sourceBearingY,
+                cursor.viewportX * metrics.cellWidth + sourceBearingX,
+                cursor.viewportY * metrics.cellHeight + sourceBearingY,
                 (entry.srcRight - entry.srcLeft) * inverseDpr,
                 (entry.srcBottom - entry.srcTop) * inverseDpr,
               ),

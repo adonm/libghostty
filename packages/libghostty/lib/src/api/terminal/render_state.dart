@@ -32,8 +32,8 @@ enum DirtyState {
 /// Construct once, call [update] each frame to refresh the snapshot from a
 /// [Terminal], then iterate rows and cells using [RowIterator] / [CellIterator]
 /// bound with [RowIterator.reset] / [CellIterator.reset]. After rendering,
-/// clear the per-row dirty flags via [RowIterator.dirty] and set [dirty] back
-/// to [DirtyState.clean]. When done with the state entirely, call [dispose].
+/// clear the global and per-row dirty flags with [clean]. When done with the
+/// state entirely, call [dispose].
 ///
 /// The key design principle is that the render state only needs access to the
 /// [Terminal] during the [update] call. Between updates, all data can be read
@@ -47,8 +47,8 @@ enum DirtyState {
 ///
 /// Dirty state is tracked at two independent layers: a global [dirty] state
 /// and per-row flags via [RowIterator.dirty]. [update] sets these but does
-/// not clear them. After rendering, set [dirty] back to [DirtyState.clean]
-/// and clear each processed row's flag via [RowIterator.dirty].
+/// not clear them. After rendering a complete frame, call [clean]. For a
+/// partial frame, use [RowIterator.dirty] to clear only the rows consumed.
 ///
 /// ```dart
 /// final renderState = RenderState();
@@ -68,7 +68,7 @@ enum DirtyState {
 ///     }
 ///     rows.dirty = false;
 ///   }
-///   renderState.dirty = DirtyState.clean;
+///   renderState.clean();
 /// }
 /// ```
 final class RenderState {
@@ -102,11 +102,12 @@ final class RenderState {
     return _cols;
   }
 
-  /// Cursor state from the last [update]: position, visibility, blink,
-  /// shape, and password input flag. If the cursor is outside the
-  /// viewport, [Cursor.position] defaults to zero and [Cursor.wideTail]
-  /// defaults to false.
-  Cursor get cursor {
+  /// Cursor state from the last [update].
+  ///
+  /// Check [RenderStateCursor.viewportHasValue] before reading its viewport
+  /// coordinates or wide-tail state. Viewport presence is independent of
+  /// [RenderStateCursor.visible], which reflects terminal cursor modes.
+  RenderStateCursor get cursor {
     _ensureAlive();
     return bindings.render.renderStateGetCursor(_handle);
   }
@@ -139,6 +140,16 @@ final class RenderState {
     return _rows;
   }
 
+  /// Clears the global dirty state and every per-row dirty flag.
+  ///
+  /// Call this after a complete frame has been rendered. Use [dirty] and
+  /// [RowIterator.dirty] when only part of a frame has been consumed.
+  void clean() {
+    _ensureAlive();
+    bindings.render.renderStateClean(_handle);
+    _dirty = .clean;
+  }
+
   /// Releases the native render state handle.
   void dispose() {
     if (_disposed) return;
@@ -152,8 +163,8 @@ final class RenderState {
   /// After this call, all render state properties ([cols], [rows], [colors],
   /// [cursor]) reflect the terminal's current state, and [dirty] indicates
   /// what changed. Does not clear this render state's own dirty tracking;
-  /// after rendering, set [dirty] to [DirtyState.clean] and clear per-row
-  /// flags via [RowIterator.dirty] during the render loop.
+  /// after rendering a complete frame, call [clean]. For partial rendering,
+  /// clear only consumed rows via [RowIterator.dirty].
   ///
   /// Any [RowIterator] or [CellIterator] previously bound to this render
   /// state must be rebound via [RowIterator.reset] / [CellIterator.reset]

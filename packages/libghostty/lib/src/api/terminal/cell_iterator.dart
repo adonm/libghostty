@@ -33,6 +33,8 @@ final class CellIterator {
 
   var _disposed = false;
   RowIterator? _rowIterator;
+  RawCellsView? _rawCells;
+  var _rawCellsAvailable = false;
   var _rowPositionGeneration = 0;
   var _rawCell = const LibGhosttyHandle.fromAddress(0);
   var _graphemeLen = 0;
@@ -217,6 +219,11 @@ final class CellIterator {
     rowIterator._ensurePositioned();
     bindings.render.rowCellsInit(_handle, rowIterator._handle);
     _rowIterator = rowIterator;
+    final rawCells = _rawCells ??= RawCellsView();
+    _rawCellsAvailable = bindings.render.rowIteratorGetRawCells(
+      rowIterator._handle,
+      rawCells,
+    );
     _rowPositionGeneration = rowIterator._positionGeneration;
     _col = -1;
     _prevStyleId = -1;
@@ -276,7 +283,10 @@ final class CellIterator {
     _isSelected = rowCell.selected;
     _selectedValid = true;
 
-    final cell = bindings.render.cellGetSummary(_rawCell);
+    final cell = !_rawCellsAvailable
+        ? bindings.render.cellGetSummary(_rawCell)
+        : bindings.render.rawCellsGetSummary(_rawCells!, _col) ??
+              bindings.render.cellGetSummary(_rawCell);
     _styleId = cell.styleId;
     _codepoint = _graphemeLen > 0 ? cell.codepoint : 0;
     _wide = cell.wide;

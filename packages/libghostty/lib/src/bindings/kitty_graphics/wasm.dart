@@ -242,7 +242,7 @@ final class WasmKittyGraphicsBindings implements KittyGraphicsBindings {
         result,
         operation: 'ghostty_kitty_graphics_placement_iterator_new',
       );
-      return .fromAddress(_memory.readPtr(out));
+      return .fromAddress(_exports.ghostty_wasm_take_opaque(out));
     } finally {
       frame.release();
     }
@@ -332,9 +332,9 @@ final class WasmKittyGraphicsBindings implements KittyGraphicsBindings {
   }
 
   int _allocate(int size, {int alignment = 1}) {
-    final pointer = _require(_exports.allocateU8Array(size));
+    final pointer = _require(_exports.allocateBytes(size));
     if (pointer % alignment != 0) {
-      _exports.freeU8Array(pointer, size);
+      _exports.freeBytes(pointer, size);
       throw StateError('libghostty WASM allocator returned misaligned memory.');
     }
     return pointer;

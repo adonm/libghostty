@@ -8,6 +8,7 @@ import 'package:libghostty/src/bindings/types.dart';
 import 'package:libghostty/src/generated/libghostty_enums.g.dart';
 import 'package:libghostty/src/types/exceptions.dart';
 import 'package:libghostty/src/types/geometry.dart';
+import 'package:libghostty/src/types/terminal.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -75,6 +76,56 @@ void main() {
       expect(
         bindings.terminalGetActiveScreen(terminal),
         TerminalScreen.primary,
+      );
+    });
+
+    test('writes through ground and reports partial consumption', () {
+      final terminal = createTerminal();
+
+      bindings.terminalVtWrite(terminal, Uint8List.fromList([0x1b, 0x5b]));
+
+      expect(
+        bindings.terminalWriteUntilGround(
+          terminal,
+          Uint8List.fromList('31mA'.codeUnits),
+        ),
+        3,
+      );
+      bindings.terminalVtWrite(terminal, Uint8List.fromList([0x1b, 0x5b]));
+      expect(
+        bindings.terminalWriteUntilGround(
+          terminal,
+          Uint8List.fromList('31'.codeUnits),
+        ),
+        isNull,
+      );
+    });
+
+    test('copies binary unknown sequence callback data', () {
+      final terminal = createTerminal();
+      TerminalUnknownSequence? sequence;
+      bindings.terminalSetUnknownSequenceMaxBytes(terminal, 2);
+      bindings.terminalSetOnUnknownSequence(
+        terminal,
+        (value) => sequence = value,
+      );
+
+      bindings.terminalVtWrite(
+        terminal,
+        Uint8List.fromList([0x1b, 0x5f, 0x00, 0x01, 0x02, 0x1b, 0x5c]),
+      );
+
+      expect(sequence?.tag, TerminalUnknownSequenceTag.apc);
+      expect(sequence?.content, Uint8List.fromList([0x00, 0x01]));
+      expect(sequence?.truncated, isTrue);
+    });
+
+    test('maps terminfo byte-limit failures', () {
+      final terminal = createTerminal();
+
+      expect(
+        () => bindings.terminalSetTerminfoName(terminal, 'a' * 129),
+        throwsA(isA<InvalidValueException>()),
       );
     });
 

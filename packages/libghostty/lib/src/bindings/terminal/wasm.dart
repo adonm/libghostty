@@ -193,7 +193,7 @@ final class WasmTerminalBindings implements TerminalBindings {
     final buffers = _stringBuffers.remove(terminal.value);
     if (buffers != null) {
       for (final buffer in buffers.values) {
-        _exports.freeU8Array(buffer.$1, buffer.$2);
+        _exports.freeBytes(buffer.$1, buffer.$2);
       }
     }
   }
@@ -245,6 +245,10 @@ final class WasmTerminalBindings implements TerminalBindings {
   @override
   bool terminalGetCursorPendingWrap(LibGhosttyHandle terminal) =>
       _getBool(terminal, .cursorPendingWrap, 'ghostty_terminal_get');
+
+  @override
+  bool terminalGetCursorAtPrompt(LibGhosttyHandle terminal) =>
+      _getBool(terminal, .cursorAtPrompt, 'ghostty_terminal_get');
 
   @override
   Style terminalGetCursorStyle(LibGhosttyHandle terminal) =>
@@ -353,11 +357,11 @@ final class WasmTerminalBindings implements TerminalBindings {
 
   @override
   int? terminalGetScrollbackMaxBytes(LibGhosttyHandle terminal) =>
-      _getOptionalU64(terminal, .scrollbackMaxBytes);
+      _getOptionalUsize(terminal, .scrollbackMaxBytes);
 
   @override
   int? terminalGetScrollbackMaxLines(LibGhosttyHandle terminal) =>
-      _getOptionalU64(terminal, .scrollbackMaxLines);
+      _getOptionalUsize(terminal, .scrollbackMaxLines);
 
   @override
   int terminalGetScrollbackRows(LibGhosttyHandle terminal) =>
@@ -379,7 +383,7 @@ final class WasmTerminalBindings implements TerminalBindings {
         visible: _memory.readU32(pointer + _layout.scrollbarVisible),
       );
     } finally {
-      _exports.freeU8Array(pointer, _layout.scrollbarSize);
+      _exports.freeBytes(pointer, _layout.scrollbarSize);
     }
   }
 
@@ -400,6 +404,10 @@ final class WasmTerminalBindings implements TerminalBindings {
       _getBool(terminal, .vtProcessingError, 'ghostty_terminal_get');
 
   @override
+  bool terminalGetVtGround(LibGhosttyHandle terminal) =>
+      _getBool(terminal, .vtGround, 'ghostty_terminal_get');
+
+  @override
   int terminalGetWidthPx(LibGhosttyHandle terminal) =>
       _getU32(terminal, .widthPx, 'ghostty_terminal_get');
 
@@ -416,7 +424,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       checkResultCode(result, operation: 'ghostty_terminal_get');
       return _memory.readU8(pointer + _layout.terminalModeConfigValue) != 0;
     } finally {
-      _exports.freeU8Array(pointer, _layout.terminalModeConfigSize);
+      _exports.freeBytes(pointer, _layout.terminalModeConfigSize);
     }
   }
 
@@ -444,7 +452,7 @@ final class WasmTerminalBindings implements TerminalBindings {
     try {
       final result = _exports.ghostty_terminal_new(0, out, cols, rows);
       checkResultCode(result, operation: 'ghostty_terminal_new');
-      return .fromAddress(_memory.readPtr(out));
+      return .fromAddress(_exports.ghostty_wasm_take_opaque(out));
     } finally {
       _exports.freeOpaque(out);
     }
@@ -558,7 +566,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       );
       checkResultCode(result, operation: 'ghostty_terminal_set');
     } finally {
-      _exports.freeU8Array(pointer, size);
+      _exports.freeBytes(pointer, size);
     }
   }
 
@@ -972,6 +980,53 @@ final class WasmTerminalBindings implements TerminalBindings {
   }
 
   @override
+  void terminalSetOnUnknownSequence(
+    LibGhosttyHandle terminal,
+    TerminalUnknownSequenceCallback? callback,
+  ) {
+    _setCallback(
+      terminal,
+      .unknownSequence,
+      callback,
+      (reuseIndex) => _registerCallback(
+        ((int _, int _, int pointer) {
+          try {
+            final content =
+                pointer +
+                _layout.unknownSequenceValue +
+                _layout.unknownStringSequenceContent;
+            final contentPointer = _memory.readPtr(content);
+            final contentLength = _memory.readU32(content + _layout.stringLen);
+            callback!(
+              TerminalUnknownSequence(
+                tag: .fromValue(
+                  _memory.readU32(pointer + _layout.unknownSequenceTag),
+                ),
+                content: contentPointer == 0 || contentLength == 0
+                    ? Uint8List(0)
+                    : Uint8List.fromList(
+                        _memory.readBytes(contentPointer, contentLength),
+                      ),
+                truncated:
+                    _memory.readU8(
+                      pointer +
+                          _layout.unknownSequenceValue +
+                          _layout.unknownStringSequenceTruncated,
+                    ) !=
+                    0,
+              ),
+            );
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
+          }
+        }).toJS,
+        ['i32', 'i32', 'i32'],
+        reuseIndex: reuseIndex,
+      ),
+    );
+  }
+
+  @override
   void terminalSetOnWritePty(
     LibGhosttyHandle terminal,
     ValueSetter<Uint8List>? callback,
@@ -1049,6 +1104,19 @@ final class WasmTerminalBindings implements TerminalBindings {
   }
 
   @override
+  void terminalSetUnknownSequenceMaxBytes(
+    LibGhosttyHandle terminal,
+    int? bytes,
+  ) {
+    _setU32(terminal, .unknownMaxBytes, bytes);
+  }
+
+  @override
+  void terminalSetTerminfoName(LibGhosttyHandle terminal, String? name) {
+    _setString(terminal, .terminfoName, name);
+  }
+
+  @override
   void terminalSetTitle(LibGhosttyHandle terminal, String? title) {
     _setString(terminal, .title, title);
   }
@@ -1099,19 +1167,62 @@ final class WasmTerminalBindings implements TerminalBindings {
     }
   }
 
-  int _allocateBytes(int size, {int alignment = 1}) {
-    final requiredAlignment = alignment < _layout.maxAlignment
-        ? _layout.maxAlignment
-        : alignment;
-    return _requirePointer(
-      _exports.allocateAlignedU8Array(size, alignment: requiredAlignment),
-    );
+  @override
+  int? terminalWriteUntilGround(LibGhosttyHandle terminal, Uint8List data) {
+    final frame = _scratch.acquire(const []);
+    try {
+      final pointer = data.isEmpty ? 0 : frame.variableAddress(0, data.length);
+      if (data.isNotEmpty) _memory.writeBytes(pointer, data);
+      final consumed = frame.variableAddress(
+        1,
+        _wasmSizeSize,
+        alignment: _wasmSizeSize,
+      );
+      var reachedGround = true;
+      void operation() {
+        final result = _exports.ghostty_terminal_vt_write_until_ground(
+          terminal.value,
+          pointer,
+          data.length,
+          consumed,
+        );
+        if (result == Result.noValue.value) {
+          reachedGround = false;
+          return;
+        }
+        checkResultCode(
+          result,
+          operation: 'ghostty_terminal_vt_write_until_ground',
+        );
+      }
+
+      if (_callbacks.isEmpty || _callbackError != null) {
+        if (_callbackError != null) {
+          _runNestedCallbackOperation(operation);
+        } else {
+          operation();
+        }
+      } else {
+        operation();
+        final failure = _callbackError;
+        if (failure != null) {
+          _callbackError = null;
+          Error.throwWithStackTrace(failure.error, failure.stackTrace);
+        }
+      }
+      final result = _memory.readU32(consumed);
+      return reachedGround ? result : null;
+    } finally {
+      frame.release();
+    }
   }
 
+  int _allocateBytes(int size) => _requirePointer(_exports.allocateBytes(size));
+
   int _allocateSize() {
-    final pointer = _requirePointer(_exports.allocateUsize());
+    final pointer = _requirePointer(_exports.allocateBytes(4));
     if (pointer % _wasmSizeSize != 0) {
-      _exports.freeUsize(pointer);
+      _exports.freeBytes(pointer, 4);
       throw StateError('libghostty WASM allocator returned misaligned memory.');
     }
     return pointer;
@@ -1132,7 +1243,7 @@ final class WasmTerminalBindings implements TerminalBindings {
     final map = _stringBuffers[terminal];
     final previous = map?.remove(option);
     if (previous != null) {
-      _exports.freeU8Array(previous.$1, previous.$2);
+      _exports.freeBytes(previous.$1, previous.$2);
     }
     if (map != null && map.isEmpty) _stringBuffers.remove(terminal);
   }
@@ -1156,12 +1267,12 @@ final class WasmTerminalBindings implements TerminalBindings {
       checkResultCode(result, operation: operation);
       return _memory.readI32(pointer);
     } finally {
-      _exports.freeUsize(pointer);
+      _exports.freeBytes(pointer, 4);
     }
   }
 
   bool? _getOptionalBool(LibGhosttyHandle terminal, TerminalData data) {
-    final pointer = _requirePointer(_exports.allocateU8());
+    final pointer = _requirePointer(_exports.allocateBytes(1));
     try {
       final result = _exports.ghostty_terminal_get(
         terminal.value,
@@ -1173,7 +1284,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       }
       return _memory.readU8(pointer) != 0;
     } finally {
-      _exports.freeU8(pointer);
+      _exports.freeBytes(pointer, 1);
     }
   }
 
@@ -1190,7 +1301,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       }
       return _readRgb(pointer);
     } finally {
-      _exports.freeU8Array(pointer, _layout.colorRgbSize);
+      _exports.freeBytes(pointer, _layout.colorRgbSize);
     }
   }
 
@@ -1207,7 +1318,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       }
       return _readString(pointer);
     } finally {
-      _exports.freeU8Array(pointer, _layout.stringSize);
+      _exports.freeBytes(pointer, _layout.stringSize);
     }
   }
 
@@ -1224,7 +1335,24 @@ final class WasmTerminalBindings implements TerminalBindings {
       }
       return _memory.readU64(pointer);
     } finally {
-      _exports.freeU8Array(pointer, 8);
+      _exports.freeBytes(pointer, 8);
+    }
+  }
+
+  int? _getOptionalUsize(LibGhosttyHandle terminal, TerminalData data) {
+    final pointer = _allocateSize();
+    try {
+      final result = _exports.ghostty_terminal_get(
+        terminal.value,
+        data.value,
+        pointer,
+      );
+      if (!checkOptionalCode(result, operation: 'ghostty_terminal_get')) {
+        return null;
+      }
+      return _memory.readU32(pointer);
+    } finally {
+      _exports.freeBytes(pointer, 4);
     }
   }
 
@@ -1243,7 +1371,7 @@ final class WasmTerminalBindings implements TerminalBindings {
           _readRgb(pointer + i * _layout.colorRgbSize),
       ];
     } finally {
-      _exports.freeU8Array(pointer, size);
+      _exports.freeBytes(pointer, size);
     }
   }
 
@@ -1258,7 +1386,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       checkResultCode(result, operation: 'ghostty_terminal_get');
       return _readString(pointer);
     } finally {
-      _exports.freeU8Array(pointer, _layout.stringSize);
+      _exports.freeBytes(pointer, _layout.stringSize);
     }
   }
 
@@ -1274,7 +1402,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       checkResultCode(result, operation: 'ghostty_terminal_get');
       return _readStyle(pointer);
     } finally {
-      _exports.freeU8Array(pointer, _layout.styleSize);
+      _exports.freeBytes(pointer, _layout.styleSize);
     }
   }
 
@@ -1289,7 +1417,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       checkResultCode(result, operation: operation);
       return _memory.readU16(pointer);
     } finally {
-      _exports.freeUsize(pointer);
+      _exports.freeBytes(pointer, 4);
     }
   }
 
@@ -1304,12 +1432,12 @@ final class WasmTerminalBindings implements TerminalBindings {
       checkResultCode(result, operation: operation);
       return _memory.readU32(pointer);
     } finally {
-      _exports.freeUsize(pointer);
+      _exports.freeBytes(pointer, 4);
     }
   }
 
   int _getU8(LibGhosttyHandle terminal, TerminalData data, String operation) {
-    final pointer = _requirePointer(_exports.allocateU8());
+    final pointer = _requirePointer(_exports.allocateBytes(1));
     try {
       final result = _exports.ghostty_terminal_get(
         terminal.value,
@@ -1319,7 +1447,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       checkResultCode(result, operation: operation);
       return _memory.readU8(pointer);
     } finally {
-      _exports.freeU8(pointer);
+      _exports.freeBytes(pointer, 1);
     }
   }
 
@@ -1411,10 +1539,10 @@ final class WasmTerminalBindings implements TerminalBindings {
     final map = _stringBuffers.putIfAbsent(terminal, () => {});
     final previous = map[option];
     final allocationLength = bytes.isEmpty ? 1 : bytes.length;
-    final pointer = _requirePointer(_exports.allocateU8Array(allocationLength));
+    final pointer = _requirePointer(_exports.allocateBytes(allocationLength));
     _memory.writeBytes(pointer, bytes);
     if (previous != null) {
-      _exports.freeU8Array(previous.$1, previous.$2);
+      _exports.freeBytes(previous.$1, previous.$2);
     }
     map[option] = (pointer, allocationLength);
   }
@@ -1446,7 +1574,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       _setNull(terminal, option);
       return;
     }
-    final pointer = _requirePointer(_exports.allocateU8());
+    final pointer = _requirePointer(_exports.allocateBytes(1));
     try {
       _memory.writeU8(pointer, value ? 1 : 0);
       final result = _exports.ghostty_terminal_set(
@@ -1456,7 +1584,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       );
       checkResultCode(result, operation: 'ghostty_terminal_set');
     } finally {
-      _exports.freeU8(pointer);
+      _exports.freeBytes(pointer, 1);
     }
   }
 
@@ -1510,7 +1638,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       );
       checkResultCode(result, operation: 'ghostty_terminal_set');
     } finally {
-      _exports.freeU8Array(pointer, _layout.colorRgbSize);
+      _exports.freeBytes(pointer, _layout.colorRgbSize);
     }
   }
 
@@ -1529,7 +1657,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       );
       checkResultCode(result, operation: 'ghostty_terminal_set');
     } finally {
-      _exports.freeUsize(pointer);
+      _exports.freeBytes(pointer, 4);
     }
   }
 
@@ -1550,7 +1678,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       );
       checkResultCode(result, operation: 'ghostty_terminal_set');
     } finally {
-      _exports.freeU8Array(pointer, _layout.terminalModeConfigSize);
+      _exports.freeBytes(pointer, _layout.terminalModeConfigSize);
     }
   }
 
@@ -1587,9 +1715,9 @@ final class WasmTerminalBindings implements TerminalBindings {
       );
       checkResultCode(result, operation: 'ghostty_terminal_set');
     } finally {
-      _exports.freeU8Array(bytesPointer, bytes.isEmpty ? 1 : bytes.length);
+      _exports.freeBytes(bytesPointer, bytes.isEmpty ? 1 : bytes.length);
       if (stringPointer != 0) {
-        _exports.freeU8Array(stringPointer, _layout.stringSize);
+        _exports.freeBytes(stringPointer, _layout.stringSize);
       }
     }
   }
@@ -1609,7 +1737,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       );
       checkResultCode(result, operation: 'ghostty_terminal_set');
     } finally {
-      _exports.freeUsize(pointer);
+      _exports.freeBytes(pointer, 4);
     }
   }
 
@@ -1628,7 +1756,7 @@ final class WasmTerminalBindings implements TerminalBindings {
       );
       checkResultCode(result, operation: 'ghostty_terminal_set');
     } finally {
-      _exports.freeU8Array(pointer, 8);
+      _exports.freeBytes(pointer, 8);
     }
   }
 

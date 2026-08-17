@@ -15,7 +15,7 @@ import 'package:libghostty/libghostty.dart';
 import 'helpers/font_loader.dart';
 
 void main() {
-  group('Cursor goldens', () {
+  group('RenderStateCursor goldens', () {
     const cjkFallback = ['Noto Sans JP', 'JetBrains Mono'];
     const cols = 15;
     const emojiFallback = ['Noto Emoji', 'JetBrains Mono'];

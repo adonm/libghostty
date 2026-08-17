@@ -1521,20 +1521,20 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// @ingroup render
   external int ghostty_render_state_begin_update(int state, int terminal);
 
-  /// Get the current color information from a render state.
+  /// Mark all dirty render-state data as consumed.
   ///
-  /// This writes as many fields as fit in the caller-provided sized struct.
-  /// `out_colors->size` must be set by the caller (typically via
-  /// GHOSTTY_INIT_SIZED(GhosttyRenderStateColors)).
+  /// This sets the global dirty state to GHOSTTY_RENDER_STATE_DIRTY_FALSE and
+  /// clears every per-row dirty flag. It is idempotent and does not modify cell
+  /// contents or dirty state owned by the terminal. Call this only after a
+  /// complete frame has been rendered successfully; partial consumers should
+  /// use ghostty_render_state_set() and ghostty_render_state_row_set() instead.
   ///
   /// @param state The render state handle (NULL returns GHOSTTY_INVALID_VALUE)
-  /// @param[out] out_colors Sized output struct to receive render-state colors
-  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` or
-  /// `out_colors` is NULL, or if `out_colors->size` is smaller than
-  /// `sizeof(size_t)`
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` is
+  /// NULL
   ///
   /// @ingroup render
-  external int ghostty_render_state_colors_get(int state, Pointer out_colors);
+  external int ghostty_render_state_clean(int state);
 
   /// Complete a prior ghostty_render_state_begin_update call by performing any
   /// deferred work.
@@ -1568,8 +1568,9 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// @param state The render state handle (NULL returns GHOSTTY_INVALID_VALUE)
   /// @param data The data kind to query
   /// @param[out] out Pointer to receive the queried value
-  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` is
-  /// NULL or `data` is not a recognized enum value
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` or
+  /// `out` is NULL, `data` is not a recognized enum value, or a sized
+  /// output struct is smaller than `sizeof(size_t)`
   ///
   /// @ingroup render
   external int ghostty_render_state_get(int state, int data, Pointer out);
@@ -1716,7 +1717,8 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   ///
   /// The `out` pointer must point to a value of the type corresponding to the
   /// requested data kind (see GhosttyRenderStateRowData).
-  /// Call ghostty_render_state_row_iterator_next() at least once before
+  /// Call ghostty_render_state_row_iterator_next() or
+  /// ghostty_render_state_row_iterator_next_dirty() at least once before
   /// calling this function.
   ///
   /// @param iterator The iterator handle to query (NULL returns GHOSTTY_INVALID_VALUE)
@@ -1785,7 +1787,8 @@ extension type GhosttyExports(JSObject _) implements JSObject {
 
   /// Move a render-state row iterator to the next row.
   ///
-  /// Returns true if the iterator moved successfully and row data is
+  /// Rows are visited contiguously in ascending viewport order, starting at
+  /// y = 0. Returns true if the iterator moved successfully and row data is
   /// available to read at the new position.
   ///
   /// @param iterator The iterator handle to advance (may be NULL)
@@ -1795,11 +1798,34 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// @ingroup render
   external int ghostty_render_state_row_iterator_next(int iterator);
 
+  /// Move a render-state row iterator to the next row requiring a redraw.
+  ///
+  /// If the global dirty state is GHOSTTY_RENDER_STATE_DIRTY_FALSE, this returns
+  /// false. If it is GHOSTTY_RENDER_STATE_DIRTY_PARTIAL, clean rows are skipped.
+  /// If it is GHOSTTY_RENDER_STATE_DIRTY_FULL, every remaining row is returned
+  /// regardless of its per-row dirty flag. Rows are returned in ascending
+  /// viewport order. This function does not clear any dirty state.
+  ///
+  /// @param iterator The iterator handle to advance (NULL returns false)
+  /// @param[out] out_y Receives the viewport y coordinate when true is returned
+  /// (NULL returns false); it is not modified when false is
+  /// returned
+  /// @return true if advanced to a row requiring a redraw, false if an argument
+  /// is NULL or the iterator has reached the end of the effective dirty
+  /// rows
+  ///
+  /// @ingroup render
+  external int ghostty_render_state_row_iterator_next_dirty(
+    int iterator,
+    Pointer out_y,
+  );
+
   /// Set an option on the current row in a render-state row iterator.
   ///
   /// The `value` pointer must point to a value of the type corresponding to the
   /// requested option kind (see GhosttyRenderStateRowOption).
-  /// Call ghostty_render_state_row_iterator_next() at least once before
+  /// Call ghostty_render_state_row_iterator_next() or
+  /// ghostty_render_state_row_iterator_next_dirty() at least once before
   /// calling this function.
   ///
   /// @param iterator The iterator handle to update (NULL returns GHOSTTY_INVALID_VALUE)
@@ -2685,8 +2711,8 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES to a nonzero value before the
   /// input that produced the continuation was written.
   ///
-  /// The caller must serialize this operation with ghostty_terminal_vt_write()
-  /// and all other access to the same terminal.
+  /// The caller must serialize this operation with both VT write functions and
+  /// all other access to the same terminal.
   ///
   /// @param terminal Terminal to read from (must not be NULL)
   /// @param writer Destination writer whose write callback must not be NULL
@@ -3245,9 +3271,10 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// The behavior of a NULL value is specific to each option and is
   /// documented by the corresponding GhosttyTerminalOption value.
   ///
-  /// Callbacks are invoked synchronously during ghostty_terminal_vt_write().
-  /// Callbacks must not call ghostty_terminal_vt_write() on the same
-  /// terminal (no reentrancy).
+  /// Callbacks are invoked synchronously during VT writes. Callbacks must not
+  /// call ghostty_terminal_vt_write() or
+  /// ghostty_terminal_vt_write_until_ground() on the same terminal
+  /// (no reentrancy).
   ///
   /// @param terminal The terminal handle (may be NULL, in which case this is a no-op)
   /// @param option The option to set
@@ -3277,6 +3304,37 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   ///
   /// @ingroup terminal
   external void ghostty_terminal_vt_write(int terminal, Pointer data, int len);
+
+  /// Write VT-encoded data, but only the shortest prefix needed to reach ground.
+  ///
+  /// Ground is when the stream isn't in the middle of any type of sequence:
+  /// UTF-8, ESC, CSI, OSC, etc. It is the stateless point of the stream.
+  ///
+  /// This is useful to know because it is a point at which you can
+  /// safely insert out-of-band VT sequences. For example, while reading
+  /// from a pty if you want to make your own changes, you can wait until
+  /// the pty input reaches ground, then write yours.
+  ///
+  /// If the stream is already at ground then this consumes nothing and returns
+  /// GHOSTTY_SUCCESS. On success, out_consumed is the number of bytes consumed
+  /// before reaching ground, including the byte that reaches it.
+  /// GHOSTTY_NO_VALUE means the full slice was consumed without reaching ground.
+  ///
+  /// @param terminal The terminal handle (must not be NULL)
+  /// @param data Pointer to the data to write, or NULL when len is zero
+  /// @param len Length of the data in bytes
+  /// @param[out] out_consumed Number of bytes consumed (must not be NULL)
+  /// @return GHOSTTY_SUCCESS if ground was reached, GHOSTTY_NO_VALUE if all input
+  /// was consumed without reaching ground, or GHOSTTY_INVALID_VALUE if
+  /// an argument is invalid
+  ///
+  /// @ingroup terminal
+  external int ghostty_terminal_vt_write_until_ground(
+    int terminal,
+    Pointer data,
+    int len,
+    Pointer out_consumed,
+  );
 
   /// Free a tracked grid reference.
   ///
@@ -3371,29 +3429,51 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// @ingroup grid_ref
   external int ghostty_tracked_grid_ref_snapshot(int ref, Pointer out_ref);
 
-  /// Return a pointer to a null-terminated JSON string describing the
-  /// layout of every C API struct for the current target.
+  /// Return the versioned libghostty-vt C type manifest for the current target.
   ///
-  /// This is primarily useful for language bindings that can't easily
-  /// set C struct fields and need to do so via byte offsets. For example,
-  /// WebAssembly modules can't share struct definitions with the host.
+  /// The manifest defines all the public types available in the linked
+  /// build. The types contain their layouts, enum values, union fields, and more.
+  ///
+  /// Language bindings, such as WebAssembly hosts, should obtain offsets,
+  /// sizes, alignments, array shapes, enum constants, and tagged-union arms from
+  /// this manifest rather than hardcoding them. Consumers should reject unknown
+  /// schema versions and verify the descriptors they require at initialization.
+  ///
+  /// Packed type descriptors define fields using `lsb` and `width`. `lsb` is
+  /// relative to bit zero of the containing numerical value; for nested packed
+  /// layouts it is relative to the immediate containing field. Tagged packed
+  /// unions select an inline arm layout using the named tag field. These layouts
+  /// describe the current linked build and are not a cross-version stability
+  /// promise.
+  ///
+  /// The formal format is defined by the
+  /// <a href="types.schema.json">libghostty-vt ABI manifest JSON Schema</a>.
   ///
   /// Example (abbreviated):
   /// @code{.json}
   /// {
-  /// "GhosttyMouseEncoderSize": {
-  /// "size": 40,
-  /// "align": 8,
+  /// "schema": 1,
+  /// "abi": {
+  /// "target": "wasm32", "os": "freestanding", "environment": "none",
+  /// "pointer_size": 4, "usize_size": 4, "max_alignment": 16,
+  /// "endian": "little"
+  /// },
+  /// "types": {
+  /// "GhosttyRenderStateData": {
+  /// "kind": "enum", "size": 4, "align": 4,
+  /// "underlying": "i32", "prefix": "GHOSTTY_RENDER_STATE_DATA_",
+  /// "values": { "INVALID": 0, "DIRTY": 3, "MAX_VALUE": 2147483647 }
+  /// },
+  /// "GhosttyStyleColor": {
+  /// "kind": "struct", "size": 16, "align": 8,
   /// "fields": {
-  /// "size":           { "offset": 0,  "size": 8, "type": "u64" },
-  /// "screen_width":   { "offset": 8,  "size": 4, "type": "u32" },
-  /// "screen_height":  { "offset": 12, "size": 4, "type": "u32" },
-  /// "cell_width":     { "offset": 16, "size": 4, "type": "u32" },
-  /// "cell_height":    { "offset": 20, "size": 4, "type": "u32" },
-  /// "padding_top":    { "offset": 24, "size": 4, "type": "u32" },
-  /// "padding_bottom": { "offset": 28, "size": 4, "type": "u32" },
-  /// "padding_right":  { "offset": 32, "size": 4, "type": "u32" },
-  /// "padding_left":   { "offset": 36, "size": 4, "type": "u32" }
+  /// "tag": { "offset": 0, "size": 4,
+  /// "type": "GhosttyStyleColorTag" },
+  /// "value": { "offset": 8, "size": 8,
+  /// "type": "GhosttyStyleColorValue", "tag": "tag",
+  /// "arms": { "NONE": null, "PALETTE": "palette",
+  /// "RGB": "rgb" } }
+  /// }
   /// }
   /// }
   /// }
@@ -3512,48 +3592,35 @@ extension type GhosttyExports(JSObject _) implements JSObject {
     Pointer width,
   );
 
+  /// Allocate caller-owned storage for a Wasm ABI value or scratch buffer.
+  ///
+  /// The returned address is aligned to the target's maximum C ABI alignment,
+  /// reported as `abi.max_alignment` by ghostty_type_json(). The memory is
+  /// uninitialized. A zero-length request returns NULL.
+  ///
+  /// The returned pointer must be released with ghostty_wasm_free() using the
+  /// exact same length.
+  ///
+  /// @param len Number of bytes to allocate
+  /// @return Pointer to allocated storage, or NULL if len is zero or allocation
+  /// failed
+  /// @ingroup wasm
+  external Pointer ghostty_wasm_alloc(int len);
+
   /// Allocate an opaque pointer. This can be used for any opaque pointer
-  /// types such as GhosttyKeyEncoder, GhosttyKeyEvent, etc.
+  /// types such as GhosttyKeyEncoder, GhosttyKeyEvent, etc. The allocated slot
+  /// is initialized to NULL and may be reused across constructors.
   ///
   /// @return Pointer to allocated opaque pointer, or NULL if allocation failed
   /// @ingroup wasm
   external Pointer ghostty_wasm_alloc_opaque();
 
-  /// Allocate memory for an SGR attribute (WebAssembly only).
+  /// Free storage allocated by ghostty_wasm_alloc().
   ///
-  /// This is a convenience function for WebAssembly environments to allocate
-  /// memory for an SGR attribute structure that can be passed to ghostty_sgr_next.
-  ///
-  /// @return Pointer to the allocated attribute structure
-  ///
+  /// @param ptr Pointer to free, or NULL (NULL is safely ignored)
+  /// @param len Original allocation length passed to ghostty_wasm_alloc()
   /// @ingroup wasm
-  external Pointer ghostty_wasm_alloc_sgr_attribute();
-
-  /// Allocate an array of uint16_t values.
-  ///
-  /// @param len Number of uint16_t elements to allocate
-  /// @return Pointer to allocated array, or NULL if allocation failed
-  /// @ingroup wasm
-  external Pointer ghostty_wasm_alloc_u16_array(int len);
-
-  /// Allocate a single uint8_t value.
-  ///
-  /// @return Pointer to allocated uint8_t, or NULL if allocation failed
-  /// @ingroup wasm
-  external Pointer ghostty_wasm_alloc_u8();
-
-  /// Allocate an array of uint8_t values.
-  ///
-  /// @param len Number of uint8_t elements to allocate
-  /// @return Pointer to allocated array, or NULL if allocation failed
-  /// @ingroup wasm
-  external Pointer ghostty_wasm_alloc_u8_array(int len);
-
-  /// Allocate a single size_t value.
-  ///
-  /// @return Pointer to allocated size_t, or NULL if allocation failed
-  /// @ingroup wasm
-  external Pointer ghostty_wasm_alloc_usize();
+  external void ghostty_wasm_free(Pointer ptr, int len);
 
   /// Free an opaque pointer allocated by ghostty_wasm_alloc_opaque().
   ///
@@ -3561,38 +3628,15 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// @ingroup wasm
   external void ghostty_wasm_free_opaque(Pointer ptr);
 
-  /// Free memory for an SGR attribute (WebAssembly only).
+  /// Take an opaque handle from an out-parameter slot.
   ///
-  /// Frees memory allocated by ghostty_wasm_alloc_sgr_attribute.
+  /// Returns the handle currently stored in @p slot and resets the slot to NULL.
+  /// This function does not allocate, free the returned handle, or free the slot.
+  /// Always check the GhosttyResult returned by the function that populated the
+  /// slot before calling this function.
   ///
-  /// @param attr Pointer to the attribute structure to free
-  ///
+  /// @param slot Pointer to an opaque out-parameter slot, or NULL
+  /// @return Stored opaque handle, or NULL if slot or its value is NULL
   /// @ingroup wasm
-  external void ghostty_wasm_free_sgr_attribute(Pointer attr);
-
-  /// Free an array allocated by ghostty_wasm_alloc_u16_array().
-  ///
-  /// @param ptr Pointer to the array to free, or NULL (NULL is safely ignored)
-  /// @param len Length of the array (must match the length passed to alloc)
-  /// @ingroup wasm
-  external void ghostty_wasm_free_u16_array(Pointer ptr, int len);
-
-  /// Free a uint8_t allocated by ghostty_wasm_alloc_u8().
-  ///
-  /// @param ptr Pointer to free, or NULL (NULL is safely ignored)
-  /// @ingroup wasm
-  external void ghostty_wasm_free_u8(Pointer ptr);
-
-  /// Free an array allocated by ghostty_wasm_alloc_u8_array().
-  ///
-  /// @param ptr Pointer to the array to free, or NULL (NULL is safely ignored)
-  /// @param len Length of the array (must match the length passed to alloc)
-  /// @ingroup wasm
-  external void ghostty_wasm_free_u8_array(Pointer ptr, int len);
-
-  /// Free a size_t allocated by ghostty_wasm_alloc_usize().
-  ///
-  /// @param ptr Pointer to free, or NULL (NULL is safely ignored)
-  /// @ingroup wasm
-  external void ghostty_wasm_free_usize(Pointer ptr);
+  external Pointer ghostty_wasm_take_opaque(Pointer slot);
 }

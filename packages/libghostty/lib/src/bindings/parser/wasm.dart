@@ -4,16 +4,18 @@ import '../../types/types.dart';
 import '../result_helpers.dart';
 import '../types.dart';
 import '../wasm/allocator.dart';
+import '../wasm/layouts.dart';
 import '../wasm/memory.dart';
 import '../wasm/scratch.dart';
 import 'parser.dart';
 
 final class WasmParserBindings implements ParserBindings {
   final Memory _memory;
+  final Layouts _layout;
   final GhosttyExports _exports;
   final WasmScratchPool _scratch;
 
-  WasmParserBindings(this._exports)
+  WasmParserBindings(this._exports, this._layout)
     : _memory = Memory(_exports),
       _scratch = WasmScratchPool(
         WasmExportScratchAllocator(_exports),
@@ -35,7 +37,7 @@ final class WasmParserBindings implements ParserBindings {
         out,
       );
       if (present == 0) return null;
-      final pointer = _memory.readPtr(out);
+      final pointer = _exports.ghostty_wasm_take_opaque(out);
       if (pointer == 0) return null;
       return _memory.readCString(pointer);
     } finally {
@@ -64,7 +66,7 @@ final class WasmParserBindings implements ParserBindings {
     try {
       final result = _exports.ghostty_osc_new(0, out);
       checkResultCode(result, operation: 'ghostty_osc_new');
-      return .fromAddress(_memory.readPtr(out));
+      return .fromAddress(_exports.ghostty_wasm_take_opaque(out));
     } finally {
       _exports.freeOpaque(out);
     }
@@ -86,7 +88,7 @@ final class WasmParserBindings implements ParserBindings {
     try {
       final result = _exports.ghostty_sgr_new(0, out);
       checkResultCode(result, operation: 'ghostty_sgr_new');
-      return .fromAddress(_memory.readPtr(out));
+      return .fromAddress(_exports.ghostty_wasm_take_opaque(out));
     } finally {
       _exports.freeOpaque(out);
     }
@@ -94,12 +96,14 @@ final class WasmParserBindings implements ParserBindings {
 
   @override
   SgrAttribute? sgrNext(LibGhosttyHandle parser) {
-    final pointer = _requirePointer(_exports.allocateSgrAttribute());
+    final pointer = _requirePointer(
+      _exports.allocateBytes(_layout.sgrAttributeSize),
+    );
     try {
       if (_exports.ghostty_sgr_next(parser.value, pointer) == 0) return null;
       return _readSgrAttribute(pointer);
     } finally {
-      _exports.freeSgrAttribute(pointer);
+      _exports.freeBytes(pointer, _layout.sgrAttributeSize);
     }
   }
 

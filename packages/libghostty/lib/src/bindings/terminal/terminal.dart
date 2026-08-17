@@ -29,6 +29,7 @@ abstract interface class TerminalBindings {
   List<RgbColor> terminalGetColorPaletteDefault(LibGhosttyHandle terminal);
   int terminalGetCols(LibGhosttyHandle terminal);
   int terminalGetContinuationMaxBytes(LibGhosttyHandle terminal);
+  bool terminalGetCursorAtPrompt(LibGhosttyHandle terminal);
   bool terminalGetCursorPendingWrap(LibGhosttyHandle terminal);
   Style terminalGetCursorStyle(LibGhosttyHandle terminal);
   bool terminalGetCursorVisible(LibGhosttyHandle terminal);
@@ -51,6 +52,7 @@ abstract interface class TerminalBindings {
   String terminalGetTitle(LibGhosttyHandle terminal);
   int terminalGetTotalRows(LibGhosttyHandle terminal);
   bool terminalGetViewportActive(LibGhosttyHandle terminal);
+  bool terminalGetVtGround(LibGhosttyHandle terminal);
   bool terminalGetVtProcessingError(LibGhosttyHandle terminal);
   int terminalGetWidthPx(LibGhosttyHandle terminal);
 
@@ -155,6 +157,10 @@ abstract interface class TerminalBindings {
     LibGhosttyHandle terminal,
     VoidCallback? callback,
   );
+  void terminalSetOnUnknownSequence(
+    LibGhosttyHandle terminal,
+    TerminalUnknownSequenceCallback? callback,
+  );
   void terminalSetOnWritePty(
     LibGhosttyHandle terminal,
     ValueSetter<Uint8List>? callback,
@@ -167,10 +173,16 @@ abstract interface class TerminalBindings {
   void terminalSetPwd(LibGhosttyHandle terminal, String? pwd);
   void terminalSetScrollbackMaxBytes(LibGhosttyHandle terminal, int? bytes);
   void terminalSetScrollbackMaxLines(LibGhosttyHandle terminal, int? lines);
+  void terminalSetTerminfoName(LibGhosttyHandle terminal, String? name);
   void terminalSetTitle(LibGhosttyHandle terminal, String? title);
   void terminalSetTitleReport(
     LibGhosttyHandle terminal, {
     required bool enabled,
   });
+  void terminalSetUnknownSequenceMaxBytes(
+    LibGhosttyHandle terminal,
+    int? bytes,
+  );
   void terminalVtWrite(LibGhosttyHandle terminal, Uint8List data);
+  int? terminalWriteUntilGround(LibGhosttyHandle terminal, Uint8List data);
 }

@@ -68,6 +68,143 @@ void main() {
       });
     });
 
+    group('VT parser state', () {
+      test('tracks OSC 133 prompt boundaries and alternate screen', () {
+        terminal.write(
+          Uint8List.fromList([0x1b, 0x5d, 0x31, 0x33, 0x33, 0x3b, 0x41, 0x07]),
+        );
+
+        expect(terminal.isCursorAtPrompt, isTrue);
+
+        terminal.write(
+          Uint8List.fromList([0x1b, 0x5b, 0x3f, 0x31, 0x30, 0x34, 0x39, 0x68]),
+        );
+
+        expect(terminal.isCursorAtPrompt, isFalse);
+      });
+
+      test('reports ground and consumes through ground', () {
+        expect(terminal.isVtGround, isTrue);
+
+        terminal.write(Uint8List.fromList([0x1b, 0x5b]));
+
+        expect(terminal.isVtGround, isFalse);
+        expect(
+          terminal.writeUntilGround(Uint8List.fromList('31mA'.codeUnits)),
+          3,
+        );
+
+        terminal.write(Uint8List.fromList([0x41]));
+
+        expect(terminal.isVtGround, isTrue);
+      });
+
+      test('returns null when all input is consumed before ground', () {
+        terminal.write(Uint8List.fromList([0x1b, 0x5b]));
+
+        expect(
+          terminal.writeUntilGround(Uint8List.fromList('31'.codeUnits)),
+          isNull,
+        );
+      });
+
+      test('reaches ground after completing partial UTF-8', () {
+        terminal.write(Uint8List.fromList([0xc2]));
+
+        expect(terminal.isVtGround, isFalse);
+        expect(terminal.writeUntilGround(Uint8List.fromList([0xa2, 0x41])), 1);
+      });
+
+      test('returns zero when already in ground', () {
+        expect(terminal.writeUntilGround(Uint8List.fromList([0x41])), 0);
+        expect(terminal.isVtGround, isTrue);
+      });
+    });
+
+    group('unknown sequences', () {
+      test('copies binary APC content and reports truncation', () {
+        TerminalUnknownSequence? sequence;
+        terminal.unknownSequenceMaxBytes = 2;
+        terminal.onUnknownSequence = (value) => sequence = value;
+
+        terminal.write(
+          Uint8List.fromList([0x1b, 0x5f, 0x00, 0x01, 0x02, 0x1b, 0x5c]),
+        );
+
+        expect(sequence?.tag, TerminalUnknownSequenceTag.apc);
+        expect(sequence?.content, Uint8List.fromList([0x00, 0x01]));
+        expect(sequence?.truncated, isTrue);
+      });
+
+      test('clears the callback and capture limit', () {
+        var count = 0;
+        terminal.unknownSequenceMaxBytes = 32;
+        terminal.onUnknownSequence = (_) => count++;
+        terminal.onUnknownSequence = null;
+        terminal.unknownSequenceMaxBytes = null;
+
+        terminal.write(Uint8List.fromList([0x1b, 0x5f, 0x61, 0x1b, 0x5c]));
+
+        expect(count, 0);
+      });
+    });
+
+    group('terminfoName', () {
+      test('answers and clears XTGETTCAP TN queries', () {
+        final output = <Uint8List>[];
+        terminal.terminfoName = 'xterm-256color';
+        terminal.onWritePty = output.add;
+
+        terminal.write(
+          Uint8List.fromList([
+            0x1b,
+            0x50,
+            0x2b,
+            0x71,
+            0x35,
+            0x34,
+            0x34,
+            0x45,
+            0x1b,
+            0x5c,
+          ]),
+        );
+
+        expect(
+          String.fromCharCodes(output.single),
+          contains('787465726D2D323536636F6C6F72'),
+        );
+        output.clear();
+        terminal.terminfoName = null;
+
+        terminal.write(
+          Uint8List.fromList([
+            0x1b,
+            0x50,
+            0x2b,
+            0x71,
+            0x35,
+            0x34,
+            0x34,
+            0x45,
+            0x1b,
+            0x5c,
+          ]),
+        );
+
+        expect(output, isEmpty);
+      });
+
+      test('maps the 128 UTF-8 byte limit to InvalidValueException', () {
+        terminal.terminfoName = 'xterm-256color';
+
+        expect(
+          () => terminal.terminfoName = 'a' * 129,
+          throwsA(isA<InvalidValueException>()),
+        );
+      });
+    });
+
     group('scrollbackMaxLines', () {
       test('gets the value set through the setter', () {
         terminal.scrollbackMaxLines = 100;
@@ -817,8 +954,8 @@ void main() {
         terminal.resize(cols: 40, rows: 10);
         renderState.update(terminal);
 
-        expect(renderState.cursor.position.row, lessThan(10));
-        expect(renderState.cursor.position.col, lessThan(40));
+        expect(renderState.cursor.viewportY, lessThan(10));
+        expect(renderState.cursor.viewportX, lessThan(40));
       });
 
       test('shrinking rows adjusts cursor position', () {
@@ -834,7 +971,7 @@ void main() {
         resizedTerminal.resize(cols: 10, rows: 3);
         renderState.update(resizedTerminal);
 
-        expect(renderState.cursor.position.row, 2);
+        expect(renderState.cursor.viewportY, 2);
       });
 
       test('no content duplication after shrink', () {
@@ -934,8 +1071,8 @@ void main() {
           addTearDown(t.dispose);
           _expectAllCellsEmpty(t);
           rs.update(t);
-          expect(rs.cursor.position.row, 0);
-          expect(rs.cursor.position.col, 0);
+          expect(rs.cursor.viewportY, 0);
+          expect(rs.cursor.viewportX, 0);
         });
 
         test('multiple dispose-recreate cycles produce clean screens', () {

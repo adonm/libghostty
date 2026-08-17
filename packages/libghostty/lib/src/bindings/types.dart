@@ -65,6 +65,26 @@ typedef RawSelectionGestureState = ({
   RawGridRef? anchor,
 });
 
+/// Borrowed contiguous cell storage from a render-state row.
+///
+/// This type is internal to the bindings. A view is reused by its owner rather
+/// than allocated for every row. The address is valid only until the render
+/// state is updated.
+final class RawCellsView {
+  var address = 0;
+  var length = 0;
+
+  void clear() {
+    address = 0;
+    length = 0;
+  }
+
+  void set({required int address, required int length}) {
+    this.address = address;
+    this.length = length;
+  }
+}
+
 /// An opaque libghostty handle represented by its native address or Wasm
 /// pointer.
 extension type const LibGhosttyHandle._(int value) {

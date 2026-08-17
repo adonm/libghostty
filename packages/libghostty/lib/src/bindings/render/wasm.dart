@@ -20,7 +20,7 @@ const _wasmOutputSlotSize = 8;
 const _maxMultiQueryCount = 12;
 final JSString _cellGetMultiMethod = 'ghostty_cell_get_multi'.toJS;
 final JSString _rowGetMultiMethod = 'ghostty_row_get_multi'.toJS;
-const _emptyRenderStateCursor = Cursor(visible: false);
+const _emptyRenderStateCursor = RenderStateCursor(visible: false);
 const RawRowIteratorSummary _emptyRowIteratorSummary = (
   dirty: false,
   rawRow: 0,
@@ -64,16 +64,6 @@ const _rowSummaryKeys = <RowData>[
   .hyperlink,
   .semanticPrompt,
   .kittyVirtualPlaceholder,
-];
-const _cursorStateKeys = <RenderStateData>[
-  .cursorVisualStyle,
-  .cursorVisible,
-  .cursorBlinking,
-  .cursorPasswordInput,
-  .cursorViewportHasValue,
-  .cursorViewportX,
-  .cursorViewportY,
-  .cursorViewportWideTail,
 ];
 const _renderStateSummaryKeys = <RenderStateData>[.cols, .rows, .dirty];
 
@@ -132,6 +122,10 @@ final class WasmRenderBindings implements RenderBindings {
       _required(_raw.cellGetWide(h.value), 'ghostty_cell_get');
 
   @override
+  RawCellSummary? rawCellsGetSummary(RawCellsView view, int index) =>
+      _raw.rawCellsGetSummary(view, index);
+
+  @override
   LibGhosttyHandle gridRefCell(RawGridRef r) =>
       .fromAddress(_required(_raw.gridRefCell(r), 'ghostty_grid_ref_cell'));
 
@@ -158,6 +152,10 @@ final class WasmRenderBindings implements RenderBindings {
   );
 
   @override
+  void renderStateClean(LibGhosttyHandle s) =>
+      _check(_raw.renderStateClean(s.value), 'ghostty_render_state_clean');
+
+  @override
   void renderStateEndUpdate(LibGhosttyHandle s) => _check(
     _raw.renderStateEndUpdate(s.value),
     'ghostty_render_state_end_update',
@@ -168,70 +166,16 @@ final class WasmRenderBindings implements RenderBindings {
       _raw.renderStateFree(state.value);
 
   @override
-  TerminalColors renderStateGetColors(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetColors(s.value),
-    'ghostty_render_state_colors_get',
-  );
+  TerminalColors renderStateGetColors(LibGhosttyHandle s) =>
+      _required(_raw.renderStateGetColors(s.value), 'ghostty_render_state_get');
 
   @override
   int renderStateGetCols(LibGhosttyHandle s) =>
       _required(_raw.renderStateGetCols(s.value), 'ghostty_render_state_get');
 
   @override
-  Cursor renderStateGetCursor(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursor(s.value),
-    'ghostty_render_state_get_multi',
-  );
-
-  @override
-  bool renderStateGetCursorBlinking(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursorBlinking(s.value),
-    'ghostty_render_state_get',
-  );
-
-  @override
-  bool renderStateGetCursorInViewport(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursorInViewport(s.value),
-    'ghostty_render_state_get',
-  );
-
-  @override
-  bool renderStateGetCursorPasswordInput(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursorPasswordInput(s.value),
-    'ghostty_render_state_get',
-  );
-
-  @override
-  bool renderStateGetCursorViewportWideTail(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursorViewportWideTail(s.value),
-    'ghostty_render_state_get',
-  );
-
-  @override
-  int renderStateGetCursorViewportX(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursorViewportX(s.value),
-    'ghostty_render_state_get',
-  );
-
-  @override
-  int renderStateGetCursorViewportY(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursorViewportY(s.value),
-    'ghostty_render_state_get',
-  );
-
-  @override
-  bool renderStateGetCursorVisible(LibGhosttyHandle s) => _required(
-    _raw.renderStateGetCursorVisible(s.value),
-    'ghostty_render_state_get',
-  );
-
-  @override
-  RenderStateCursorVisualStyle renderStateGetCursorVisualStyle(
-    LibGhosttyHandle s,
-  ) => _required(
-    _raw.renderStateGetCursorVisualStyle(s.value),
-    'ghostty_render_state_get',
-  );
+  RenderStateCursor renderStateGetCursor(LibGhosttyHandle s) =>
+      _required(_raw.renderStateGetCursor(s.value), 'ghostty_render_state_get');
 
   @override
   RenderStateDirty renderStateGetDirty(LibGhosttyHandle s) =>
@@ -424,6 +368,10 @@ final class WasmRenderBindings implements RenderBindings {
   );
 
   @override
+  bool rowIteratorGetRawCells(LibGhosttyHandle h, RawCellsView view) =>
+      _raw.rowIteratorGetRawCells(h.value, view);
+
+  @override
   void rowIteratorInit(LibGhosttyHandle h, LibGhosttyHandle s) => _check(
     _raw.rowIteratorInit(h.value, s.value),
     'ghostty_render_state_get',
@@ -436,6 +384,10 @@ final class WasmRenderBindings implements RenderBindings {
 
   @override
   bool rowIteratorNext(LibGhosttyHandle h) => _raw.rowIteratorNext(h.value);
+
+  @override
+  int? rowIteratorNextDirty(LibGhosttyHandle h) =>
+      _raw.rowIteratorNextDirty(h.value);
 
   @override
   void rowIteratorSetDirty(LibGhosttyHandle h, {required bool dirty}) => _check(
@@ -541,9 +493,6 @@ final class _WasmRenderRaw {
   late final int _renderStateSummaryMultiKeys;
   late final int _renderStateSummaryMultiValues;
   late final int _renderStateSummaryMultiOut;
-  late final int _cursorMultiKeys;
-  late final int _cursorMultiValues;
-  late final int _cursorMultiOut;
   late final int _rowCellsMultiKeys;
   late final int _rowCellsMultiValues;
   late final int _rowCellsMultiOut;
@@ -558,78 +507,40 @@ final class _WasmRenderRaw {
         WasmExportScratchAllocator(_exports),
         maxVariableLength: WasmScratchPool.defaultMaxVariableLength,
       ) {
-    _multiKeys = _allocateBytes(
-      _maxMultiQueryCount * _wasmEnumSize,
-      alignment: _wasmEnumSize,
-    );
-    _multiValues = _allocateBytes(
-      _maxMultiQueryCount * _wasmPointerSize,
-      alignment: _wasmPointerSize,
-    );
-    _multiOut = _allocateBytes(
-      _maxMultiQueryCount * _wasmOutputSlotSize,
-      alignment: _wasmOutputSlotSize,
-    );
+    _multiKeys = _allocateBytes(_maxMultiQueryCount * _wasmEnumSize);
+    _multiValues = _allocateBytes(_maxMultiQueryCount * _wasmPointerSize);
+    _multiOut = _allocateBytes(_maxMultiQueryCount * _wasmOutputSlotSize);
     _multiWritten = _allocateSize();
     _renderStateSummaryMultiKeys = _allocateBytes(
       _renderStateSummaryKeys.length * _wasmEnumSize,
-      alignment: _wasmEnumSize,
     );
     _renderStateSummaryMultiValues = _allocateBytes(
       _renderStateSummaryKeys.length * _wasmPointerSize,
-      alignment: _wasmPointerSize,
     );
     _renderStateSummaryMultiOut = _allocateBytes(
       _renderStateSummaryKeys.length * _wasmOutputSlotSize,
-      alignment: _wasmOutputSlotSize,
-    );
-    _cursorMultiKeys = _allocateBytes(
-      _cursorStateKeys.length * _wasmEnumSize,
-      alignment: _wasmEnumSize,
-    );
-    _cursorMultiValues = _allocateBytes(
-      _cursorStateKeys.length * _wasmPointerSize,
-      alignment: _wasmPointerSize,
-    );
-    _cursorMultiOut = _allocateBytes(
-      _cursorStateKeys.length * _wasmOutputSlotSize,
-      alignment: _wasmOutputSlotSize,
     );
     _rowCellsMultiKeys = _allocateBytes(
       _rowCellsSummaryKeys.length * _wasmEnumSize,
-      alignment: _wasmEnumSize,
     );
     _rowCellsMultiValues = _allocateBytes(
       _rowCellsSummaryKeys.length * _wasmPointerSize,
-      alignment: _wasmPointerSize,
     );
     _rowCellsMultiOut = _allocateBytes(
       _rowCellsSummaryKeys.length * _wasmOutputSlotSize,
-      alignment: _wasmOutputSlotSize,
     );
-    _cellMultiKeys = _allocateBytes(
-      _cellSummaryKeys.length * _wasmEnumSize,
-      alignment: _wasmEnumSize,
-    );
+    _cellMultiKeys = _allocateBytes(_cellSummaryKeys.length * _wasmEnumSize);
     _cellMultiValues = _allocateBytes(
       _cellSummaryKeys.length * _wasmPointerSize,
-      alignment: _wasmPointerSize,
     );
     _cellMultiOut = _allocateBytes(
       _cellSummaryKeys.length * _wasmOutputSlotSize,
-      alignment: _wasmOutputSlotSize,
     );
     _writeMultiKeys(
       _renderStateSummaryKeys,
       _renderStateSummaryMultiKeys,
       _renderStateSummaryMultiValues,
       _renderStateSummaryMultiOut,
-    );
-    _writeMultiKeys(
-      _cursorStateKeys,
-      _cursorMultiKeys,
-      _cursorMultiValues,
-      _cursorMultiOut,
     );
     _writeMultiKeys(
       _rowCellsSummaryKeys,
@@ -883,6 +794,10 @@ final class _WasmRenderRaw {
     );
   }
 
+  Result renderStateClean(int state) {
+    return .fromValue(_exports.ghostty_render_state_clean(state));
+  }
+
   Result renderStateEndUpdate(int state) {
     return .fromValue(_exports.ghostty_render_state_end_update(state));
   }
@@ -894,10 +809,18 @@ final class _WasmRenderRaw {
   CResult<TerminalColors> renderStateGetColors(int state) {
     final frame = _scratch.acquire(const []);
     try {
-      final colorsPtr = frame.variableAddress(0, _layout.colorsSize);
+      final colorsPtr = frame.variableAddress(
+        0,
+        _layout.colorsSize,
+        alignment: _layout.maxAlignment,
+      );
       _memory.writeU32(colorsPtr, _layout.colorsSize);
       final result = Result.fromValue(
-        _exports.ghostty_render_state_colors_get(state, colorsPtr),
+        _exports.ghostty_render_state_get(
+          state,
+          RenderStateData.colors.value,
+          colorsPtr,
+        ),
       );
       if (result != .success) return (result, _emptyTerminalColors);
 
@@ -936,93 +859,55 @@ final class _WasmRenderRaw {
     return _renderStateGetU16(state, .cols);
   }
 
-  CResult<Cursor> renderStateGetCursor(int state) {
-    final result = Result.fromValue(
-      _exports.ghostty_render_state_get_multi(
-        state,
-        _cursorStateKeys.length,
-        _cursorMultiKeys,
-        _cursorMultiValues,
-        _multiWritten,
-      ),
-    );
-    final written = _memory.readU32(_multiWritten);
-    final cursorOffscreen = result == .invalidValue && written == 5;
-    if (result != .success && !cursorOffscreen) {
-      return (result, _emptyRenderStateCursor);
-    }
-    final visualStyle = RenderStateCursorVisualStyle.fromValue(
-      _memory.readI32(_cursorMultiOut),
-    );
-    final visible = _memory.readU8(_cursorMultiOut + _wasmOutputSlotSize) != 0;
-    final blinking =
-        _memory.readU8(_cursorMultiOut + 2 * _wasmOutputSlotSize) != 0;
-    final passwordInput =
-        _memory.readU8(_cursorMultiOut + 3 * _wasmOutputSlotSize) != 0;
-    final inViewport =
-        _memory.readU8(_cursorMultiOut + 4 * _wasmOutputSlotSize) != 0;
-    if (!inViewport) {
+  CResult<RenderStateCursor> renderStateGetCursor(int state) {
+    final frame = _scratch.acquire(const []);
+    try {
+      final cursorPtr = frame.variableAddress(
+        0,
+        _layout.cursorSize,
+        alignment: _layout.maxAlignment,
+      );
+      _memory.writeU32(cursorPtr, _layout.cursorSize);
+      final result = Result.fromValue(
+        _exports.ghostty_render_state_get(
+          state,
+          RenderStateData.cursor.value,
+          cursorPtr,
+        ),
+      );
+      if (result != .success) return (result, _emptyRenderStateCursor);
+
+      final inViewport =
+          _memory.readU8(cursorPtr + _layout.cursorViewportHasValue) != 0;
+      final visible = _memory.readU8(cursorPtr + _layout.cursorVisible) != 0;
+      final blinking = _memory.readU8(cursorPtr + _layout.cursorBlinking) != 0;
+      final passwordInput =
+          _memory.readU8(cursorPtr + _layout.cursorPasswordInput) != 0;
+      final visualStyle = RenderStateCursorVisualStyle.fromValue(
+        _memory.readI32(cursorPtr + _layout.cursorVisualStyle),
+      );
       return (
-        .success,
-        Cursor(
+        result,
+        RenderStateCursor(
+          viewportHasValue: inViewport,
+          viewportX: inViewport
+              ? _memory.readU16(cursorPtr + _layout.cursorViewportX)
+              : 0,
+          viewportY: inViewport
+              ? _memory.readU16(cursorPtr + _layout.cursorViewportY)
+              : 0,
+          wideTail:
+              inViewport &&
+              _memory.readU8(cursorPtr + _layout.cursorWideTail) != 0,
           visible: visible,
           blinking: blinking,
           passwordInput: passwordInput,
-          shape: visualStyle,
+          visualStyle: visualStyle,
         ),
       );
+    } finally {
+      frame.release();
     }
-
-    return (
-      result,
-      Cursor(
-        position: Position(
-          row: _memory.readU16(_cursorMultiOut + 6 * _wasmOutputSlotSize),
-          col: _memory.readU16(_cursorMultiOut + 5 * _wasmOutputSlotSize),
-        ),
-        visible: visible,
-        blinking: blinking,
-        passwordInput: passwordInput,
-        shape: visualStyle,
-        wideTail:
-            _memory.readU8(_cursorMultiOut + 7 * _wasmOutputSlotSize) != 0,
-      ),
-    );
-  }
-
-  CResult<bool> renderStateGetCursorBlinking(int state) {
-    return _renderStateGetBool(state, .cursorBlinking);
-  }
-
-  CResult<bool> renderStateGetCursorInViewport(int state) {
-    return _renderStateGetBool(state, .cursorViewportHasValue);
-  }
-
-  CResult<bool> renderStateGetCursorPasswordInput(int state) {
-    return _renderStateGetBool(state, .cursorPasswordInput);
-  }
-
-  CResult<bool> renderStateGetCursorViewportWideTail(int state) {
-    return _renderStateGetBool(state, .cursorViewportWideTail);
-  }
-
-  CResult<int> renderStateGetCursorViewportX(int state) {
-    return _renderStateGetU16(state, .cursorViewportX);
-  }
-
-  CResult<int> renderStateGetCursorViewportY(int state) {
-    return _renderStateGetU16(state, .cursorViewportY);
-  }
-
-  CResult<bool> renderStateGetCursorVisible(int state) {
-    return _renderStateGetBool(state, .cursorVisible);
-  }
-
-  CResult<RenderStateCursorVisualStyle> renderStateGetCursorVisualStyle(
-    int state,
-  ) {
-    final raw = _renderStateGetI32(state, .cursorVisualStyle);
-    return (raw.$1, RenderStateCursorVisualStyle.fromValue(raw.$2));
   }
 
   CResult<RenderStateDirty> renderStateGetDirty(int state) {
@@ -1067,7 +952,7 @@ final class _WasmRenderRaw {
       );
       final result = _exports.ghostty_render_state_new(0, outPtr);
       if (result != Result.success.value) return (.fromValue(result), 0);
-      return (.fromValue(result), _memory.readPtr(outPtr));
+      return (.fromValue(result), _exports.ghostty_wasm_take_opaque(outPtr));
     } finally {
       frame.release();
     }
@@ -1421,7 +1306,7 @@ final class _WasmRenderRaw {
         _exports.ghostty_render_state_row_cells_new(0, outPtr),
       );
       if (result != .success) return (result, 0);
-      return (result, _memory.readPtr(outPtr));
+      return (result, _exports.ghostty_wasm_take_opaque(outPtr));
     } finally {
       frame.release();
     }
@@ -1600,6 +1485,43 @@ final class _WasmRenderRaw {
     );
   }
 
+  bool rowIteratorGetRawCells(int iterator, RawCellsView view) {
+    final frame = _scratch.acquire(const []);
+    try {
+      final viewPtr = frame.variableAddress(
+        0,
+        _layout.cellsViewSize,
+        alignment: _layout.maxAlignment,
+      );
+      final result = Result.fromValue(
+        _exports.ghostty_render_state_row_get(
+          iterator,
+          RenderStateRowData.cellsRaw.value,
+          viewPtr,
+        ),
+      );
+      if (result != .success) {
+        view.clear();
+        return false;
+      }
+      final address = _memory.readPtr(viewPtr + _layout.cellsViewPtr);
+      final length = _memory.readU32(viewPtr + _layout.cellsViewLen);
+      if (address == 0 && length != 0) {
+        throw StateError('GhosttyCellsView has a null pointer with cells.');
+      }
+      view.set(address: address, length: length);
+      return true;
+    } finally {
+      frame.release();
+    }
+  }
+
+  RawCellSummary? rawCellsGetSummary(RawCellsView view, int index) {
+    if (index < 0 || index >= view.length) return null;
+    final raw = _memory.readU64(view.address + index * _layout.cellLayout.size);
+    return _layout.cellLayout.decode(raw);
+  }
+
   Result rowIteratorInit(int iterator, int renderState) {
     final frame = _scratch.acquire(const []);
     try {
@@ -1632,7 +1554,7 @@ final class _WasmRenderRaw {
         _exports.ghostty_render_state_row_iterator_new(0, outPtr),
       );
       if (result != .success) return (result, 0);
-      return (result, _memory.readPtr(outPtr));
+      return (result, _exports.ghostty_wasm_take_opaque(outPtr));
     } finally {
       frame.release();
     }
@@ -1640,6 +1562,20 @@ final class _WasmRenderRaw {
 
   bool rowIteratorNext(int iterator) {
     return _exports.ghostty_render_state_row_iterator_next(iterator) != 0;
+  }
+
+  int? rowIteratorNextDirty(int iterator) {
+    final frame = _scratch.acquire(const []);
+    try {
+      final outY = frame.variableAddress(0, 2, alignment: 2);
+      final hasNext = _exports.ghostty_render_state_row_iterator_next_dirty(
+        iterator,
+        outY,
+      );
+      return hasNext == 0 ? null : _memory.readU16(outY);
+    } finally {
+      frame.release();
+    }
   }
 
   Result rowIteratorSetDirty(int iterator, {required bool dirty}) {
@@ -1701,7 +1637,7 @@ final class _WasmRenderRaw {
         outPtr,
       );
       if (result != Result.success.value) return (.fromValue(result), 0);
-      return (.fromValue(result), _memory.readPtr(outPtr));
+      return (.fromValue(result), _exports.ghostty_wasm_take_opaque(outPtr));
     } finally {
       frame.release();
     }
@@ -1796,23 +1732,17 @@ final class _WasmRenderRaw {
     }
   }
 
-  int _allocateBytes(int size, {int alignment = 1}) {
-    final requiredAlignment = alignment < _layout.maxAlignment
-        ? _layout.maxAlignment
-        : alignment;
-    final pointer = _exports.allocateAlignedU8Array(
-      size,
-      alignment: requiredAlignment,
-    );
+  int _allocateBytes(int size) {
+    final pointer = _exports.allocateBytes(size);
     if (pointer == 0) throw const OutOfMemoryException();
     return pointer;
   }
 
   int _allocateSize() {
-    final pointer = _exports.allocateUsize();
+    final pointer = _exports.allocateBytes(4);
     if (pointer == 0) throw const OutOfMemoryException();
     if (pointer % _wasmSizeSize != 0) {
-      _exports.freeUsize(pointer);
+      _exports.freeBytes(pointer, 4);
       throw StateError('libghostty WASM allocator returned misaligned memory.');
     }
     return pointer;
@@ -1980,22 +1910,6 @@ final class _WasmRenderRaw {
       overline: _memory.readU8(stylePtr + _layout.styleOverline) != 0,
       underline: .fromValue(_memory.readI32(stylePtr + _layout.styleUnderline)),
     );
-  }
-
-  CResult<bool> _renderStateGetBool(int state, RenderStateData data) {
-    final frame = _scratch.acquire(const []);
-    try {
-      final outPtr = frame.variableAddress(0, 1);
-      final result = _exports.ghostty_render_state_get(
-        state,
-        data.value,
-        outPtr,
-      );
-      if (result != 0) return (.fromValue(result), false);
-      return (.fromValue(result), _memory.readU8(outPtr) != 0);
-    } finally {
-      frame.release();
-    }
   }
 
   CResult<int> _renderStateGetI32(int state, RenderStateData data) {

@@ -20,12 +20,12 @@ final class WasmKeyBindings implements KeyBindings {
 
   @override
   String keyEncoderEncode(LibGhosttyHandle encoder, LibGhosttyHandle event) {
-    final lengthPointer = _requirePointer(_exports.allocateUsize());
+    final lengthPointer = _requirePointer(_exports.allocateBytes(4));
     var capacity = 128;
     var allocationLength = capacity;
     var buffer = 0;
     try {
-      buffer = _requirePointer(_exports.allocateU8Array(allocationLength));
+      buffer = _requirePointer(_exports.allocateBytes(allocationLength));
       var result = _exports.ghostty_key_encoder_encode(
         encoder.value,
         event.value,
@@ -34,11 +34,11 @@ final class WasmKeyBindings implements KeyBindings {
         lengthPointer,
       );
       if (result == Result.outOfSpace.value) {
-        _exports.freeU8Array(buffer, allocationLength);
+        _exports.freeBytes(buffer, allocationLength);
         buffer = 0;
         capacity = _memory.readU32(lengthPointer);
         allocationLength = capacity == 0 ? 1 : capacity;
-        buffer = _requirePointer(_exports.allocateU8Array(allocationLength));
+        buffer = _requirePointer(_exports.allocateBytes(allocationLength));
         result = _exports.ghostty_key_encoder_encode(
           encoder.value,
           event.value,
@@ -52,8 +52,8 @@ final class WasmKeyBindings implements KeyBindings {
         _memory.readBytes(buffer, _memory.readU32(lengthPointer)),
       );
     } finally {
-      if (buffer != 0) _exports.freeU8Array(buffer, allocationLength);
-      _exports.freeUsize(lengthPointer);
+      if (buffer != 0) _exports.freeBytes(buffer, allocationLength);
+      _exports.freeBytes(lengthPointer, 4);
     }
   }
 
@@ -68,7 +68,7 @@ final class WasmKeyBindings implements KeyBindings {
     try {
       final result = _exports.ghostty_key_encoder_new(0, out);
       checkRequiredCode(result, operation: 'ghostty_key_encoder_new');
-      return .fromAddress(_memory.readPtr(out));
+      return .fromAddress(_exports.ghostty_wasm_take_opaque(out));
     } finally {
       _exports.freeOpaque(out);
     }
@@ -80,18 +80,18 @@ final class WasmKeyBindings implements KeyBindings {
     KeyEncoderOption option, {
     required bool value,
   }) {
-    final pointer = _requirePointer(_exports.allocateU8());
+    final pointer = _requirePointer(_exports.allocateBytes(1));
     try {
       _memory.writeU8(pointer, value ? 1 : 0);
       _exports.ghostty_key_encoder_setopt(encoder.value, option.value, pointer);
     } finally {
-      _exports.freeU8(pointer);
+      _exports.freeBytes(pointer, 1);
     }
   }
 
   @override
   void keyEncoderSetKittyFlags(LibGhosttyHandle encoder, int flags) {
-    final pointer = _requirePointer(_exports.allocateU8());
+    final pointer = _requirePointer(_exports.allocateBytes(1));
     try {
       _memory.writeU8(pointer, flags);
       _exports.ghostty_key_encoder_setopt(
@@ -100,7 +100,7 @@ final class WasmKeyBindings implements KeyBindings {
         pointer,
       );
     } finally {
-      _exports.freeU8(pointer);
+      _exports.freeBytes(pointer, 1);
     }
   }
 
@@ -117,7 +117,7 @@ final class WasmKeyBindings implements KeyBindings {
 
   @override
   void keyEncoderSetOptionAsAlt(LibGhosttyHandle encoder, OptionAsAlt value) {
-    final pointer = _requirePointer(_exports.allocateUsize());
+    final pointer = _requirePointer(_exports.allocateBytes(4));
     try {
       _memory.writeI32(pointer, value.value);
       _exports.ghostty_key_encoder_setopt(
@@ -126,7 +126,7 @@ final class WasmKeyBindings implements KeyBindings {
         pointer,
       );
     } finally {
-      _exports.freeUsize(pointer);
+      _exports.freeBytes(pointer, 4);
     }
   }
 
@@ -134,7 +134,7 @@ final class WasmKeyBindings implements KeyBindings {
   void keyEventFree(LibGhosttyHandle event) {
     final previous = _utf8Pointers.remove(event.value);
     if (previous != null) {
-      _exports.freeU8Array(previous.$1, previous.$2);
+      _exports.freeBytes(previous.$1, previous.$2);
     }
     _exports.ghostty_key_event_free(event.value);
   }
@@ -171,7 +171,7 @@ final class WasmKeyBindings implements KeyBindings {
 
   @override
   String? keyEventGetUtf8(LibGhosttyHandle event) {
-    final lengthPointer = _requirePointer(_exports.allocateUsize());
+    final lengthPointer = _requirePointer(_exports.allocateBytes(4));
     try {
       final pointer = _exports.ghostty_key_event_get_utf8(
         event.value,
@@ -182,7 +182,7 @@ final class WasmKeyBindings implements KeyBindings {
       if (length == 0) return null;
       return utf8.decode(_memory.readBytes(pointer, length));
     } finally {
-      _exports.freeUsize(lengthPointer);
+      _exports.freeBytes(lengthPointer, 4);
     }
   }
 
@@ -192,7 +192,7 @@ final class WasmKeyBindings implements KeyBindings {
     try {
       final result = _exports.ghostty_key_event_new(0, out);
       checkRequiredCode(result, operation: 'ghostty_key_event_new');
-      return .fromAddress(_memory.readPtr(out));
+      return .fromAddress(_exports.ghostty_wasm_take_opaque(out));
     } finally {
       _exports.freeOpaque(out);
     }
@@ -245,15 +245,15 @@ final class WasmKeyBindings implements KeyBindings {
     }
 
     final capacity = _nextCapacity(length, previous?.$2 ?? 0);
-    final pointer = _requirePointer(_exports.allocateU8Array(capacity));
+    final pointer = _requirePointer(_exports.allocateBytes(capacity));
     try {
       _memory.writeBytes(pointer, encoded);
       _exports.ghostty_key_event_set_utf8(event.value, pointer, length);
     } catch (_) {
-      _exports.freeU8Array(pointer, capacity);
+      _exports.freeBytes(pointer, capacity);
       rethrow;
     }
-    if (previous != null) _exports.freeU8Array(previous.$1, previous.$2);
+    if (previous != null) _exports.freeBytes(previous.$1, previous.$2);
     _utf8Pointers[event.value] = (pointer, capacity);
   }
 

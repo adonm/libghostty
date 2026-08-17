@@ -488,13 +488,13 @@ final class WasmUtilityBindings implements UtilityBindings {
   ({int pointer, int length, int allocation}) _allocUtf8(String value) {
     final bytes = utf8.encode(value);
     final allocation = bytes.isEmpty ? 1 : bytes.length;
-    final pointer = _requirePointer(_exports.allocateU8Array(allocation));
+    final pointer = _requirePointer(_exports.allocateBytes(allocation));
     _memory.writeBytes(pointer, bytes);
     return (pointer: pointer, length: bytes.length, allocation: allocation);
   }
 
   void _freeUtf8(({int pointer, int length, int allocation}) value) {
-    _exports.freeU8Array(value.pointer, value.allocation);
+    _exports.freeBytes(value.pointer, value.allocation);
   }
 
   List<RgbColor> _readPalette(int pointer) => [
