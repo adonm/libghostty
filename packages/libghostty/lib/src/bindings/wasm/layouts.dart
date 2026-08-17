@@ -1,14 +1,23 @@
+import 'dart:convert';
+
 /// Precomputed C struct sizes and field offsets for WASM32.
 ///
 /// Parsed once from [ghostty_type_json] at initialization. All fields
 /// are final ints resolved from the JSON, so method calls use direct
 /// field access with no map lookups.
-class Layouts {
+final class Layouts {
+  late final int maxAlignment;
+
   // GhosttyBuffer
   late final int bufferSize;
   late final int bufferPtr;
   late final int bufferCap;
   late final int bufferLen;
+
+  // GhosttyWriter
+  late final int writerSize;
+  late final int writerWrite;
+  late final int writerUserdata;
 
   // GhosttyClipboardContent
   late final int clipboardContentSize;
@@ -38,6 +47,7 @@ class Layouts {
 
   // GhosttyColorRgb
   late final int colorRgbSize;
+  late final int colorRgbR;
   late final int colorRgbG;
   late final int colorRgbB;
 
@@ -234,15 +244,35 @@ class Layouts {
   late final int scrollViewportSize;
   late final int scrollViewportDelta;
 
-  Layouts(Map<String, dynamic> types) {
-    // TODO(elias8): migrate to `_Struct(types, ...)` once upstream ghostty
-    // registers `GhosttyBuffer` in `types.zig`.
-    bufferSize = 12;
-    bufferPtr = 0;
-    bufferCap = 4;
-    bufferLen = 8;
+  // GhosttySysImage
+  late final int sysImageSize;
+  late final int sysImageWidth;
+  late final int sysImageHeight;
+  late final int sysImageData;
+  late final int sysImageDataLen;
 
-    var struct = _Struct(types, 'GhosttyClipboardContent');
+  Layouts(Map<String, dynamic> types) {
+    maxAlignment = _readMaxAlignment(types);
+
+    var struct = _optionalStruct(types, 'GhosttyBuffer');
+    if (struct == null) {
+      bufferSize = 12;
+      bufferPtr = 0;
+      bufferCap = 4;
+      bufferLen = 8;
+    } else {
+      bufferSize = struct.size;
+      bufferPtr = struct['ptr'];
+      bufferCap = struct['cap'];
+      bufferLen = struct['len'];
+    }
+
+    struct = _Struct(types, 'GhosttyWriter');
+    writerSize = struct.size;
+    writerWrite = struct['write'];
+    writerUserdata = struct['userdata'];
+
+    struct = _Struct(types, 'GhosttyClipboardContent');
     clipboardContentSize = struct.size;
     clipboardContentMime = struct['mime'];
     clipboardContentData = struct['data'];
@@ -270,6 +300,7 @@ class Layouts {
 
     struct = _Struct(types, 'GhosttyColorRgb');
     colorRgbSize = struct.size;
+    colorRgbR = struct['r'];
     colorRgbG = struct['g'];
     colorRgbB = struct['b'];
 
@@ -345,16 +376,14 @@ class Layouts {
     selectLineWhitespaceLen = struct['whitespace_len'];
     selectLineSemanticPromptBoundary = struct['semantic_prompt_boundary'];
 
-    final selectionFormat = types['GhosttyTerminalSelectionFormatOptions'];
-    if (selectionFormat == null) {
-      // Some WASM artifacts omit this C struct from ghostty_type_json.
+    struct = _optionalStruct(types, 'GhosttyTerminalSelectionFormatOptions');
+    if (struct == null) {
       selectionFormatSize = 16;
       selectionFormatEmit = 4;
       selectionFormatUnwrap = 8;
       selectionFormatTrim = 9;
       selectionFormatSelection = 12;
     } else {
-      struct = _Struct(types, 'GhosttyTerminalSelectionFormatOptions');
       selectionFormatSize = struct.size;
       selectionFormatEmit = struct['emit'];
       selectionFormatUnwrap = struct['unwrap'];
@@ -368,20 +397,34 @@ class Layouts {
     gridRefX = struct['x'];
     gridRefY = struct['y'];
 
-    // TODO(elias8): migrate to `_Struct(types, ...)` once upstream ghostty
-    // registers `GhosttyKittyGraphicsPlacementRenderInfo` in `types.zig`.
-    kittyRenderInfoSize = 48;
-    kittyRenderInfoPixelWidth = 4;
-    kittyRenderInfoPixelHeight = 8;
-    kittyRenderInfoGridCols = 12;
-    kittyRenderInfoGridRows = 16;
-    kittyRenderInfoViewportCol = 20;
-    kittyRenderInfoViewportRow = 24;
-    kittyRenderInfoViewportVisible = 28;
-    kittyRenderInfoSourceX = 32;
-    kittyRenderInfoSourceY = 36;
-    kittyRenderInfoSourceWidth = 40;
-    kittyRenderInfoSourceHeight = 44;
+    struct = _optionalStruct(types, 'GhosttyKittyGraphicsPlacementRenderInfo');
+    if (struct == null) {
+      kittyRenderInfoSize = 48;
+      kittyRenderInfoPixelWidth = 4;
+      kittyRenderInfoPixelHeight = 8;
+      kittyRenderInfoGridCols = 12;
+      kittyRenderInfoGridRows = 16;
+      kittyRenderInfoViewportCol = 20;
+      kittyRenderInfoViewportRow = 24;
+      kittyRenderInfoViewportVisible = 28;
+      kittyRenderInfoSourceX = 32;
+      kittyRenderInfoSourceY = 36;
+      kittyRenderInfoSourceWidth = 40;
+      kittyRenderInfoSourceHeight = 44;
+    } else {
+      kittyRenderInfoSize = struct.size;
+      kittyRenderInfoPixelWidth = struct['pixel_width'];
+      kittyRenderInfoPixelHeight = struct['pixel_height'];
+      kittyRenderInfoGridCols = struct['grid_cols'];
+      kittyRenderInfoGridRows = struct['grid_rows'];
+      kittyRenderInfoViewportCol = struct['viewport_col'];
+      kittyRenderInfoViewportRow = struct['viewport_row'];
+      kittyRenderInfoViewportVisible = struct['viewport_visible'];
+      kittyRenderInfoSourceX = struct['source_x'];
+      kittyRenderInfoSourceY = struct['source_y'];
+      kittyRenderInfoSourceWidth = struct['source_width'];
+      kittyRenderInfoSourceHeight = struct['source_height'];
+    }
 
     struct = _Struct(types, 'GhosttyMouseEncoderSize');
     mouseEncoderSizeSize = struct.size;
@@ -439,13 +482,12 @@ class Layouts {
     colorsCursorHasValue = struct['cursor_has_value'];
     colorsPalette = struct['palette'];
 
-    final renderRowSelection = types['GhosttyRenderStateRowSelection'];
-    if (renderRowSelection == null) {
+    struct = _optionalStruct(types, 'GhosttyRenderStateRowSelection');
+    if (struct == null) {
       renderRowSelectionSize = 8;
       renderRowSelectionStartX = 4;
       renderRowSelectionEndX = 6;
     } else {
-      struct = _Struct(types, 'GhosttyRenderStateRowSelection');
       renderRowSelectionSize = struct.size;
       renderRowSelectionStartX = struct['start_x'];
       renderRowSelectionEndX = struct['end_x'];
@@ -491,11 +533,53 @@ class Layouts {
     struct = _Struct(types, 'GhosttyTerminalScrollViewport');
     scrollViewportSize = struct.size;
     scrollViewportDelta = struct['value'];
+
+    struct = _optionalStruct(types, 'GhosttySysImage');
+    if (struct == null) {
+      // Use the fixed wasm32 extern-struct layout when metadata omits it.
+      sysImageSize = 16;
+      sysImageWidth = 0;
+      sysImageHeight = 4;
+      sysImageData = 8;
+      sysImageDataLen = 12;
+    } else {
+      sysImageSize = struct.size;
+      sysImageWidth = struct['width'];
+      sysImageHeight = struct['height'];
+      sysImageData = struct['data'];
+      sysImageDataLen = struct['data_len'];
+    }
   }
+
+  Layouts.fromJson(String source) : this(_decodeLayoutJson(source));
+}
+
+int _readMaxAlignment(Map<String, dynamic> types) {
+  var maxAlignment = 8;
+  for (final value in types.values) {
+    if (value is Map<String, dynamic> && value['align'] is int) {
+      final alignment = value['align'] as int;
+      if (alignment > maxAlignment) maxAlignment = alignment;
+    }
+  }
+  return maxAlignment;
+}
+
+Map<String, dynamic> _decodeLayoutJson(String source) {
+  final value = jsonDecode(source);
+  if (value is! Map) {
+    throw const FormatException('Layout metadata must have an object root.');
+  }
+  return value.cast<String, dynamic>();
+}
+
+_Struct? _optionalStruct(Map<String, dynamic> types, String name) {
+  if (types[name] is! Map<String, dynamic>) return null;
+  return _Struct(types, name);
 }
 
 /// Typed accessor for a single struct's layout from the JSON.
-class _Struct {
+final class _Struct {
   final int size;
   final Map<String, dynamic> _fields;
 
@@ -505,7 +589,6 @@ class _Struct {
           (types[name] as Map<String, dynamic>)['fields']
               as Map<String, dynamic>;
 
-  int operator [](String field) {
-    return (_fields[field] as Map<String, dynamic>)['offset'] as int;
-  }
+  int operator [](String field) =>
+      (_fields[field] as Map<String, dynamic>)['offset'] as int;
 }

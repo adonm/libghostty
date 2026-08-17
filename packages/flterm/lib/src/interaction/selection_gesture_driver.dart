@@ -104,10 +104,6 @@ final class SelectionGestureDriver {
 
   void _setWordBoundaryCodepoints(SelectionGestureEvent event) {
     final codepoints = _wordBoundaryCodepoints;
-    if (codepoints == null) {
-      event.clear(.wordBoundaryCodepoints);
-      return;
-    }
     event.setWordBoundaryCodepoints(codepoints);
   }
 }

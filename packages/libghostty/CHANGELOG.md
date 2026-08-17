@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.0.13
+
+### Breaking
+
+- **Typed public values**: callback payloads, terminal geometry, decoded images,
+  and X11 colors use named, immutable classes. Replace record literals with the
+  corresponding class constructors.
+- **Kitty placement types**: `Placement` and `RenderInfo` are replaced by
+  `KittyPlacement` and `KittyPlacementRenderInfo`.
+- **Cursor shape types**: terminal cursor configuration accepts
+  `TerminalCursorShape`; render snapshots use `CursorShape`.
+- **Selection gesture options**: `SelectionGestureEvent.clear()` is replaced
+  by nullable setters such as `setRef(null)` and
+  `setWordBoundaryCodepoints(null)`. Use `clearPosition()` to clear the pointer
+  position.
+- **Exception constructors**: messages and operation context use the named
+  `message` and `operation` arguments.
+
+### Changed
+
+- **Error details**: libghostty exceptions include the result code and operation
+  context. Unknown result codes are preserved by `UnknownResultException`.
+- **Native and Wasm consistency**: both targets expose the same public behavior,
+  including error handling and resource lifetime semantics.
+
 ## 0.0.12
 
 ### Breaking
