@@ -246,13 +246,12 @@ jobs:
       - name: isolate from repo git
         run: touch ghostty/.git
       - run: flutter pub get
-      - run: dart pub global activate very_good_cli
       - name: build wasm
         working-directory: packages/libghostty
         run: dart run tool/build_wasm.dart
       - name: run wasm tests
         working-directory: packages/libghostty
-        run: very_good test --platform=chrome test/wasm
+        run: dart test --platform=chrome test --exclude-tags=ffi
 
   test-flterm-golden:
     name: test-flterm-linux-golden
