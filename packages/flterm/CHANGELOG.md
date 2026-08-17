@@ -18,6 +18,8 @@
 
 ### Changed
 
+- **Incremental rendering**: frame building uses libghostty's dirty-row
+  iteration and bulk cleanup to reduce row scans and binding calls.
 - **Resize lifecycle**: `onResize` reports only after `TerminalView` commits a
   measured grid; assigning it later immediately reports that grid.
   Cell-pixel-only changes skip the callback, and in-band output is emitted
@@ -25,6 +27,8 @@
 
 ### Fixed
 
+- **Cursor viewport state**: cursor and IME preedit rendering honor whether
+  the cursor has a valid viewport position and use its reported visual style.
 - **Text input recovery**: terminal clients reconnect when another input client
   takes the platform text input connection, including while composition is
   active.
