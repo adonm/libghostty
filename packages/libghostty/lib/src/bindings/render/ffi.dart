@@ -117,7 +117,7 @@ final class FfiRenderBindings implements RenderBindings {
       _required(_raw.cellGetWide(h.value), 'ghostty_cell_get');
 
   @override
-  RawCellSummary? rawCellsGetSummary(RawCellsView view, int index) => null;
+  bool decodeRawCell(RawCellsView view, int index, RawCellData output) => false;
 
   @override
   LibGhosttyHandle gridRefCell(RawGridRef r) =>

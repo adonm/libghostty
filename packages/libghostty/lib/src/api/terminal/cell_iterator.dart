@@ -37,12 +37,10 @@ final class CellIterator {
   var _rawCellsAvailable = false;
   var _rowPositionGeneration = 0;
   var _rawCell = const LibGhosttyHandle.fromAddress(0);
+  final _rawCellData = RawCellData();
   var _graphemeLen = 0;
-  var _codepoint = 0;
-  var _styleId = -1;
   var _prevStyleId = -1;
   var _cachedStyle = const Style();
-  var _wide = CellWidth.narrow;
   var _col = -1;
   var _isSelected = false;
   var _textValid = false;
@@ -63,19 +61,38 @@ final class CellIterator {
   /// default background.
   RgbColor? get background {
     _ensureCurrent();
+    if (_rawCellsAvailable) {
+      _ensureMetadata();
+      if (_rawCellData.hasBackgroundRgb) {
+        return RgbColor(
+          _rawCellData.backgroundR,
+          _rawCellData.backgroundG,
+          _rawCellData.backgroundB,
+        );
+      }
+    }
     return bindings.render.rowCellsGetBgColor(_handle);
   }
 
   /// Resolved background as packed ARGB int, or null if unset.
   int? get backgroundArgb {
     _ensureCurrent();
+    if (_rawCellsAvailable) {
+      _ensureMetadata();
+      if (_rawCellData.hasBackgroundRgb) {
+        return 0xFF000000 |
+            (_rawCellData.backgroundR << 16) |
+            (_rawCellData.backgroundG << 8) |
+            _rawCellData.backgroundB;
+      }
+    }
     return bindings.render.rowCellsGetBgColorArgb(_handle);
   }
 
   /// Primary codepoint of the current cell, or 0 if the cell has no text.
   int get codepoint {
     _ensureText();
-    return _codepoint;
+    return _rawCellData.codepoint;
   }
 
   /// Column index of the current cell within the row (zero-based).
@@ -91,7 +108,7 @@ final class CellIterator {
   String get content {
     _ensureText();
     if (_graphemeLen == 0) return '';
-    if (_graphemeLen == 1) return String.fromCharCode(_codepoint);
+    if (_graphemeLen == 1) return String.fromCharCode(_rawCellData.codepoint);
     return String.fromCharCodes(
       bindings.render.rowCellsGetGraphemes(_handle, _graphemeLen),
     );
@@ -123,12 +140,17 @@ final class CellIterator {
   /// Whether the current cell has a hyperlink (OSC 8).
   bool get hasHyperlink {
     _ensureText();
+    if (_rawCellsAvailable) return _rawCellData.hasHyperlink;
     return bindings.render.cellGetHasHyperlink(_rawCell);
   }
 
   /// Whether the current cell has non-default styling attributes.
   bool get hasStyling {
     _ensureCurrent();
+    if (_rawCellsAvailable) {
+      _ensureMetadata();
+      return _rawCellData.styleId != 0;
+    }
     return bindings.render.rowCellsGetHasStyling(_handle);
   }
 
@@ -141,6 +163,7 @@ final class CellIterator {
   /// Whether the current cell is protected (DECSCA).
   bool get isProtected {
     _ensureText();
+    if (_rawCellsAvailable) return _rawCellData.isProtected;
     return bindings.render.cellGetProtected(_rawCell);
   }
 
@@ -151,6 +174,7 @@ final class CellIterator {
   /// inversion, etc are caller policy.
   bool get isSelected {
     _ensureCurrent();
+    if (_rawCellsAvailable) return _rawCells!.isSelected(_col);
     if (!_selectedValid) {
       _isSelected = bindings.render.rowCellsGetSelected(_handle);
       _selectedValid = true;
@@ -161,6 +185,7 @@ final class CellIterator {
   /// Semantic content type of the current cell.
   SemanticContent get semanticContent {
     _ensureText();
+    if (_rawCellsAvailable) return _rawCellData.semanticContent;
     return bindings.render.cellGetSemanticContent(_rawCell);
   }
 
@@ -168,8 +193,8 @@ final class CellIterator {
   /// lookups across cells sharing the same style.
   Style get style {
     _ensureMetadata();
-    if (_styleId != _prevStyleId) {
-      _prevStyleId = _styleId;
+    if (_rawCellData.styleId != _prevStyleId) {
+      _prevStyleId = _rawCellData.styleId;
       _cachedStyle = bindings.render.rowCellsGetStyle(_handle);
     }
     return _cachedStyle;
@@ -179,14 +204,14 @@ final class CellIterator {
   /// style id share identical styling attributes.
   int get styleId {
     _ensureMetadata();
-    return _styleId;
+    return _rawCellData.styleId;
   }
 
   /// Cell width: [CellWidth.narrow], [CellWidth.wide], or
   /// [CellWidth.spacerTail] (the second cell of a wide character).
   CellWidth get wide {
     _ensureMetadata();
-    return _wide;
+    return _rawCellData.wide;
   }
 
   /// Releases the native iterator handle.
@@ -277,19 +302,33 @@ final class CellIterator {
   }
 
   void _refreshMetadata() {
+    if (_rawCellsAvailable) {
+      if (bindings.render.decodeRawCell(_rawCells!, _col, _rawCellData)) {
+        _rawCell = .fromAddress(_rawCellData.rawCell);
+        _graphemeLen = _rawCellData.hasGrapheme
+            ? bindings.render.rowCellsGetGraphemeLen(_handle)
+            : _rawCellData.codepoint == 0
+            ? 0
+            : 1;
+        _selectedValid = true;
+        _textValid = true;
+        _metadataValid = true;
+        return;
+      }
+      _rawCellsAvailable = false;
+    }
+
     final rowCell = bindings.render.rowCellsGetSummary(_handle);
     _rawCell = .fromAddress(rowCell.rawCell);
     _graphemeLen = rowCell.graphemeLen;
     _isSelected = rowCell.selected;
     _selectedValid = true;
 
-    final cell = !_rawCellsAvailable
-        ? bindings.render.cellGetSummary(_rawCell)
-        : bindings.render.rawCellsGetSummary(_rawCells!, _col) ??
-              bindings.render.cellGetSummary(_rawCell);
-    _styleId = cell.styleId;
-    _codepoint = _graphemeLen > 0 ? cell.codepoint : 0;
-    _wide = cell.wide;
+    final cell = bindings.render.cellGetSummary(_rawCell);
+    _rawCellData.rawCell = rowCell.rawCell;
+    _rawCellData.styleId = cell.styleId;
+    _rawCellData.codepoint = _graphemeLen > 0 ? cell.codepoint : 0;
+    _rawCellData.wide = cell.wide;
     _textValid = true;
     _metadataValid = true;
   }

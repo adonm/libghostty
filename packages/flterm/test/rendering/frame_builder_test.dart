@@ -146,6 +146,17 @@ void main() {
       expect(atlas.emojiImage, isNotNull);
     });
 
+    test('sync rebuilds external and terminal dirty rows together', () {
+      writeUtf8(terminal, 'A\r\nB');
+      builder.sync(terminal, terminalDirty: true);
+      builder.markRowsDirty(1, 2);
+      writeUtf8(terminal, '\x1b[1;1HC');
+
+      builder.sync(terminal, terminalDirty: true);
+
+      expect(sprites.regular.count, 2);
+    });
+
     test('sync emits operator ligatures without adding text atlas entries', () {
       final initialCacheSize = atlas.cacheSize;
       writeUtf8(terminal, '=> !=');

@@ -3,6 +3,7 @@ library;
 
 import 'dart:convert';
 
+import 'package:libghostty/src/bindings/types.dart' show RawCellData;
 import 'package:libghostty/src/bindings/wasm/layouts.dart';
 import 'package:libghostty/src/generated/libghostty_enums.g.dart';
 import 'package:test/test.dart';
@@ -63,6 +64,9 @@ void main() {
     required int codepoint,
     required int styleId,
     required int wide,
+    bool isProtected = false,
+    bool hasHyperlink = false,
+    int semanticContent = 0,
   }) {
     final cell = types['GhosttyCell'] as Map<String, dynamic>;
     final bits = cell['bits'] as Map<String, dynamic>;
@@ -79,7 +83,10 @@ void main() {
     return field('content_tag', tag) +
         field('content', codepoint) +
         field('style_id', styleId) +
-        field('wide', wide);
+        field('wide', wide) +
+        field('protected', isProtected ? 1 : 0) +
+        field('hyperlink', hasHyperlink ? 1 : 0) +
+        field('semantic_content', semanticContent);
   }
 
   group('PackedCellLayout', () {
@@ -94,7 +101,9 @@ void main() {
         wide: 1,
       );
 
-      final summary = layout.decode(raw);
+      final summary = RawCellData();
+
+      layout.decodeInto(raw, summary);
 
       expect(summary.codepoint, 0x41);
       expect(summary.styleId, 0x1234);
@@ -112,9 +121,88 @@ void main() {
         wide: 0,
       );
 
-      final summary = layout.decode(raw);
+      final summary = RawCellData();
+
+      layout.decodeInto(raw, summary);
 
       expect(summary.codepoint, 0x1F642);
+    });
+
+    test('decodes packed cell metadata without a C query', () {
+      final types = packedCellTypes();
+      final layout = PackedCellLayout.fromTypes(types);
+      final raw = rawCell(
+        types,
+        tag: 0,
+        codepoint: 0x41,
+        styleId: 7,
+        wide: 2,
+        isProtected: true,
+        hasHyperlink: true,
+        semanticContent: 2,
+      );
+      final data = RawCellData();
+
+      layout.decodeInto(raw, data);
+
+      expect(
+        (
+          rawCell: data.rawCell,
+          contentTag: data.contentTag,
+          codepoint: data.codepoint,
+          hasGrapheme: data.hasGrapheme,
+          styleId: data.styleId,
+          wide: data.wide,
+          isProtected: data.isProtected,
+          hasHyperlink: data.hasHyperlink,
+          semanticContent: data.semanticContent,
+        ),
+        (
+          rawCell: raw,
+          contentTag: CellContentTag.codepoint,
+          codepoint: 0x41,
+          hasGrapheme: false,
+          styleId: 7,
+          wide: CellWide.spacerTail,
+          isProtected: true,
+          hasHyperlink: true,
+          semanticContent: CellSemanticContent.prompt,
+        ),
+      );
+    });
+
+    test('decodes inline RGB background data from the tagged arm', () {
+      final types = packedCellTypes();
+      final layout = PackedCellLayout.fromTypes(types);
+      final raw = rawCell(
+        types,
+        tag: 3,
+        codepoint: 0x123456,
+        styleId: 0,
+        wide: 0,
+      );
+      final data = RawCellData();
+
+      layout.decodeInto(raw, data);
+
+      expect(
+        (
+          contentTag: data.contentTag,
+          codepoint: data.codepoint,
+          hasBackgroundRgb: data.hasBackgroundRgb,
+          red: data.backgroundR,
+          green: data.backgroundG,
+          blue: data.backgroundB,
+        ),
+        (
+          contentTag: CellContentTag.bgColorRgb,
+          codepoint: 0,
+          hasBackgroundRgb: true,
+          red: 0x56,
+          green: 0x34,
+          blue: 0x12,
+        ),
+      );
     });
 
     test('rejects a missing packed field', () {

@@ -246,7 +246,7 @@ class FrameBuilder {
     if (terminalDirty) {
       if (dirty != .clean || hasDirtyRows) {
         _build(dirty == .clean ? .partial : dirty);
-        _renderState.dirty = .clean;
+        _renderState.clean();
       }
     } else if (hasDirtyRows) {
       _build(.partial);
@@ -257,16 +257,26 @@ class FrameBuilder {
     _rowBuilder.beginFrame();
 
     final rebuildAll = dirty != DirtyState.partial;
+    final useDirtyIterator =
+        dirty == _renderState.dirty &&
+        dirty != .clean &&
+        (dirty != .partial || !_dirtyRows.anyDirty);
     _rows.reset(_renderState);
 
-    var row = 0;
-    while (_rows.next()) {
-      if (row >= _state.rows) break;
-      if (rebuildAll || _rows.dirty || _dirtyRows.isDirty(row)) {
+    if (useDirtyIterator) {
+      while (_rows.nextDirty()) {
+        final row = _rows.index;
+        if (row >= _state.rows) break;
         _rowBuilder.rebuildRow(row, _rows, _cells);
-        _rows.dirty = false;
       }
-      row++;
+    } else {
+      while (_rows.next()) {
+        final row = _rows.index;
+        if (row >= _state.rows) break;
+        if (rebuildAll || _rows.dirty || _dirtyRows.isDirty(row)) {
+          _rowBuilder.rebuildRow(row, _rows, _cells);
+        }
+      }
     }
 
     _dirtyRows._clear();

@@ -15,7 +15,7 @@ abstract interface class RenderBindings {
   int cellGetStyleId(LibGhosttyHandle cell);
   RawCellSummary cellGetSummary(LibGhosttyHandle cell);
   CellWide cellGetWide(LibGhosttyHandle cell);
-  RawCellSummary? rawCellsGetSummary(RawCellsView view, int index);
+  bool decodeRawCell(RawCellsView view, int index, RawCellData output);
 
   LibGhosttyHandle gridRefCell(RawGridRef ref);
   List<int> gridRefGraphemes(RawGridRef ref);

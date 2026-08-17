@@ -122,8 +122,8 @@ final class WasmRenderBindings implements RenderBindings {
       _required(_raw.cellGetWide(h.value), 'ghostty_cell_get');
 
   @override
-  RawCellSummary? rawCellsGetSummary(RawCellsView view, int index) =>
-      _raw.rawCellsGetSummary(view, index);
+  bool decodeRawCell(RawCellsView view, int index, RawCellData output) =>
+      _raw.decodeRawCell(view, index, output);
 
   @override
   LibGhosttyHandle gridRefCell(RawGridRef r) =>
@@ -1509,17 +1509,27 @@ final class _WasmRenderRaw {
       if (address == 0 && length != 0) {
         throw StateError('GhosttyCellsView has a null pointer with cells.');
       }
-      view.set(address: address, length: length);
+      final selection = rowIteratorGetSelection(iterator);
+      final hasSelection = checkOptionalCode(
+        selection.$1.value,
+        operation: 'ghostty_render_state_row_get',
+      );
+      view.set(
+        address: address,
+        length: length,
+        selection: hasSelection ? selection.$2 : null,
+      );
       return true;
     } finally {
       frame.release();
     }
   }
 
-  RawCellSummary? rawCellsGetSummary(RawCellsView view, int index) {
-    if (index < 0 || index >= view.length) return null;
+  bool decodeRawCell(RawCellsView view, int index, RawCellData output) {
+    if (index < 0 || index >= view.length) return false;
     final raw = _memory.readU64(view.address + index * _layout.cellLayout.size);
-    return _layout.cellLayout.decode(raw);
+    _layout.cellLayout.decodeInto(raw, output);
+    return true;
   }
 
   Result rowIteratorInit(int iterator, int renderState) {

@@ -804,8 +804,14 @@ final class PackedCellLayout {
   final int size;
   final String underlying;
   final _PackedBit _contentTag;
+  final _PackedBit _contentRgbR;
+  final _PackedBit _contentRgbG;
+  final _PackedBit _contentRgbB;
   final _PackedBit _styleId;
   final _PackedBit _wide;
+  final _PackedBit _protected;
+  final _PackedBit _hyperlink;
+  final _PackedBit _semanticContent;
   final _PackedBit _codepoint;
   final _PackedBit _codepointGrapheme;
 
@@ -905,8 +911,14 @@ final class PackedCellLayout {
       size: cellSize,
       underlying: underlying,
       contentTag: contentTag,
+      contentRgbR: _nestedBit(content, rgb, 'r'),
+      contentRgbG: _nestedBit(content, rgb, 'g'),
+      contentRgbB: _nestedBit(content, rgb, 'b'),
       styleId: styleId,
       wide: wide,
+      protected: protected,
+      hyperlink: hyperlink,
+      semanticContent: semanticContent,
       codepoint: _nestedBit(content, codepoint, 'codepoint'),
       codepointGrapheme: _nestedBit(content, codepointGrapheme, 'codepoint'),
     );
@@ -916,29 +928,56 @@ final class PackedCellLayout {
     required this.size,
     required this.underlying,
     required _PackedBit contentTag,
+    required _PackedBit contentRgbR,
+    required _PackedBit contentRgbG,
+    required _PackedBit contentRgbB,
     required _PackedBit styleId,
     required _PackedBit wide,
+    required _PackedBit protected,
+    required _PackedBit hyperlink,
+    required _PackedBit semanticContent,
     required _PackedBit codepoint,
     required _PackedBit codepointGrapheme,
   }) : _contentTag = contentTag,
+       _contentRgbR = contentRgbR,
+       _contentRgbG = contentRgbG,
+       _contentRgbB = contentRgbB,
        _styleId = styleId,
        _wide = wide,
+       _protected = protected,
+       _hyperlink = hyperlink,
+       _semanticContent = semanticContent,
        _codepoint = codepoint,
        _codepointGrapheme = codepointGrapheme;
 
-  RawCellSummary decode(int raw) {
-    final tag = _extract(raw, _contentTag);
-    final codepoint = switch (tag) {
-      0 => _extract(raw, _codepoint),
-      1 => _extract(raw, _codepointGrapheme),
-      2 || 3 => 0,
-      _ => throw StateError('Unsupported GhosttyCell content tag: $tag.'),
+  /// Decodes one manifest-described cell into reusable storage.
+  ///
+  /// [target] is overwritten and returned. The packed value is borrowed from
+  /// the row view and remains valid only until the render state is updated.
+  RawCellData decodeInto(int raw, RawCellData target) {
+    final contentTag = CellContentTag.fromValue(_extract(raw, _contentTag));
+    final hasGrapheme = contentTag == .codepointGrapheme;
+    final codepoint = switch (contentTag) {
+      .codepoint => _extract(raw, _codepoint),
+      .codepointGrapheme => _extract(raw, _codepointGrapheme),
+      .bgColorPalette || .bgColorRgb => 0,
     };
-    return (
+    target.set(
+      rawCell: raw,
+      contentTag: contentTag,
       codepoint: codepoint,
+      hasGrapheme: hasGrapheme,
       styleId: _extract(raw, _styleId),
       wide: CellWide.fromValue(_extract(raw, _wide)),
+      isProtected: _extract(raw, _protected) != 0,
+      hasHyperlink: _extract(raw, _hyperlink) != 0,
+      semanticContent: .fromValue(_extract(raw, _semanticContent)),
+      hasBackgroundRgb: contentTag == .bgColorRgb,
+      backgroundR: _extract(raw, _contentRgbR),
+      backgroundG: _extract(raw, _contentRgbG),
+      backgroundB: _extract(raw, _contentRgbB),
     );
+    return target;
   }
 
   static _PackedBit _nestedBit(_PackedBit parent, _PackedArm arm, String name) {
