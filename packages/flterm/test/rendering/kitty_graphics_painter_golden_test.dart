@@ -24,7 +24,7 @@ void main() {
       final decoded = img.decodePng(bytes);
       if (decoded == null) return null;
       final rgba = decoded.convert(format: img.Format.uint8, numChannels: 4);
-      return (
+      return DecodedImage(
         width: rgba.width,
         height: rgba.height,
         rgba: Uint8List.fromList(rgba.toUint8List()),

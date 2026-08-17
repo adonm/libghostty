@@ -579,7 +579,7 @@ final class TerminalControllerImpl extends TerminalController {
     _terminal.kittyImageStorageLimit = _config.kittyImageStorageLimit;
     _terminal.setApcBufferLimit(_config.apcBufferLimit);
     _terminal.setGlyphProtocol(enabled: _config.glyphProtocol);
-    _terminal.defaultCursorShape = _config.cursorStyle;
+    _terminal.defaultCursorShape = .fromValue(_config.cursorStyle.value);
     _terminal.defaultCursorBlink = _config.cursorBlink;
   }
 

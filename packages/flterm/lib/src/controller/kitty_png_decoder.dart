@@ -18,5 +18,9 @@ DecodedImage? _decodePng(Uint8List bytes) {
   final decoded = decodePng(bytes);
   if (decoded == null) return null;
   final rgba = decoded.convert(format: .uint8, numChannels: 4);
-  return (width: rgba.width, height: rgba.height, rgba: rgba.toUint8List());
+  return DecodedImage(
+    width: rgba.width,
+    height: rgba.height,
+    rgba: rgba.toUint8List(),
+  );
 }

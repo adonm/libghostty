@@ -229,12 +229,15 @@ void main() {
       await tester.pumpWidget(wrap(terminal));
       await tester.pumpWidget(wrap(replacement));
 
-      expect(replacement.geometry, (
-        cols: defaultCols,
-        rows: defaultRows,
-        widthPx: defaultCols * defaultMetrics.cellWidth.toInt(),
-        heightPx: defaultRows * defaultMetrics.cellHeight.toInt(),
-      ));
+      expect(
+        replacement.geometry,
+        const TerminalGeometry(
+          cols: defaultCols,
+          rows: defaultRows,
+          widthPx: defaultCols * 8,
+          heightPx: defaultRows * 16,
+        ),
+      );
     });
 
     testWidgets('theme change triggers layout', (tester) async {

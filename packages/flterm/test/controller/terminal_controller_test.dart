@@ -193,12 +193,15 @@ void main() {
           ),
         );
 
-        expect(controller.terminal.geometry, (
-          cols: 80,
-          rows: 24,
-          widthPx: 1280,
-          heightPx: 768,
-        ));
+        expect(
+          controller.terminal.geometry,
+          const TerminalGeometry(
+            cols: 80,
+            rows: 24,
+            widthPx: 1280,
+            heightPx: 768,
+          ),
+        );
       });
 
       test('updates physical geometry when the grid is unchanged', () {
@@ -230,12 +233,15 @@ void main() {
           ),
         );
 
-        expect(binding.terminal.geometry, (
-          cols: 80,
-          rows: 24,
-          widthPx: 800,
-          heightPx: 480,
-        ));
+        expect(
+          binding.terminal.geometry,
+          const TerminalGeometry(
+            cols: 80,
+            rows: 24,
+            widthPx: 800,
+            heightPx: 480,
+          ),
+        );
       });
 
       test('ignores resize events with invalid physical geometry', () {
@@ -268,12 +274,15 @@ void main() {
           ),
         );
 
-        expect(binding.terminal.geometry, (
-          cols: 80,
-          rows: 24,
-          widthPx: 640,
-          heightPx: 384,
-        ));
+        expect(
+          binding.terminal.geometry,
+          const TerminalGeometry(
+            cols: 80,
+            rows: 24,
+            widthPx: 640,
+            heightPx: 384,
+          ),
+        );
       });
 
       test('ignores resize events beyond the native grid limit', () {
@@ -307,12 +316,15 @@ void main() {
           ),
         );
 
-        expect(binding.terminal.geometry, (
-          cols: 80,
-          rows: 24,
-          widthPx: 640,
-          heightPx: 384,
-        ));
+        expect(
+          binding.terminal.geometry,
+          const TerminalGeometry(
+            cols: 80,
+            rows: 24,
+            widthPx: 640,
+            heightPx: 384,
+          ),
+        );
       });
 
       test('emits the measured in-band resize report', () {
@@ -843,7 +855,10 @@ void main() {
 
         writeControllerUtf8(controller, '\x1b]9;Build finished\x07');
 
-        expect(notification, (title: '', body: 'Build finished'));
+        expect(
+          notification,
+          const DesktopNotification(title: '', body: 'Build finished'),
+        );
       });
     });
 
@@ -854,7 +869,7 @@ void main() {
 
         writeControllerUtf8(controller, '\x1b]9;4;1;42\x07');
 
-        expect(report, (state: TerminalProgressState.set, progress: 42));
+        expect(report, const TerminalProgress(state: .set, progress: 42));
       });
     });
 
