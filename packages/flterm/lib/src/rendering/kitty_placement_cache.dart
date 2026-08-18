@@ -14,13 +14,13 @@ import 'paint_state.dart';
 final class KittyPlacementCache {
   final PaintState _state;
   final KittyImageCache _images;
-  final List<KittyPlacementSnapshot> _snapshots = [];
   final Set<int> _liveImageIds = {};
+  final List<KittyPlacementSnapshot> _snapshots = [];
   _SnapshotKey? _key;
 
   KittyPlacementCache({required this._state, required this._images});
 
-  /// Placement snapshots ordered by their signed z-index.
+  /// Placement snapshots ordered by signed z-index, then image ID.
   Iterable<KittyPlacementSnapshot> get snapshots => _snapshots;
 
   /// Refreshes snapshots from [terminal] when protocol or geometry inputs have
@@ -51,9 +51,14 @@ final class KittyPlacementCache {
     );
     if (!geometryDirty && _key == key) return false;
 
-    _clear();
+    final nextSnapshots = <KittyPlacementSnapshot>[];
+    final nextLiveImageIds = <int>{};
+    final drawableImageIds = {
+      for (final snapshot in _snapshots) snapshot.imageId,
+    };
+    var replacementPending = false;
     for (final placement in graphics.placements()) {
-      _liveImageIds.add(placement.imageId);
+      nextLiveImageIds.add(placement.imageId);
 
       final info = placement.renderInfo;
       if (!info.viewportVisible) continue;
@@ -62,8 +67,11 @@ final class KittyPlacementCache {
       final image = graphics.image(placement.imageId);
       if (image == null) continue;
 
-      _images.lookup(image);
-      _snapshots.add(
+      final entry = _images.lookup(image);
+      replacementPending |=
+          entry is KittyImagePending &&
+          !drawableImageIds.contains(placement.imageId);
+      nextSnapshots.add(
         KittyPlacementSnapshot(
           imageId: placement.imageId,
           dst: Rect.fromLTWH(
@@ -85,7 +93,20 @@ final class KittyPlacementCache {
       );
     }
 
-    if (_snapshots.length > 1) _snapshots.sort(_compareZ);
+    if (nextSnapshots.length > 1) nextSnapshots.sort(_compareZ);
+    // Placement and image publication is one visual transaction. This keeps
+    // the last complete frame drawable when clients animate with new IDs.
+    if (replacementPending && _snapshots.isNotEmpty) {
+      _images.evict({..._liveImageIds, ...nextLiveImageIds});
+      return false;
+    }
+
+    _snapshots
+      ..clear()
+      ..addAll(nextSnapshots);
+    _liveImageIds
+      ..clear()
+      ..addAll(nextLiveImageIds);
     _images.evict(_liveImageIds);
     _key = key;
     return true;
@@ -97,7 +118,8 @@ final class KittyPlacementCache {
   }
 
   static int _compareZ(KittyPlacementSnapshot a, KittyPlacementSnapshot b) {
-    return a.z.compareTo(b.z);
+    final z = a.z.compareTo(b.z);
+    return z != 0 ? z : a.imageId.compareTo(b.imageId);
   }
 }
 

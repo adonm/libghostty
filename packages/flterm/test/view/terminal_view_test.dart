@@ -324,6 +324,49 @@ void main() {
       expect(rows.last, greaterThan(0));
     });
 
+    testWidgets('sizes a pinned Kitty placement during first layout', (
+      tester,
+    ) async {
+      final kittyController = TerminalController(
+        config: const TerminalConfig(cursorBlink: false),
+      );
+      addTearDown(kittyController.dispose);
+      final fontData = File(
+        'test/fixtures/fonts/JetBrainsMono-Regular.ttf',
+      ).readAsBytesSync();
+      const payload = '/wAA';
+      kittyController.write(
+        Uint8List.fromList(
+          '\x1b_Gf=24,s=1,v=1,a=T,i=1,c=1,r=1;$payload\x1b\\'.codeUnits,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 800,
+              height: 480,
+              child: TerminalView(
+                controller: kittyController,
+                padding: EdgeInsets.zero,
+                fontData: fontData,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final nativeTerminal = terminal(kittyController);
+      final placement = KittyGraphics.of(nativeTerminal)!.placements().single;
+      final geometry = nativeTerminal.geometry;
+      expect(
+        (placement.renderInfo.pixelWidth, placement.renderInfo.pixelHeight),
+        (geometry.widthPx ~/ geometry.cols, geometry.heightPx ~/ geometry.rows),
+      );
+    });
+
     testWidgets('geometry uses the Flutter view device pixel ratio', (
       tester,
     ) async {
