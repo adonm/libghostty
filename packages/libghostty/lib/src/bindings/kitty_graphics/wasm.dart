@@ -141,23 +141,21 @@ final class WasmKittyGraphicsBindings implements KittyGraphicsBindings {
       _imageGetU32(image, .number);
 
   @override
-  Uint8List kittyGraphicsImageGetPixelData(LibGhosttyHandle image) {
-    if (image.value == 0) throw const InvalidValueException();
-    _setImageMulti([.dataPtr, .dataLen]);
-    final result = Result.fromValue(
-      _exports.ghostty_kitty_graphics_image_get_multi(
-        image.value,
-        2,
-        _keys,
-        _values,
-        _written,
-      ),
-    );
-    checkCode(result, operation: 'ghostty_kitty_graphics_image_get_multi');
-    final pointer = _memory.readPtr(_multi);
-    final length = _memory.readU32(_multi + _wasmOutputSlotSize);
-    if (pointer == 0 || length == 0) return Uint8List(0);
-    return Uint8List.fromList(_memory.readBytes(pointer, length));
+  int kittyGraphicsImageGetPixelData(
+    LibGhosttyHandle image,
+    Uint8List destination,
+  ) {
+    final source = _imagePixelDataView(image);
+    if (destination.length < source.length) {
+      throw RangeError.range(
+        destination.length,
+        source.length,
+        null,
+        'destination.length',
+      );
+    }
+    destination.setRange(0, source.length, source);
+    return source.length;
   }
 
   @override
@@ -372,6 +370,25 @@ final class WasmKittyGraphicsBindings implements KittyGraphicsBindings {
     } finally {
       frame.release();
     }
+  }
+
+  Uint8List _imagePixelDataView(LibGhosttyHandle image) {
+    if (image.value == 0) throw const InvalidValueException();
+    _setImageMulti([.dataPtr, .dataLen]);
+    final result = Result.fromValue(
+      _exports.ghostty_kitty_graphics_image_get_multi(
+        image.value,
+        2,
+        _keys,
+        _values,
+        _written,
+      ),
+    );
+    checkCode(result, operation: 'ghostty_kitty_graphics_image_get_multi');
+    final pointer = _memory.readPtr(_multi);
+    final length = _memory.readU32(_multi + _wasmOutputSlotSize);
+    if (pointer == 0 || length == 0) return Uint8List(0);
+    return _memory.readBytes(pointer, length);
   }
 
   int _require(int pointer) {

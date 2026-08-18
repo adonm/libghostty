@@ -201,12 +201,14 @@ void main() {
         final image = KittyGraphics.of(terminal)!.image(1)!;
         expect(image.width, 64);
         expect(image.height, 64);
+        final pixels = Uint8List(image.width * image.height * 4);
+        image.copyPixelDataInto(pixels);
 
         final cache = KittyImageCache(onImageReady: () {});
         addTearDown(cache.dispose);
         cache.putReady(
           image.id,
-          await imageFromRgba(image.pixelData, image.width, image.height),
+          await imageFromRgba(pixels, image.width, image.height),
         );
 
         final snapshots = [

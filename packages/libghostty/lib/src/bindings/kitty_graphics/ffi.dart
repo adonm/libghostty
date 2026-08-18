@@ -106,24 +106,21 @@ final class FfiKittyGraphicsBindings implements KittyGraphicsBindings {
       _imageGetU32(image, .number);
 
   @override
-  Uint8List kittyGraphicsImageGetPixelData(LibGhosttyHandle image) {
-    if (image.value == 0) checkResultCode(Result.invalidValue.value);
-    _setImageMulti([.dataPtr, .dataLen]);
-    final result = ghostty_kitty_graphics_image_get_multi(
-      Pointer.fromAddress(image.value),
-      2,
-      _keys,
-      _values,
-      _written,
-    );
-    checkResultCode(
-      result.value,
-      operation: 'ghostty_kitty_graphics_image_get_multi',
-    );
-    final pointer = (_multi + 0).cast<Pointer<Uint8>>().value;
-    final length = (_multi + 1).cast<Size>().value;
-    if (pointer == nullptr || length == 0) return Uint8List(0);
-    return Uint8List.fromList(pointer.asTypedList(length));
+  int kittyGraphicsImageGetPixelData(
+    LibGhosttyHandle image,
+    Uint8List destination,
+  ) {
+    final source = _imagePixelDataView(image);
+    if (destination.length < source.length) {
+      throw RangeError.range(
+        destination.length,
+        source.length,
+        null,
+        'destination.length',
+      );
+    }
+    destination.setRange(0, source.length, source);
+    return source.length;
   }
 
   @override
@@ -327,6 +324,26 @@ final class FfiKittyGraphicsBindings implements KittyGraphicsBindings {
       );
       return out.value;
     });
+  }
+
+  Uint8List _imagePixelDataView(LibGhosttyHandle image) {
+    if (image.value == 0) checkResultCode(Result.invalidValue.value);
+    _setImageMulti([.dataPtr, .dataLen]);
+    final result = ghostty_kitty_graphics_image_get_multi(
+      Pointer.fromAddress(image.value),
+      2,
+      _keys,
+      _values,
+      _written,
+    );
+    checkResultCode(
+      result.value,
+      operation: 'ghostty_kitty_graphics_image_get_multi',
+    );
+    final pointer = (_multi + 0).cast<Pointer<Uint8>>().value;
+    final length = (_multi + 1).cast<Size>().value;
+    if (pointer == nullptr || length == 0) return Uint8List(0);
+    return pointer.asTypedList(length);
   }
 
   void _setImageMulti(List<KittyGraphicsImageData> keys) {

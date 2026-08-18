@@ -108,10 +108,10 @@ class KittyImageCache {
     if (image.compression != .none) return null;
     switch (image.format) {
       case KittyImageFormat.rgba:
-        return image.pixelData;
+        return _copyPixelData(image, image.width * image.height * 4);
       case KittyImageFormat.rgb:
-        final src = image.pixelData;
         final pixelCount = image.width * image.height;
+        final src = _copyPixelData(image, pixelCount * 3);
         if (src.length < pixelCount * 3) return null;
         final out = Uint8List(pixelCount * 4);
         for (var i = 0; i < pixelCount; i++) {
@@ -126,6 +126,14 @@ class KittyImageCache {
       case KittyImageFormat.gray:
         return null;
     }
+  }
+
+  Uint8List _copyPixelData(KittyImage image, int byteLength) {
+    final destination = Uint8List(byteLength);
+    final written = image.copyPixelDataInto(destination);
+    return written == destination.length
+        ? destination
+        : Uint8List.sublistView(destination, 0, written);
   }
 }
 

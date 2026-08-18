@@ -1,6 +1,7 @@
 @Tags(['ffi'])
 library;
 
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:libghostty/libghostty.dart';
@@ -44,14 +45,44 @@ void main() {
           expect(image.format, KittyImageFormat.rgb);
         });
 
-        test('returns decoded RGB bytes', () {
+        test('copies decoded RGB bytes', () {
           terminal.write(_transmitRedPixel(id: 7));
+          final destination = Uint8List(3);
 
           final image = KittyGraphics.of(terminal)!.image(7)!;
-          expect(
-            image.pixelData,
-            equals(Uint8List.fromList([0xff, 0x00, 0x00])),
-          );
+          image.copyPixelDataInto(destination);
+
+          expect(destination, [0xff, 0x00, 0x00]);
+        });
+
+        test('returns the copied RGB byte count', () {
+          terminal.write(_transmitRedPixel(id: 8));
+          final destination = Uint8List.fromList([1, 1, 1, 1]);
+
+          final written = KittyGraphics.of(
+            terminal,
+          )!.image(8)!.copyPixelDataInto(destination);
+
+          expect(written, 3);
+        });
+
+        test('keeps copied RGB bytes stable after terminal mutation', () {
+          terminal.write(_transmitRedPixel(id: 8));
+          final destination = Uint8List(3);
+          KittyGraphics.of(terminal)!.image(8)!.copyPixelDataInto(destination);
+
+          terminal.write(_transmitRedPixel(id: 9));
+
+          expect(destination, [0xff, 0x00, 0x00]);
+        });
+
+        test('rejects insufficient pixel destination storage', () {
+          terminal.write(_transmitRedPixel(id: 9));
+          final image = KittyGraphics.of(terminal)!.image(9)!;
+          final destination = Uint8List.fromList([1, 2]);
+
+          expect(() => image.copyPixelDataInto(destination), throwsRangeError);
+          expect(destination, [1, 2]);
         });
       });
 
@@ -139,7 +170,7 @@ void main() {
         expect(image!.width, 2);
         expect(image.height, 1);
         expect(image.format, KittyImageFormat.rgba);
-        expect(image.pixelData, hasLength(8));
+        expect(image.copyPixelDataInto(Uint8List(8)), 8);
       });
 
       test('rejects payload when callback returns null', () {
@@ -150,6 +181,54 @@ void main() {
         );
 
         expect(KittyGraphics.of(terminal)!.image(56), isNull);
+      });
+
+      test('rejects payload when callback throws', () {
+        LibGhostty.setPngDecoder((_) {
+          throw StateError('decoder failed');
+        });
+
+        terminal.write(
+          Uint8List.fromList('\x1b_Gf=100,a=t,i=58;aGVsbG8=\x1b\\'.codeUnits),
+        );
+
+        expect(KittyGraphics.of(terminal)!.image(58), isNull);
+      });
+
+      test('rejects payload when callback returns short RGBA data', () {
+        LibGhostty.setPngDecoder(
+          (_) => DecodedImage(width: 1, height: 1, rgba: Uint8List(3)),
+        );
+
+        terminal.write(
+          Uint8List.fromList('\x1b_Gf=100,a=t,i=59;aGVsbG8=\x1b\\'.codeUnits),
+        );
+
+        expect(KittyGraphics.of(terminal)!.image(59), isNull);
+      });
+
+      test('rejects payload when callback returns oversized RGBA data', () {
+        LibGhostty.setPngDecoder(
+          (_) => DecodedImage(width: 1, height: 1, rgba: Uint8List(5)),
+        );
+
+        terminal.write(
+          Uint8List.fromList('\x1b_Gf=100,a=t,i=60;aGVsbG8=\x1b\\'.codeUnits),
+        );
+
+        expect(KittyGraphics.of(terminal)!.image(60), isNull);
+      });
+
+      test('rejects payload with mismatched dimensions', () {
+        LibGhostty.setPngDecoder(
+          (_) => DecodedImage(width: 2, height: 1, rgba: Uint8List(4)),
+        );
+
+        terminal.write(
+          Uint8List.fromList('\x1b_Gf=100,a=t,i=61;aGVsbG8=\x1b\\'.codeUnits),
+        );
+
+        expect(KittyGraphics.of(terminal)!.image(61), isNull);
       });
 
       test('clearPngDecoder stops routing to callback', () {
@@ -206,6 +285,116 @@ void main() {
         expect(p.renderInfo.sourceWidth, 1);
         expect(p.renderInfo.sourceHeight, 1);
       });
+
+      test('keeps a placement snapshot stable after terminal mutation', () {
+        terminal.resize(cols: 80, rows: 24, cellWidthPx: 10, cellHeightPx: 20);
+        terminal.write(
+          Uint8List.fromList(
+            '\x1b_Gf=24,s=1,v=1,a=T,i=12,c=2,r=1;/wAA\x1b\\'.codeUnits,
+          ),
+        );
+        final placement = KittyGraphics.of(terminal)!.placements().single;
+        final snapshot = (
+          imageId: placement.imageId,
+          placementId: placement.placementId,
+          isVirtual: placement.isVirtual,
+          xOffset: placement.xOffset,
+          yOffset: placement.yOffset,
+          sourceX: placement.sourceX,
+          sourceY: placement.sourceY,
+          sourceWidth: placement.sourceWidth,
+          sourceHeight: placement.sourceHeight,
+          columns: placement.columns,
+          rows: placement.rows,
+          z: placement.z,
+          renderInfo: placement.renderInfo,
+        );
+
+        terminal.resize(cols: 80, rows: 24, cellWidthPx: 20, cellHeightPx: 40);
+
+        expect((
+          imageId: placement.imageId,
+          placementId: placement.placementId,
+          isVirtual: placement.isVirtual,
+          xOffset: placement.xOffset,
+          yOffset: placement.yOffset,
+          sourceX: placement.sourceX,
+          sourceY: placement.sourceY,
+          sourceWidth: placement.sourceWidth,
+          sourceHeight: placement.sourceHeight,
+          columns: placement.columns,
+          rows: placement.rows,
+          z: placement.z,
+          renderInfo: placement.renderInfo,
+        ), snapshot);
+      });
+
+      test(
+        'reports a negative viewport row for a partially scrolled placement',
+        () {
+          final scrolled = Terminal(cols: 80, rows: 5);
+          addTearDown(scrolled.dispose);
+          scrolled.kittyImageStorageLimit = 1 << 20;
+          scrolled.resize(cols: 80, rows: 5, cellWidthPx: 10, cellHeightPx: 20);
+          scrolled.write(
+            Uint8List.fromList(
+              '\x1b_Ga=t,t=d,f=24,i=13,s=1,v=2;////////\x1b\\'
+                      '\x1b_Ga=p,i=13,p=1,c=1,r=4,C=1;\x1b\\'
+                  .codeUnits,
+            ),
+          );
+          scrolled.write(Uint8List.fromList('\n\n\n\n\n\n'.codeUnits));
+
+          final placement = KittyGraphics.of(scrolled)!.placements().single;
+
+          expect(
+            (
+              placement.renderInfo.viewportVisible,
+              placement.renderInfo.viewportRow,
+            ),
+            (true, -2),
+          );
+        },
+      );
+
+      test(
+        'preserves stretched destination for an oversized source request',
+        () {
+          terminal.resize(
+            cols: 80,
+            rows: 24,
+            cellWidthPx: 10,
+            cellHeightPx: 20,
+          );
+          final payload = base64Encode(Uint8List(64));
+          terminal.write(
+            Uint8List.fromList(
+              '\x1b_Ga=t,t=d,f=32,i=14,s=4,v=4;$payload\x1b\\'.codeUnits,
+            ),
+          );
+          terminal.write(
+            Uint8List.fromList(
+              '\x1b_Ga=p,i=14,p=1,x=3,y=3,w=10,h=10;\x1b\\'.codeUnits,
+            ),
+          );
+
+          final renderInfo = KittyGraphics.of(
+            terminal,
+          )!.placements().single.renderInfo;
+
+          expect(
+            (
+              renderInfo.pixelWidth,
+              renderInfo.pixelHeight,
+              renderInfo.sourceX,
+              renderInfo.sourceY,
+              renderInfo.sourceWidth,
+              renderInfo.sourceHeight,
+            ),
+            (10, 10, 3, 3, 1, 1),
+          );
+        },
+      );
     });
   });
 }
