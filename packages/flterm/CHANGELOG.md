@@ -40,6 +40,9 @@
   selection and terminal mouse reporting.
 - **View updates**: controller swaps transfer terminal focus correctly, and
   changing `TerminalView.fontData` refreshes cell metrics.
+- **Kitty graphics rendering**: unchanged and replacing images remain drawable,
+  decode pressure is bounded, and placement geometry refreshes during initial
+  layout and window resizing.
 
 ## 0.0.5
 

@@ -19,6 +19,9 @@
   position.
 - **Exception constructors**: messages and operation context use the named
   `message` and `operation` arguments.
+- **Kitty pixel data**: `KittyImage.pixelData` is replaced by
+  `copyPixelDataInto()`, which copies into caller-owned storage and returns the
+  written byte count.
 
 ### Added
 
