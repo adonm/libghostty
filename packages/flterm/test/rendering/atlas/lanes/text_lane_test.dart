@@ -36,7 +36,7 @@ void main() {
       lane.dispose();
     });
 
-    Future<({int left, int right, int width})> paintedBounds(
+    Future<({int height, int left, int right, int width})> paintedBounds(
       Image image,
       AtlasEntry entry,
     ) async {
@@ -49,17 +49,24 @@ void main() {
       final bottom = entry.srcBottom.ceil();
       var paintedLeft = right;
       var paintedRight = left - 1;
+      var paintedTop = bottom;
+      var paintedBottom = top - 1;
       for (var y = top; y < bottom; y++) {
         for (var x = left; x < right; x++) {
           final alpha = data[(y * imageWidth + x) * 4 + 3];
           if (alpha > 0) {
             paintedLeft = x < paintedLeft ? x : paintedLeft;
             paintedRight = x > paintedRight ? x : paintedRight;
+            paintedTop = y < paintedTop ? y : paintedTop;
+            paintedBottom = y > paintedBottom ? y : paintedBottom;
           }
         }
       }
 
       return (
+        height: paintedBottom >= paintedTop
+            ? paintedBottom - paintedTop + 1
+            : 0,
         left: paintedLeft,
         right: paintedRight,
         width: paintedRight >= paintedLeft ? paintedRight - paintedLeft + 1 : 0,
@@ -134,6 +141,138 @@ void main() {
       final insetDelta = (leftInset - rightInset).abs();
 
       expect(insetDelta, lessThanOrEqualTo(2));
+    });
+
+    test('rasterizeText centers borrowed symbols in the first cell', () async {
+      final lane = TextLane()
+        ..configure(
+          config(
+            metrics: const CellMetrics(
+              cellWidth: 32,
+              cellHeight: 32,
+              baseline: 24,
+            ),
+          ),
+        );
+      addTearDown(lane.dispose);
+      final centered = lane.rasterizeText(
+        'A',
+        bold: false,
+        italic: false,
+        span: 2,
+      );
+      final centerInFirstCell = lane.rasterizeText(
+        'A',
+        bold: false,
+        italic: false,
+        span: 2,
+        centerInFirstCell: true,
+      );
+
+      lane.ensureImage();
+      final image = lane.image!;
+      final centeredBounds = await paintedBounds(image, centered);
+      final firstCellBounds = await paintedBounds(image, centerInFirstCell);
+
+      final centeredInset = centeredBounds.left - centered.srcLeft.floor();
+      final firstCellInset =
+          firstCellBounds.left - centerInFirstCell.srcLeft.floor();
+      expect(firstCellInset, lessThan(centeredInset));
+      expect(firstCellBounds.width, centeredBounds.width);
+    });
+
+    test('rasterizeText uniformly fits an oversized glyph', () async {
+      final regularLane = TextLane(initialSize: 128, maxSize: 128)
+        ..configure(
+          config(
+            metrics: const CellMetrics(
+              cellWidth: 32,
+              cellHeight: 32,
+              baseline: 24,
+            ),
+          ),
+        );
+      final constrainedLane = TextLane(initialSize: 128, maxSize: 128)
+        ..configure(
+          config(
+            metrics: const CellMetrics(
+              cellWidth: 4,
+              cellHeight: 32,
+              baseline: 24,
+            ),
+          ),
+        );
+      addTearDown(regularLane.dispose);
+      addTearDown(constrainedLane.dispose);
+      final regular = regularLane.rasterizeText(
+        '■',
+        bold: false,
+        italic: false,
+      );
+      final constrained = constrainedLane.rasterizeText(
+        '■',
+        bold: false,
+        italic: false,
+      );
+      regularLane.ensureImage();
+      constrainedLane.ensureImage();
+
+      final regularBounds = await paintedBounds(regularLane.image!, regular);
+      final constrainedBounds = await paintedBounds(
+        constrainedLane.image!,
+        constrained,
+      );
+
+      expect(constrainedBounds.width, lessThanOrEqualTo(4));
+      expect(constrainedBounds.height, lessThan(regularBounds.height));
+    });
+
+    test('rasterizeText uniformly fits a glyph taller than its cell', () async {
+      final regularLane = TextLane(initialSize: 128, maxSize: 128)
+        ..configure(
+          config(
+            metrics: const CellMetrics(
+              cellWidth: 32,
+              cellHeight: 32,
+              baseline: 24,
+            ),
+          ),
+        );
+      final constrainedLane = TextLane(initialSize: 128, maxSize: 128)
+        ..configure(
+          config(
+            metrics: const CellMetrics(
+              cellWidth: 32,
+              cellHeight: 8,
+              baseline: 6,
+            ),
+          ),
+        );
+      addTearDown(regularLane.dispose);
+      addTearDown(constrainedLane.dispose);
+      final regular = regularLane.rasterizeText(
+        '■',
+        bold: false,
+        italic: false,
+      );
+      final constrained = constrainedLane.rasterizeText(
+        '■',
+        bold: false,
+        italic: false,
+        span: 2,
+        centerInFirstCell: true,
+      );
+      regularLane.ensureImage();
+      constrainedLane.ensureImage();
+
+      final regularBounds = await paintedBounds(regularLane.image!, regular);
+      final constrainedBounds = await paintedBounds(
+        constrainedLane.image!,
+        constrained,
+      );
+
+      expect(constrainedBounds.height, lessThanOrEqualTo(8));
+      expect(constrainedBounds.width, lessThan(regularBounds.width));
     });
 
     test('clear drops pending text and releases the image', () {

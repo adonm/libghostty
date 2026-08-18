@@ -465,7 +465,12 @@ final class _ForegroundEmitter {
   _ForegroundEmitter(this._sprites, this._content, this._frame, this._state)
     : _operators = _AsciiOperatorRun();
 
-  void emit(CellIterator cell, _RowBuildState row, {required int span}) {
+  void emit(
+    CellIterator cell,
+    _RowBuildState row, {
+    required int span,
+    required int glyphSpan,
+  }) {
     if (!cell.hasText) {
       flush(row);
       return;
@@ -486,9 +491,14 @@ final class _ForegroundEmitter {
     }
 
     flush(row);
-    final entry = _content.resolveCell(cell, style: style, span: span);
+    final entry = _content.resolveCell(
+      cell,
+      style: style,
+      span: glyphSpan,
+      borrowedCell: glyphSpan != span,
+    );
     if (entry == null) return;
-    _emitEntry(entry, row, x: row.spriteX, wideText: span == 2);
+    _emitEntry(entry, row, x: row.spriteX, wideText: glyphSpan == 2);
   }
 
   void emitPreedit(
@@ -904,6 +914,7 @@ final class _RowBuildState {
   var bgRunInverse = false;
   var bgRunExplicit = false;
   var preeditEmitted = false;
+  var previousSymbol = false;
 
   void advance(int span, double cellWidth) {
     col += span;
@@ -935,6 +946,7 @@ final class _RowBuildState {
     bgRunInverse = false;
     bgRunExplicit = false;
     preeditEmitted = false;
+    previousSymbol = false;
   }
 }
 
@@ -1324,8 +1336,10 @@ final class _RowBuilder {
   void _writeCell(CellIterator cell) {
     final row = _row;
     final span = cell.wide == .wide ? 2 : 1;
+    final glyphSpan = _glyphSpan(cell, span);
     final preedit = _preeditRange;
     if (preedit != null && preedit.overlaps(row.row, row.col, span)) {
+      row.previousSymbol = false;
       _skipPreeditCell(cell, preedit, span);
       return;
     }
@@ -1360,12 +1374,13 @@ final class _RowBuilder {
 
     if (!row.hidden) {
       final x = row.spriteX;
-      _foreground.emit(cell, row, span: span);
+      _foreground.emit(cell, row, span: span, glyphSpan: glyphSpan);
       if (row.hasDecoration) {
         _emitDecorations(row, x: x, span: span);
       }
     } else {
       _foreground.flush(row);
+      row.previousSymbol = false;
     }
 
     if (span == 2) {
@@ -1374,4 +1389,56 @@ final class _RowBuilder {
     }
     row.advance(span, _frame.cellWidth);
   }
+
+  int _glyphSpan(CellIterator cell, int span) {
+    if (span > 1) {
+      _row.previousSymbol = false;
+      return span;
+    }
+
+    final codepoint = cell.codepoint;
+    final symbol = _isSymbolCodepoint(codepoint);
+    final graphicsElement = _isGraphicsElement(codepoint);
+    final previousSymbol = _row.previousSymbol;
+    _row.previousSymbol = symbol && !graphicsElement;
+    if (!symbol ||
+        graphicsElement ||
+        previousSymbol ||
+        _row.col + 1 >= _frame.cols) {
+      return 1;
+    }
+
+    // Symbol glyphs may borrow a following blank cell without changing the
+    // terminal's logical cursor or decoration span.
+    final currentCol = cell.col;
+    cell.select(currentCol + 1);
+    final nextCodepoint = cell.codepoint;
+    cell.select(currentCol);
+    return nextCodepoint == 0 ||
+            nextCodepoint == 0x20 ||
+            nextCodepoint == 0x2002
+        ? 2
+        : 1;
+  }
+}
+
+bool _isSymbolCodepoint(int codepoint) {
+  // Matches the symbol blocks Ghostty considers for glyph constraints.
+  if (codepoint < 0x2190) return false;
+  return (codepoint >= 0xE000 && codepoint <= 0xF8FF) ||
+      (codepoint >= 0xF0000 && codepoint <= 0xFFFFD) ||
+      (codepoint >= 0x100000 && codepoint <= 0x10FFFD) ||
+      (codepoint >= 0x2190 && codepoint <= 0x21FF) ||
+      (codepoint >= 0x2460 && codepoint <= 0x24FF) ||
+      (codepoint >= 0x2600 && codepoint <= 0x26FF) ||
+      (codepoint >= 0x2700 && codepoint <= 0x27BF) ||
+      (codepoint >= 0x1F100 && codepoint <= 0x1F1FF) ||
+      (codepoint >= 0x1F300 && codepoint <= 0x1F6FF);
+}
+
+bool _isGraphicsElement(int codepoint) {
+  return (codepoint >= 0x2500 && codepoint <= 0x259F) ||
+      (codepoint >= 0xE0B0 && codepoint <= 0xE0D7) ||
+      (codepoint >= 0x1CC00 && codepoint <= 0x1CEBF) ||
+      (codepoint >= 0x1FB00 && codepoint <= 0x1FBFF);
 }

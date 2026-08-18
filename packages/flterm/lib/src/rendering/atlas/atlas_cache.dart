@@ -10,12 +10,19 @@ import 'lanes/text_lane.dart';
 /// Lookup key for a cached text glyph. Two glyphs with the same text, bold,
 /// and italic state share the same atlas entry.
 typedef TextAtlasKey = ({String text, bool bold, bool italic});
-typedef _CodepointKey = ({int codepoint, bool bold, bool italic, int span});
+typedef _CodepointKey = ({
+  int codepoint,
+  bool bold,
+  bool italic,
+  int span,
+  bool centerInFirstCell,
+});
 typedef _TextKey = ({
   String text,
   bool bold,
   bool italic,
   int span,
+  bool centerInFirstCell,
   double sourcePadding,
 });
 typedef _SpriteKey = ({int codepoint, int span});
@@ -75,6 +82,7 @@ class AtlasCache {
     required bool bold,
     required bool italic,
     int span = 1,
+    bool centerInFirstCell = false,
   }) {
     if (span == 1 &&
         !bold &&
@@ -94,15 +102,21 @@ class AtlasCache {
       if (sprite != null) return sprite;
     }
 
-    final key = (codepoint: codepoint, bold: bold, italic: italic, span: span);
+    final key = (
+      codepoint: codepoint,
+      bold: bold,
+      italic: italic,
+      span: span,
+      centerInFirstCell: centerInFirstCell,
+    );
     final existing = _codepoints[key];
     if (existing != null) return existing;
 
-    final entry = _addText((
-      text: String.fromCharCode(codepoint),
-      bold: bold,
-      italic: italic,
-    ), span: span);
+    final entry = _addText(
+      (text: String.fromCharCode(codepoint), bold: bold, italic: italic),
+      span: span,
+      centerInFirstCell: centerInFirstCell,
+    );
     _codepoints[key] = entry;
     return entry;
   }
@@ -142,6 +156,7 @@ class AtlasCache {
       bold: key.bold,
       italic: key.italic,
       span: span,
+      centerInFirstCell: false,
       sourcePadding: 0.0,
     );
     return _emoji[cacheKey] ??= _emojiLane.rasterizeEmoji(
@@ -160,13 +175,18 @@ class AtlasCache {
     return _sprites[key] ??= _spriteLane.rasterizeSprite(glyph, span: span);
   }
 
-  AtlasEntry _addText(TextAtlasKey key, {int span = 1}) {
+  AtlasEntry _addText(
+    TextAtlasKey key, {
+    int span = 1,
+    bool centerInFirstCell = false,
+  }) {
     final sourcePadding = _textSourcePadding(key.text, span: span);
     final cacheKey = (
       text: key.text,
       bold: key.bold,
       italic: key.italic,
       span: span,
+      centerInFirstCell: centerInFirstCell,
       sourcePadding: sourcePadding,
     );
     return _text[cacheKey] ??= _textLane.rasterizeText(
@@ -174,6 +194,7 @@ class AtlasCache {
       bold: key.bold,
       italic: key.italic,
       span: span,
+      centerInFirstCell: centerInFirstCell,
       sourcePadding: sourcePadding,
     );
   }

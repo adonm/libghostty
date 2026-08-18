@@ -40,6 +40,12 @@ const bundledFontFamilyFallback = <String>[
   'Noto Sans JP',
 ];
 
+/// Font family fallback list for deterministic Nerd Font golden tests.
+const bundledNerdFontFamilyFallback = <String>[
+  'Symbols Nerd Font',
+  ...bundledFontFamilyFallback,
+];
+
 Future<void> loadBundledFonts() async {
   // DirectWrite leaves the COLRv1 and SVG fixture blank, so Windows uses the
   // equivalent CBDT subset for deterministic pixel bounds.
@@ -54,6 +60,7 @@ Future<void> loadBundledFonts() async {
   await _load(colorEmojiFilename, 'Noto Color Emoji');
   await _load('NotoEmoji-Regular.ttf', 'Noto Emoji');
   await _load('NotoSansJP-Regular.ttf', 'Noto Sans JP');
+  await _load('SymbolsNerdFont-Regular-subset.ttf', 'Symbols Nerd Font');
 }
 
 Future<Uint8List> _load(String filename, String family) async {

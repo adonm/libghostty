@@ -27,6 +27,8 @@ const _darkAnsiColors = [
 ];
 
 const _defaultFontFamilyFallback = [
+  'Symbols Nerd Font',
+  'Symbols Nerd Font Mono',
   'JetBrains Mono',
   'Menlo',
   'Consolas',

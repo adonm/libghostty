@@ -198,6 +198,31 @@ void main() {
         );
         terminal.dispose();
       });
+
+      testWidgets('Nerd Font symbol spacing', (tester) async {
+        const cols = 7;
+        const rows = 1;
+        final terminal = Terminal(cols: cols, rows: rows);
+        writeUtf8(terminal, '\x1b[34m\uE5FF\x1b[0m fvm');
+        final nerdTheme = theme.copyWith(
+          fontFamilyFallback: bundledNerdFontFamilyFallback,
+        );
+        tester.view.devicePixelRatio = 1.0;
+        await tester.pumpWidget(
+          wrap(
+            terminal,
+            theme: nerdTheme,
+            metrics: goldenMetrics,
+            maxWidth: cols * goldenMetrics.cellWidth,
+            maxHeight: rows * goldenMetrics.cellHeight,
+          ),
+        );
+        await expectLater(
+          find.byType(TerminalRenderer),
+          matchesGoldenFile('goldens/text_nerd_font_symbol_spacing.png'),
+        );
+        terminal.dispose();
+      });
     });
 
     group('text decorations', () {
