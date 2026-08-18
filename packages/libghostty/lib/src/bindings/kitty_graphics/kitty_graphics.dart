@@ -21,7 +21,10 @@ abstract interface class KittyGraphicsBindings {
   int kittyGraphicsImageGetHeight(LibGhosttyHandle image);
   int kittyGraphicsImageGetId(LibGhosttyHandle image);
   int kittyGraphicsImageGetNumber(LibGhosttyHandle image);
-  Uint8List kittyGraphicsImageGetPixelData(LibGhosttyHandle image);
+  int kittyGraphicsImageGetPixelData(
+    LibGhosttyHandle image,
+    Uint8List destination,
+  );
   int kittyGraphicsImageGetWidth(LibGhosttyHandle image);
 
   KittyPlacement kittyGraphicsPlacementGet(

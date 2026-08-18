@@ -21,7 +21,10 @@ part of 'terminal.dart';
 ///   if (!placement.renderInfo.viewportVisible) continue;
 ///   final image = kitty.image(placement.imageId);
 ///   if (image == null) continue;
-///   // draw `image.pixelData` cropped to `placement.renderInfo.source*`
+///   if (image.format != KittyImageFormat.rgba) continue;
+///   final pixels = Uint8List(image.width * image.height * 4);
+///   image.copyPixelDataInto(pixels);
+///   // Draw `pixels` cropped to `placement.renderInfo.source*`
 ///   // at grid cell (renderInfo.viewportCol, renderInfo.viewportRow).
 /// }
 /// ```
@@ -124,8 +127,8 @@ final class KittyGraphics {
 /// immediately. Do not access a [KittyImage] after mutating the terminal;
 /// reacquire it through [KittyGraphics.image] first.
 ///
-/// [pixelData] is the exception: it copies the bytes into a Dart-owned
-/// [Uint8List], so the returned buffer remains valid after mutations.
+/// [copyPixelDataInto] is the exception. It copies the bytes into Dart-owned
+/// storage that remains valid after mutations.
 @immutable
 final class KittyImage {
   // The image handle points into terminal-owned storage. This strong reference
@@ -137,12 +140,12 @@ final class KittyImage {
 
   const KittyImage._(this._handle, this._owner);
 
-  /// Compression of [pixelData].
+  /// Compression of the stored pixel data.
   KittyImageCompression get compression {
     return bindings.kittyGraphics.kittyGraphicsImageGetCompression(_handle);
   }
 
-  /// Pixel format of [pixelData].
+  /// Format of the stored pixel data.
   KittyImageFormat get format {
     return bindings.kittyGraphics.kittyGraphicsImageGetFormat(_handle);
   }
@@ -169,16 +172,21 @@ final class KittyImage {
   /// Image number assigned by the protocol, or zero when unset.
   int get number => bindings.kittyGraphics.kittyGraphicsImageGetNumber(_handle);
 
-  /// Raw pixel bytes, copied into a Dart-owned buffer so the list remains
-  /// valid after subsequent terminal mutations.
-  ///
-  /// Stored images are already decoded and decompressed before they reach this
-  /// API. PNG payloads are decoded through the callback installed via
-  /// [LibGhostty.setPngDecoder] and exposed here as RGBA.
-  Uint8List get pixelData {
-    return bindings.kittyGraphics.kittyGraphicsImageGetPixelData(_handle);
-  }
-
   /// Image width in pixels.
   int get width => bindings.kittyGraphics.kittyGraphicsImageGetWidth(_handle);
+
+  /// Copies the raw pixel bytes into [destination] and returns the byte count.
+  ///
+  /// Stored images are already decoded and decompressed. PNG payloads are
+  /// decoded through the callback installed via [LibGhostty.setPngDecoder]
+  /// and copied as RGBA. The destination must be large enough for the complete
+  /// payload; otherwise a [RangeError] is thrown. The copy completes
+  /// synchronously, so the written bytes remain valid after subsequent
+  /// terminal mutations.
+  int copyPixelDataInto(Uint8List destination) {
+    return bindings.kittyGraphics.kittyGraphicsImageGetPixelData(
+      _handle,
+      destination,
+    );
+  }
 }
