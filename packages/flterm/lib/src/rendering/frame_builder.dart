@@ -679,6 +679,7 @@ final class _ForegroundEmitter {
       fontWeight: bold ? .bold : theme.fontWeight,
       fontStyle: italic ? .italic : .normal,
       fontFamilyFallback: theme.fontFamilyFallback,
+      fontFeatures: const [FontFeature.enable('liga')],
     );
     _lastTextStyleTheme = theme;
     _lastTextStyleForeground = foreground;

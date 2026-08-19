@@ -180,7 +180,7 @@ void main() {
           '\x1b[2mFaint text\x1b[0m\r\n'
           '\x1b[7mInverse text\x1b[0m\r\n'
           '\x1b[42;30m BG color \x1b[0m\r\n'
-          'a => b != c === d',
+          '== === !== != -> =>',
         );
         tester.view.devicePixelRatio = 1.0;
         await tester.pumpWidget(

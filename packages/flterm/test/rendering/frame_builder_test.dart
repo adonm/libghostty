@@ -225,11 +225,15 @@ void main() {
 
     test('sync emits operator ligatures without adding text atlas entries', () {
       final initialCacheSize = atlas.cacheSize;
-      writeUtf8(terminal, '=> !=');
+      writeUtf8(terminal, '=> != ===');
 
       builder.sync(terminal, terminalDirty: true);
 
-      expect(sprites.shaped.count, 2);
+      expect(sprites.shaped.count, 3);
+      expect(
+        sprites.shaped.rows.where((row) => row.isNotEmpty).single,
+        hasLength(3),
+      );
       expect(atlas.cacheSize, initialCacheSize);
     });
 
