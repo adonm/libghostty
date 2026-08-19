@@ -18,11 +18,22 @@ void main() {
   group('KittyPlacementCache', () {
     const metrics = CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12);
 
-    void writePlacedImage(Terminal terminal, {int id = 11}) {
-      final payload = base64Encode([0xff, 0x00, 0x00]);
+    void writePlacedImage(
+      Terminal terminal, {
+      int id = 11,
+      int width = 1,
+      int columns = 1,
+      int? placementId,
+    }) {
+      final payload = base64Encode(
+        List<int>.generate(width * 3, (index) => index.isEven ? 0xff : 0),
+      );
+      final placement = placementId == null ? '' : ',p=$placementId';
       terminal.write(
         Uint8List.fromList(
-          '\x1b_Gf=24,s=1,v=1,a=T,i=$id,c=1,r=1;$payload\x1b\\'.codeUnits,
+          '\x1b_Gf=24,s=$width,v=1,a=T,i=$id$placement,c=$columns,r=1;'
+                  '$payload\x1b\\'
+              .codeUnits,
         ),
       );
     }
@@ -106,10 +117,12 @@ void main() {
         expect(rebuilt, isTrue);
       });
 
-      test('refreshes destination geometry after a physical resize', () {
+      test('refreshes destination geometry after a physical resize', () async {
         final fixture = geometryFixture();
         addTearDown(fixture.images.dispose);
         addTearDown(fixture.terminal.dispose);
+        fixture.decodeCallbacks.single(await testImage());
+        fixture.placements.sync(fixture.terminal, geometryDirty: false);
         fixture.state.metrics = const CellMetrics(
           cellWidth: 16,
           cellHeight: 32,
@@ -158,8 +171,58 @@ void main() {
         expect(placements.snapshots, isEmpty);
       });
 
+      test('keeps an incomplete chunked transmission non-drawable', () async {
+        final callbacks = <ImageDecoderCallback>[];
+        final chunkedTerminal = Terminal(cols: 8, rows: 2)
+          ..kittyImageStorageLimit = 1 << 20;
+        final chunkedState = PaintState(TerminalTheme.dark(), metrics)
+          ..cols = 8
+          ..rows = 2;
+        final chunkedImages = KittyImageCache(
+          onImageReady: () {},
+          decodeImage: (_, _, _, _, callback) => callbacks.add(callback),
+        );
+        final chunkedPlacements = KittyPlacementCache(
+          state: chunkedState,
+          images: chunkedImages,
+        );
+        addTearDown(chunkedImages.dispose);
+        addTearDown(chunkedTerminal.dispose);
+        chunkedTerminal.resize(
+          cols: 8,
+          rows: 2,
+          cellWidthPx: 8,
+          cellHeightPx: 16,
+        );
+        chunkedTerminal.write(
+          Uint8List.fromList(
+            '\x1b_Ga=t,f=24,s=1,v=2,i=31,m=1;/wAA\x1b\\'
+                    '\x1b_Ga=p,i=31,c=1,r=1\x1b\\'
+                .codeUnits,
+          ),
+        );
+        expect(
+          () => chunkedPlacements.sync(chunkedTerminal, geometryDirty: true),
+          returnsNormally,
+        );
+        expect(chunkedPlacements.snapshots, isEmpty);
+
+        chunkedTerminal.write(
+          Uint8List.fromList('\x1b_Gm=0;AP8A\x1b\\'.codeUnits),
+        );
+        chunkedTerminal.write(
+          Uint8List.fromList('\x1b_Ga=p,i=31,c=1,r=1\x1b\\'.codeUnits),
+        );
+        chunkedPlacements.sync(chunkedTerminal, geometryDirty: true);
+        callbacks.single(await testImage());
+        chunkedPlacements.sync(chunkedTerminal, geometryDirty: true);
+
+        expect(chunkedPlacements.snapshots, hasLength(1));
+        expect(chunkedImages.lookupById(31), isA<KittyImageReady>());
+      });
+
       test(
-        'retains the ready placement while a different image decodes',
+        'retains a complete frame while compatible replacement decodes',
         () async {
           final callbacks = <ImageDecoderCallback>[];
           final controlledImages = KittyImageCache(
@@ -178,23 +241,146 @@ void main() {
           terminal.write(
             Uint8List.fromList('\x1b_Ga=d,d=I,i=11\x1b\\'.codeUnits),
           );
+          terminal.write(Uint8List.fromList('\x1b[1;1H'.codeUnits));
           writePlacedImage(terminal, id: 12);
           controlledPlacements.sync(terminal, geometryDirty: true);
-          final whilePending = controlledPlacements.snapshots.single.imageId;
+          final whilePending =
+              controlledPlacements.snapshots.firstOrNull?.imageId;
           final oldReadyWhilePending =
               controlledImages.lookupById(11) is KittyImageReady;
           callbacks.last(await testImage());
 
           controlledPlacements.sync(terminal, geometryDirty: false);
 
+          expect(whilePending, 11);
+          expect(oldReadyWhilePending, isTrue);
+          expect(controlledPlacements.snapshots.single.imageId, 12);
+          expect(controlledImages.lookupById(11), isNull);
+        },
+      );
+
+      test(
+        'retains same-id pixels while compatible replacement decodes',
+        () async {
+          final callbacks = <ImageDecoderCallback>[];
+          final controlledImages = KittyImageCache(
+            onImageReady: () {},
+            decodeImage: (_, _, _, _, callback) => callbacks.add(callback),
+          );
+          final controlledPlacements = KittyPlacementCache(
+            state: state,
+            images: controlledImages,
+          );
+          addTearDown(controlledImages.dispose);
+          terminal.resize(cols: 8, rows: 2, cellWidthPx: 8, cellHeightPx: 16);
+          controlledPlacements.sync(terminal, geometryDirty: true);
+          callbacks.single(await testImage());
+          controlledPlacements.sync(terminal, geometryDirty: false);
+          final original = controlledPlacements.snapshots.single;
+
+          terminal.write(Uint8List.fromList('\x1b[1;1H'.codeUnits));
+          writePlacedImage(terminal);
+          controlledPlacements.sync(terminal, geometryDirty: true);
+
+          expect(controlledPlacements.snapshots.single, same(original));
+
+          callbacks.last(await testImage());
+          controlledPlacements.sync(terminal, geometryDirty: false);
+
           expect(
-            (
-              whilePending,
-              oldReadyWhilePending,
-              controlledPlacements.snapshots.single.imageId,
-              controlledImages.lookupById(11),
+            controlledPlacements.snapshots.single.imageGeneration,
+            isNot(original.imageGeneration),
+          );
+        },
+      );
+
+      test(
+        'does not pair stale pixels with same-id replacement geometry',
+        () async {
+          final callbacks = <ImageDecoderCallback>[];
+          final controlledImages = KittyImageCache(
+            onImageReady: () {},
+            decodeImage: (_, _, _, _, callback) => callbacks.add(callback),
+          );
+          final controlledPlacements = KittyPlacementCache(
+            state: state,
+            images: controlledImages,
+          );
+          addTearDown(controlledImages.dispose);
+          terminal.resize(cols: 8, rows: 2, cellWidthPx: 8, cellHeightPx: 16);
+          controlledPlacements.sync(terminal, geometryDirty: true);
+          callbacks.single(await testImage());
+          controlledPlacements.sync(terminal, geometryDirty: false);
+          final original = controlledPlacements.snapshots.single;
+
+          writePlacedImage(terminal, width: 2, columns: 2);
+          controlledPlacements.sync(terminal, geometryDirty: true);
+
+          final replacement = controlledPlacements.snapshots.single;
+          final staleImage =
+              controlledImages.lookupById(11)! as KittyImageReady;
+          expect(original.dst.width, metrics.cellWidth);
+          expect(replacement.dst.width, 2 * metrics.cellWidth);
+          expect(staleImage.generation, isNot(replacement.imageGeneration));
+
+          callbacks.last(await testImage());
+          controlledPlacements.sync(terminal, geometryDirty: false);
+
+          expect(
+            controlledPlacements.snapshots.single.dst.width,
+            2 * metrics.cellWidth,
+          );
+        },
+      );
+
+      test(
+        'retains compatible multi-image geometry when replacement ids reorder',
+        () async {
+          final callbacks = <ImageDecoderCallback>[];
+          final multiTerminal = Terminal(cols: 8, rows: 2)
+            ..kittyImageStorageLimit = 1 << 20;
+          final multiState = PaintState(TerminalTheme.dark(), metrics)
+            ..cols = 8
+            ..rows = 2;
+          final controlledImages = KittyImageCache(
+            onImageReady: () {},
+            decodeImage: (_, _, _, _, callback) => callbacks.add(callback),
+          );
+          final controlledPlacements = KittyPlacementCache(
+            state: multiState,
+            images: controlledImages,
+          );
+          addTearDown(controlledImages.dispose);
+          addTearDown(multiTerminal.dispose);
+          multiTerminal.resize(
+            cols: 8,
+            rows: 2,
+            cellWidthPx: 8,
+            cellHeightPx: 16,
+          );
+          writePlacedImage(multiTerminal, placementId: 11);
+          multiTerminal.write(Uint8List.fromList('\x1b[1;2H'.codeUnits));
+          writePlacedImage(multiTerminal, id: 12, placementId: 12);
+          controlledPlacements.sync(multiTerminal, geometryDirty: true);
+          callbacks[0](await testImage());
+          callbacks[1](await testImage());
+          controlledPlacements.sync(multiTerminal, geometryDirty: false);
+
+          multiTerminal.write(
+            Uint8List.fromList(
+              '\x1b_Ga=d,d=I,i=11\x1b\\\x1b_Ga=d,d=I,i=12\x1b\\'.codeUnits,
             ),
-            (11, true, 12, null),
+          );
+          multiTerminal.write(Uint8List.fromList('\x1b[1;1H'.codeUnits));
+          writePlacedImage(multiTerminal, id: 20, placementId: 20);
+          multiTerminal.write(Uint8List.fromList('\x1b[1;2H'.codeUnits));
+          writePlacedImage(multiTerminal, id: 10, placementId: 10);
+
+          controlledPlacements.sync(multiTerminal, geometryDirty: true);
+
+          expect(
+            controlledPlacements.snapshots.map((snapshot) => snapshot.imageId),
+            [11, 12],
           );
         },
       );

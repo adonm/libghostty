@@ -249,7 +249,7 @@ final class TerminalRenderBox extends RenderBox {
     _pipeline = RenderPipeline(
       atlas: atlas,
       state: _paintState,
-      onImageReady: markNeedsPaint,
+      onImageReady: _markFrameDirty,
     );
   }
 
