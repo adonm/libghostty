@@ -290,6 +290,12 @@ void main() {
       expect(theme.selection, const SelectionTheme());
     });
 
+    test('prioritizes the proportional Nerd Symbols fallback', () {
+      final theme = TerminalTheme.dark();
+
+      expect(theme.fontFamilyFallback.first, 'Symbols Nerd Font');
+    });
+
     test('defaults: fully opaque background, per-cell opacity off', () {
       final theme = TerminalTheme.dark();
       expect(theme.backgroundOpacity, 1.0);

@@ -80,13 +80,15 @@ class KittyImageCache {
 
   /// Returns the entry for [image], starting a decode on first lookup
   /// or when the image's generation has changed. Never blocks.
+  /// Callers that already read [KittyImage.generation] may pass it through to
+  /// avoid repeating the native accessor.
   ///
   /// A ready entry remains drawable while its replacement decodes. Only the
   /// latest requested generation may replace it, so rapid updates skip stale
   /// intermediate results without producing a blank frame.
-  KittyImageCacheEntry lookup(KittyImage image) {
+  KittyImageCacheEntry lookup(KittyImage image, {int? generation}) {
     if (_disposed) throw StateError('KittyImageCache is disposed.');
-    final generation = image.generation;
+    generation ??= image.generation;
     final existing = _entries[image.id];
     if (existing != null && _requestedGenerations[image.id] == generation) {
       return existing;
@@ -118,11 +120,11 @@ class KittyImageCache {
 
   /// Inserts a pre-decoded [image] under [imageId].
   @visibleForTesting
-  void putReady(int imageId, Image image) {
+  void putReady(int imageId, Image image, {int generation = 0}) {
     final existing = _entries[imageId];
     if (existing is KittyImageReady) existing.image.dispose();
-    _entries[imageId] = KittyImageReady(image);
-    _requestedGenerations[imageId] = 0;
+    _entries[imageId] = KittyImageReady(image, generation: generation);
+    _requestedGenerations[imageId] = generation;
     _requestTokens.remove(imageId);
     _queuedRequests.remove(imageId);
   }
@@ -196,7 +198,10 @@ class KittyImageCache {
           _requestTokens[request.imageId] == request.token) {
         final previous = _entries[request.imageId];
         _requestTokens.remove(request.imageId);
-        _entries[request.imageId] = KittyImageReady(decoded);
+        _entries[request.imageId] = KittyImageReady(
+          decoded,
+          generation: request.generation,
+        );
         if (previous is KittyImageReady) previous.image.dispose();
         _onImageReady();
       } else {
@@ -282,8 +287,9 @@ final class KittyImagePending extends KittyImageCacheEntry {
 /// The image is decoded and ready to draw.
 final class KittyImageReady extends KittyImageCacheEntry {
   final Image image;
+  final int generation;
 
-  const KittyImageReady(this.image);
+  const KittyImageReady(this.image, {required this.generation});
 }
 
 /// The image was rejected due to an unsupported format or compression.

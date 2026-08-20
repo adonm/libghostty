@@ -34,7 +34,10 @@ class KittyGraphicsPainter implements TerminalPainter {
     canvas.clipRect(Rect.fromLTWH(0, 0, width, height));
     for (final snap in _snapshots) {
       final cached = _cache.lookupById(snap.imageId);
-      if (cached is! KittyImageReady) continue;
+      if (cached is! KittyImageReady ||
+          cached.generation != snap.imageGeneration) {
+        continue;
+      }
 
       canvas.drawImageRect(cached.image, snap.src, snap.dst, _paint);
     }

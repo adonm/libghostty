@@ -11,6 +11,7 @@ typedef _PendingParagraph = ({
   Paragraph paragraph,
   AtlasEntry entry,
   double widthScale,
+  double heightScale,
   Offset paintOffset,
 });
 
@@ -46,12 +47,14 @@ abstract class ParagraphLane extends AtlasLane {
     Paragraph paragraph,
     AtlasEntry entry, {
     double widthScale = 1.0,
+    double heightScale = 1.0,
     Offset paintOffset = Offset.zero,
   }) {
     _pending.add((
       paragraph: paragraph,
       entry: entry,
       widthScale: widthScale,
+      heightScale: heightScale,
       paintOffset: paintOffset,
     ));
   }
@@ -136,6 +139,7 @@ abstract class ParagraphLane extends AtlasLane {
         pending.paragraph,
         entry,
         pending.widthScale,
+        pending.heightScale,
         pending.paintOffset,
       );
       canvas.restore();
@@ -150,6 +154,7 @@ abstract class ParagraphLane extends AtlasLane {
     Paragraph paragraph,
     AtlasEntry entry,
     double widthScale,
+    double heightScale,
     Offset paintOffset,
   );
 }

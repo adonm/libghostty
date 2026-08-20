@@ -42,6 +42,7 @@ class EmojiLane extends ParagraphLane {
     Paragraph paragraph,
     AtlasEntry entry,
     double _,
+    double _,
     Offset _,
   ) {
     final cellWidth = entry.srcRight - entry.srcLeft;

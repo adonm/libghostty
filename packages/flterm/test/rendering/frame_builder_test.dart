@@ -146,6 +146,72 @@ void main() {
       expect(atlas.emojiImage, isNotNull);
     });
 
+    test('sync lets a private-use symbol occupy a following blank cell', () {
+      writeUtf8(terminal, '\u{E5FF} A');
+
+      builder.sync(terminal, terminalDirty: true);
+
+      expect(
+        (sprites.regular.count, sprites.wide.count, sprites.emoji.count),
+        (1, 1, 0),
+      );
+    });
+
+    test('sync constrains a private-use symbol before text to one cell', () {
+      writeUtf8(terminal, '\u{E5FF}A');
+
+      builder.sync(terminal, terminalDirty: true);
+
+      expect(sprites.regular.count, 2);
+      expect(sprites.wide.count, 0);
+    });
+
+    test('sync constrains consecutive private-use symbols to one cell', () {
+      writeUtf8(terminal, '\u{E5FF}\u{E5FF} ');
+
+      builder.sync(terminal, terminalDirty: true);
+
+      expect(sprites.regular.count, 2);
+      expect(sprites.wide.count, 0);
+    });
+
+    test('sync lets a symbol borrow after an invisible symbol', () {
+      writeUtf8(terminal, '\x1b[8m\u{E5FF}\x1b[28m\u{E5FF} ');
+
+      builder.sync(terminal, terminalDirty: true);
+
+      expect(sprites.wide.count, 1);
+    });
+
+    test('sync lets a symbol borrow after a preedit replacement', () {
+      writeUtf8(terminal, '\u{E5FF}\u{E5FF} \x1b[1;1H');
+
+      builder.sync(terminal, terminalDirty: true, preeditText: 'a');
+
+      expect(sprites.wide.count, 1);
+    });
+
+    test('sync constrains a final-column private-use symbol to one cell', () {
+      final frame = createFrame(cols: 1, rows: 1);
+      writeUtf8(frame.terminal, '\u{E5FF}');
+
+      frame.builder.sync(frame.terminal, terminalDirty: true);
+
+      expect(frame.sprites.regular.count, 1);
+      expect(frame.sprites.wide.count, 0);
+    });
+
+    test(
+      'sync does not expand a private-use symbol over nonbreaking space',
+      () {
+        writeUtf8(terminal, '\u{E5FF}\u00A0');
+
+        builder.sync(terminal, terminalDirty: true);
+
+        expect(sprites.wide.count, 0);
+      },
+    );
+
     test('sync rebuilds external and terminal dirty rows together', () {
       writeUtf8(terminal, 'A\r\nB');
       builder.sync(terminal, terminalDirty: true);
@@ -159,11 +225,15 @@ void main() {
 
     test('sync emits operator ligatures without adding text atlas entries', () {
       final initialCacheSize = atlas.cacheSize;
-      writeUtf8(terminal, '=> !=');
+      writeUtf8(terminal, '=> != ===');
 
       builder.sync(terminal, terminalDirty: true);
 
-      expect(sprites.shaped.count, 2);
+      expect(sprites.shaped.count, 3);
+      expect(
+        sprites.shaped.rows.where((row) => row.isNotEmpty).single,
+        hasLength(3),
+      );
       expect(atlas.cacheSize, initialCacheSize);
     });
 

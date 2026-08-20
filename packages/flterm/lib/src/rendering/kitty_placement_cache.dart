@@ -53,9 +53,6 @@ final class KittyPlacementCache {
 
     final nextSnapshots = <KittyPlacementSnapshot>[];
     final nextLiveImageIds = <int>{};
-    final drawableImageIds = {
-      for (final snapshot in _snapshots) snapshot.imageId,
-    };
     var replacementPending = false;
     for (final placement in graphics.placements()) {
       nextLiveImageIds.add(placement.imageId);
@@ -67,13 +64,15 @@ final class KittyPlacementCache {
       final image = graphics.image(placement.imageId);
       if (image == null) continue;
 
-      final entry = _images.lookup(image);
+      final imageGeneration = image.generation;
+      final entry = _images.lookup(image, generation: imageGeneration);
       replacementPending |=
-          entry is KittyImagePending &&
-          !drawableImageIds.contains(placement.imageId);
+          entry is KittyImagePending ||
+          (entry is KittyImageReady && entry.generation != imageGeneration);
       nextSnapshots.add(
         KittyPlacementSnapshot(
           imageId: placement.imageId,
+          imageGeneration: imageGeneration,
           dst: Rect.fromLTWH(
             info.viewportCol * key.cellWidth +
                 placement.xOffset / key.devicePixelRatio,
@@ -94,9 +93,10 @@ final class KittyPlacementCache {
     }
 
     if (nextSnapshots.length > 1) nextSnapshots.sort(_compareZ);
-    // Placement and image publication is one visual transaction. This keeps
-    // the last complete frame drawable when clients animate with new IDs.
-    if (replacementPending && _snapshots.isNotEmpty) {
+    // Animated clients often replace every image before its decode completes.
+    // Keep the last complete frame only while its placement geometry remains
+    // compatible; changed geometry must wait for matching pixels instead.
+    if (replacementPending && _hasCompatibleGeometry(nextSnapshots)) {
       _images.evict({..._liveImageIds, ...nextLiveImageIds});
       return false;
     }
@@ -117,6 +117,30 @@ final class KittyPlacementCache {
     _liveImageIds.clear();
   }
 
+  bool _hasCompatibleGeometry(List<KittyPlacementSnapshot> next) {
+    if (_snapshots.isEmpty || _snapshots.length != next.length) return false;
+    final remaining = <({Rect dst, Rect src, int z}), int>{};
+    for (final replacement in next) {
+      final geometry = (
+        dst: replacement.dst,
+        src: replacement.src,
+        z: replacement.z,
+      );
+      remaining.update(geometry, (count) => count + 1, ifAbsent: () => 1);
+    }
+    for (final previous in _snapshots) {
+      final geometry = (dst: previous.dst, src: previous.src, z: previous.z);
+      final count = remaining[geometry];
+      if (count == null) return false;
+      if (count == 1) {
+        remaining.remove(geometry);
+      } else {
+        remaining[geometry] = count - 1;
+      }
+    }
+    return true;
+  }
+
   static int _compareZ(KittyPlacementSnapshot a, KittyPlacementSnapshot b) {
     final z = a.z.compareTo(b.z);
     return z != 0 ? z : a.imageId.compareTo(b.imageId);
@@ -130,6 +154,12 @@ final class KittyPlacementCache {
 final class KittyPlacementSnapshot {
   final int imageId;
 
+  /// Image generation this geometry was resolved against.
+  ///
+  /// The painter only draws a decoded image with the same generation, keeping
+  /// replacement geometry from being paired with stale pixels.
+  final int imageGeneration;
+
   /// Destination rectangle in the same logical-pixel space as cells.
   final Rect dst;
 
@@ -141,6 +171,7 @@ final class KittyPlacementSnapshot {
 
   const KittyPlacementSnapshot({
     required this.imageId,
+    this.imageGeneration = 0,
     required this.dst,
     required this.src,
     required this.z,
