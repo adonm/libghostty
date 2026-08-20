@@ -150,8 +150,8 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   ///
   /// Accepts Ghostty's terminal color syntax: X11 color names, hex colors
   /// in 3-, 6-, 9-, or 12-digit form (the leading # is optional for 3- and
-  /// 6-digit values), and rgb:<red>/<green>/<blue> or
-  /// rgbi:<red>/<green>/<blue> specifications. Leading and trailing spaces
+  /// 6-digit values), and rgb:&lt;red&gt;/&lt;green&gt;/&lt;blue&gt; or
+  /// rgbi:&lt;red&gt;/&lt;green&gt;/&lt;blue&gt; specifications. Leading and trailing spaces
   /// and tabs are trimmed.
   ///
   /// @param value The color value bytes (must not be NULL)
@@ -314,6 +314,26 @@ extension type GhosttyExports(JSObject _) implements JSObject {
     int buf_len,
     Pointer out_written,
   );
+
+  /// Run the formatter and stream output to a writer.
+  ///
+  /// Each call formats the current terminal state and invokes the writer
+  /// synchronously as output becomes available. The callback may be called more
+  /// than once and must not call formatter or terminal APIs using the same
+  /// formatter or its terminal.
+  ///
+  /// If an error occurs, the writer may already contain a partial formatted
+  /// output. The operation cannot be resumed from that partial output. This
+  /// function does not flush or make the caller's destination durable.
+  ///
+  /// @param formatter The formatter handle (must not be NULL)
+  /// @param writer Destination writer whose write callback must not be NULL
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_IO_ERROR if the writer rejects
+  /// output, GHOSTTY_LIMIT_EXCEEDED if output accounting overflows, or
+  /// GHOSTTY_INVALID_VALUE if an argument is invalid
+  ///
+  /// @ingroup formatter
+  external int ghostty_formatter_format(int formatter, int writer);
 
   /// Run the formatter and return an allocated buffer with the output.
   ///
@@ -2280,8 +2300,15 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// FINISH. It may only be called before decoding starts. Bytes following FINISH
   /// are left unread. On success terminal receives a caller-owned terminal with
   /// its persistent VT stream restored. Continuation tracking on the returned
-  /// terminal is disabled and GHOSTTY_TERMINAL_DATA_CONTINUATION_MAX_BYTES
-  /// returns zero. terminal is set to NULL on every error.
+  /// terminal is disabled by default. When
+  /// GHOSTTY_SNAPSHOT_DECODER_OPT_RETAIN_CONTINUATION is true, the decoder's
+  /// maximum continuation size is applied to the terminal, and the terminal
+  /// continuation APIs export the exact current continuation when that limit is
+  /// nonzero. Tracking remains enabled even if the exported continuation is
+  /// empty. Callers that do not need ongoing tracking must set
+  /// GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES to zero after export and before
+  /// writing any post-snapshot bytes, because later input may change it.
+  /// terminal is set to NULL on every error.
   /// A decoding, I/O, or allocation error after input consumption begins poisons
   /// the decoder, after which it must be freed. An invalid argument or
   /// lifecycle error detected before the operation consumes input does not
@@ -2420,10 +2447,16 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// immediately usable for rendering and live input. Older scrollback remains
   /// to be restored with ghostty_snapshot_decoder_next().
   ///
-  /// The restored parser state may be unfinished, but terminal continuation
-  /// tracking is disabled; GHOSTTY_TERMINAL_DATA_CONTINUATION_MAX_BYTES returns
-  /// zero. The decoder's continuation option is an input limit, not terminal
-  /// runtime policy.
+  /// The restored parser state may be unfinished. By default, terminal
+  /// continuation tracking is disabled and
+  /// GHOSTTY_TERMINAL_DATA_CONTINUATION_MAX_BYTES returns zero. When
+  /// GHOSTTY_SNAPSHOT_DECODER_OPT_RETAIN_CONTINUATION is true, the decoder's
+  /// maximum continuation size is applied to the terminal, and the terminal
+  /// continuation APIs export the exact current continuation when that limit is
+  /// nonzero. Tracking remains enabled even if the exported continuation is
+  /// empty. Callers that do not need ongoing tracking must set
+  /// GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES to zero after export and before
+  /// writing any post-snapshot bytes, because later input may change it.
   ///
   /// The caller must keep the returned terminal alive until FINISH validates or
   /// the decoder is freed. The decoder borrows this terminal handle while it

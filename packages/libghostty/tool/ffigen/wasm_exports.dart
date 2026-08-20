@@ -53,7 +53,10 @@ extension type $typeName(JSObject _) implements JSObject {
     final doc = binding.dartDoc;
     if (doc != null && doc.isNotEmpty) {
       for (final line in doc.split('\n')) {
-        final trimmed = line.trimLeft();
+        final trimmed = line.trimLeft().replaceAllMapped(
+          RegExp('<([A-Za-z][A-Za-z0-9_-]*)>'),
+          (match) => '&lt;${match[1]}&gt;',
+        );
         if (trimmed.startsWith('///')) {
           buf.writeln('  $trimmed');
         } else {

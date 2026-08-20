@@ -484,6 +484,34 @@ Result ghostty_focus_encode(
   );
 }
 
+/// Run the formatter and stream output to a writer.
+///
+/// Each call formats the current terminal state and invokes the writer
+/// synchronously as output becomes available. The callback may be called more
+/// than once and must not call formatter or terminal APIs using the same
+/// formatter or its terminal.
+///
+/// If an error occurs, the writer may already contain a partial formatted
+/// output. The operation cannot be resumed from that partial output. This
+/// function does not flush or make the caller's destination durable.
+///
+/// @param formatter The formatter handle (must not be NULL)
+/// @param writer Destination writer whose write callback must not be NULL
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_IO_ERROR if the writer rejects
+/// output, GHOSTTY_LIMIT_EXCEEDED if output accounting overflows, or
+/// GHOSTTY_INVALID_VALUE if an argument is invalid
+///
+/// @ingroup formatter
+@ffi.Native<ffi.Int Function(Formatter, Writer)>(
+  symbol: 'ghostty_formatter_format',
+  isLeaf: true,
+)
+external int _ghostty_formatter_format(Formatter formatter, Writer writer);
+
+Result ghostty_formatter_format(Formatter formatter, Writer writer) {
+  return Result.fromValue(_ghostty_formatter_format(formatter, writer));
+}
+
 /// Run the formatter and return an allocated buffer with the output.
 ///
 /// Each call formats the current terminal state. The buffer is allocated
@@ -3700,8 +3728,15 @@ Result ghostty_size_report_encode(
 /// FINISH. It may only be called before decoding starts. Bytes following FINISH
 /// are left unread. On success terminal receives a caller-owned terminal with
 /// its persistent VT stream restored. Continuation tracking on the returned
-/// terminal is disabled and GHOSTTY_TERMINAL_DATA_CONTINUATION_MAX_BYTES
-/// returns zero. terminal is set to NULL on every error.
+/// terminal is disabled by default. When
+/// GHOSTTY_SNAPSHOT_DECODER_OPT_RETAIN_CONTINUATION is true, the decoder's
+/// maximum continuation size is applied to the terminal, and the terminal
+/// continuation APIs export the exact current continuation when that limit is
+/// nonzero. Tracking remains enabled even if the exported continuation is
+/// empty. Callers that do not need ongoing tracking must set
+/// GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES to zero after export and before
+/// writing any post-snapshot bytes, because later input may change it.
+/// terminal is set to NULL on every error.
 /// A decoding, I/O, or allocation error after input consumption begins poisons
 /// the decoder, after which it must be freed. An invalid argument or
 /// lifecycle error detected before the operation consumes input does not
@@ -3939,10 +3974,16 @@ Result ghostty_snapshot_decoder_next(SnapshotDecoder decoder) {
 /// immediately usable for rendering and live input. Older scrollback remains
 /// to be restored with ghostty_snapshot_decoder_next().
 ///
-/// The restored parser state may be unfinished, but terminal continuation
-/// tracking is disabled; GHOSTTY_TERMINAL_DATA_CONTINUATION_MAX_BYTES returns
-/// zero. The decoder's continuation option is an input limit, not terminal
-/// runtime policy.
+/// The restored parser state may be unfinished. By default, terminal
+/// continuation tracking is disabled and
+/// GHOSTTY_TERMINAL_DATA_CONTINUATION_MAX_BYTES returns zero. When
+/// GHOSTTY_SNAPSHOT_DECODER_OPT_RETAIN_CONTINUATION is true, the decoder's
+/// maximum continuation size is applied to the terminal, and the terminal
+/// continuation APIs export the exact current continuation when that limit is
+/// nonzero. Tracking remains enabled even if the exported continuation is
+/// empty. Callers that do not need ongoing tracking must set
+/// GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES to zero after export and before
+/// writing any post-snapshot bytes, because later input may change it.
 ///
 /// The caller must keep the returned terminal alive until FINISH validates or
 /// the decoder is freed. The decoder borrows this terminal handle while it
@@ -7981,16 +8022,18 @@ final class TerminalSelectionFormatOptions extends ffi.Struct {
     ..ref.selection = selection;
 }
 
-/// Callback function type for size queries (XTWINOPS).
+/// Callback function type for terminal size reports.
 ///
-/// Called in response to XTWINOPS size queries (CSI 14/16/18 t).
+/// Called in response to XTWINOPS size queries (CSI 14/16/18 t) and when VT
+/// input enables in-band size reports (mode 2048).
 /// Return true and fill *out_size with the current terminal geometry,
-/// or return false to silently ignore the query.
+/// or return false to suppress the report.
 ///
 /// @param terminal The terminal handle
 /// @param userdata The userdata pointer set via GHOSTTY_TERMINAL_OPT_USERDATA
 /// @param[out] out_size Pointer to store the terminal size information
-/// @return true if size was filled, false to ignore the query
+/// @return true if size was filled, false to suppress the XTWINOPS response or
+/// mode 2048 report
 ///
 /// @ingroup terminal
 typedef TerminalSizeFn =
@@ -8096,9 +8139,9 @@ final class TerminalUnknownStringSequence extends ffi.Struct {
 /// Callback function type for write_pty.
 ///
 /// Called when the terminal needs to write data back to the pty, for
-/// example in response to a device status report or mode query. The
-/// data is only valid for the duration of the call; callers must copy
-/// it if it needs to persist.
+/// example in response to a device status report, mode query, or VT-driven
+/// mode 2048 enable. The data is only valid for the duration of the call;
+/// callers must copy it if it needs to persist.
 ///
 /// @param terminal The terminal handle
 /// @param userdata The userdata pointer set via GHOSTTY_TERMINAL_OPT_USERDATA
