@@ -40,9 +40,12 @@
   selection and terminal mouse reporting.
 - **View updates**: controller swaps transfer terminal focus correctly, and
   changing `TerminalView.fontData` refreshes cell metrics.
+- **Terminal glyph rendering**: Nerd Font symbols use common fallback families,
+  fit their cell without distortion, and preserve adjacent spacing. Operator
+  ligatures remain stable across complete runs.
 - **Kitty graphics rendering**: unchanged and replacing images remain drawable,
-  decode pressure is bounded, and placement geometry refreshes during initial
-  layout and window resizing.
+  decode pressure is bounded, replacement pixels and geometry publish
+  atomically, and placement geometry refreshes during layout and resizing.
 
 ## 0.0.5
 
