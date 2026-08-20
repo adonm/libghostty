@@ -13,6 +13,7 @@ import '../mouse/wasm.dart' as mouse;
 import '../parser/wasm.dart' as parser;
 import '../render/wasm.dart' as render;
 import '../selection/wasm.dart' as selection;
+import '../snapshot/wasm.dart' as snapshot;
 import '../system/wasm.dart' as system;
 import '../terminal/wasm.dart' as terminal;
 import '../utility/wasm.dart' as utility;
@@ -92,8 +93,9 @@ Future<void> _initialize(Uri wasmUri) async {
 
     platform.bindings = registry.Bindings(
       key: key.WasmKeyBindings(exports),
-      parser: parser.WasmParserBindings(exports, layout),
       mouse: mouse.WasmMouseBindings(exports, layout),
+      snapshot: snapshot.WasmSnapshotBindings(exports),
+      parser: parser.WasmParserBindings(exports, layout),
       render: render.WasmRenderBindings(exports, layout),
       system: system.WasmSystemBindings(exports, layout),
       utility: utility.WasmUtilityBindings(exports, layout),

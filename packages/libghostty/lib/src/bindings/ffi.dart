@@ -6,6 +6,7 @@ import 'mouse/ffi.dart';
 import 'parser/ffi.dart';
 import 'render/ffi.dart';
 import 'selection/ffi.dart';
+import 'snapshot/ffi.dart';
 import 'system/ffi.dart';
 import 'terminal/ffi.dart';
 import 'utility/ffi.dart';
@@ -19,6 +20,7 @@ final bindings = Bindings(
   formatter: FfiFormatterBindings(),
   utility: const FfiUtilityBindings(),
   render: FfiRenderBindings(),
+  snapshot: FfiSnapshotBindings(),
   selection: FfiSelectionBindings(),
   kittyGraphics: FfiKittyGraphicsBindings(),
   system: FfiSystemBindings(),

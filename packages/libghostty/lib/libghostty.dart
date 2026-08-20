@@ -55,6 +55,8 @@ export 'src/api/terminal/terminal.dart'
         SelectionGestureEvent,
         SelectionGestureGeometry,
         SelectionGestureState,
+        SnapshotDecoder,
+        SnapshotProgress,
         Terminal,
         TrackedGridRef;
 export 'src/api/terminal/terminal_mode.dart' show TerminalMode;

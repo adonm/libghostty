@@ -23,6 +23,7 @@ part 'render_state.dart';
 part 'row_iterator.dart';
 part 'selection.dart';
 part 'selection_gesture.dart';
+part 'snapshot.dart';
 part 'tracked_grid_ref.dart';
 
 /// Complete terminal emulator managing screen state, scrollback, cursor,
@@ -44,6 +45,7 @@ part 'tracked_grid_ref.dart';
 /// - [TrackedGridRef.at] for grid references that survive terminal mutations
 /// - [KittyGraphics.of] for Kitty graphics storage access
 /// - [Formatter] for extracting terminal content
+/// - [SnapshotDecoder] for restoring state encoded by [encodeSnapshot]
 /// - [KeyEncoder] / [MouseEncoder] for encoding input events
 ///
 /// ## Effects
@@ -109,6 +111,10 @@ final class Terminal with Listenable {
   Terminal({required int cols, required int rows})
     : _handle = bindings.terminal.terminalNew(cols, rows),
       _disposed = false {
+    _finalizer.attach(this, _handle, detach: this);
+  }
+
+  Terminal._fromHandle(this._handle) : _disposed = false {
     _finalizer.attach(this, _handle, detach: this);
   }
 
@@ -691,6 +697,16 @@ final class Terminal with Listenable {
     _finalizer.detach(this);
     _disposed = true;
     clearListeners();
+  }
+
+  /// Encodes the complete terminal state into a portable snapshot.
+  ///
+  /// The snapshot includes screen contents, scrollback, terminal modes, and
+  /// any tracked unfinished VT input. Encoding unfinished input requires
+  /// [continuationMaxBytes] to have been enabled before that input was written.
+  /// Do not mutate the terminal concurrently with this call.
+  Uint8List encodeSnapshot() {
+    return bindings.snapshot.snapshotEncode(_terminalHandle);
   }
 
   /// Formats an explicit or active selection.
