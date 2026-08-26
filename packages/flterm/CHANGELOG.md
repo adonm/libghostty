@@ -30,6 +30,13 @@
   pipeline after each paint and coalesced through a bounded 100 ms interval so
   output updates never announce as a live region. Set `semanticsLabel: null`
   to delegate the accessible surface to an embedding application.
+- **Layout-aware keyboard input**: the desktop plugin companions now supply
+  native keyboard metadata (modifiers, consumed modifiers, and the active
+  layout's unshifted codepoint) so terminal protocol encoding covers non-US
+  layouts, AltGr/Option, dead keys, lock state, repeats, and releases.
+  `TerminalConfig.optionAsAlt` makes macOS Option act as a side-aware terminal
+  Alt modifier, and `TerminalController` accepts a `keyEventNormalizer` for
+  runners with their own metadata pipeline.
 
 ### Fixed
 
