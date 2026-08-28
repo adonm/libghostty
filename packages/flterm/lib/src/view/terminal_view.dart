@@ -369,10 +369,17 @@ final class _TerminalViewState extends State<TerminalView>
     _scheduleSemanticsUpdate();
   }
 
+  void _handleSurfaceTap() {
+    _attachment.requestFocus();
+    // A tap on an already-focused view must still present the soft keyboard
+    // when keyboard presentation is enabled; focus-gain alone would not.
+    if (widget.showKeyboard) _attachment.input.showKeyboard();
+  }
+
   Widget _build(AtlasPool atlasPool) {
     final terminal = GestureDetector(
       behavior: .translucent,
-      onTap: _attachment.requestFocus,
+      onTap: _handleSurfaceTap,
       child: ColoredBox(
         color: _theme.background.withValues(alpha: _theme.backgroundOpacity),
         child: Padding(
@@ -409,8 +416,8 @@ final class _TerminalViewState extends State<TerminalView>
         hint: widget.semanticsHint,
         focusable: true,
         focused: _focusNode.hasFocus,
-        onTap: _attachment.requestFocus,
-        onFocus: _attachment.requestFocus,
+        onTap: _handleSurfaceTap,
+        onFocus: _handleSurfaceTap,
         child: child,
       ),
     );
