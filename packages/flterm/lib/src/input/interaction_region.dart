@@ -4,7 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:libghostty/libghostty.dart'
-    show MouseAction, MouseButton, Position;
+    show MouseAction, MouseButton, Position, Selection;
 import 'package:meta/meta.dart';
 
 import '../foundation.dart';
@@ -15,6 +15,8 @@ import '../view/view_attachment.dart';
 import 'input_message.dart';
 import 'primitive_gesture_detector.dart';
 import 'scroll_gesture_region.dart';
+import 'selection_handles.dart';
+import 'selection_modifier.dart';
 
 /// Owns pointer-sequence arbitration for one terminal view.
 ///
@@ -36,6 +38,7 @@ final class InteractionRegion extends StatefulWidget {
   final ScrollPhysics scrollPhysics;
   final ViewInteractionState interaction;
   final TerminalGestureSettings settings;
+  final TerminalTheme theme;
   final ScrollController? scrollController;
   final ValueChanged<ActivatedLink>? onLinkActivate;
 
@@ -44,6 +47,7 @@ final class InteractionRegion extends StatefulWidget {
     required this.child,
     required this.links,
     required this.metrics,
+    required this.theme,
     required this.attachment,
     required this.interaction,
     this.onLinkActivate,
@@ -78,6 +82,11 @@ final class _InteractionRegionState extends State<InteractionRegion> {
   Duration? _interactionTimeStamp;
   var _linkPressActive = false;
   Position? _pressCell;
+  var _selectionGestureUpdate = false;
+  var _selectionHandleDragActive = false;
+  ({Position? start, Position? end, bool rectangle})?
+  _visibleHandleSelectionSnapshot;
+  var _selectionHandlesVisible = false;
   var _terminalDragActive = false;
   var _terminalOwnsInteraction = false;
 
@@ -85,7 +94,7 @@ final class _InteractionRegionState extends State<InteractionRegion> {
 
   @override
   Widget build(BuildContext context) {
-    return Listener(
+    final interaction = Listener(
       behavior: HitTestBehavior.opaque,
       onPointerDown: _handleTrackedDown,
       onPointerMove: _handleTrackedMove,
@@ -111,6 +120,25 @@ final class _InteractionRegionState extends State<InteractionRegion> {
         ),
       ),
     );
+    return Stack(
+      clipBehavior: .none,
+      children: [
+        interaction,
+        Positioned.fill(
+          child: TerminalSelectionHandles(
+            attachment: widget.attachment,
+            metrics: widget.metrics,
+            visible:
+                _selectionHandlesVisible &&
+                widget.settings.touchSelectionHandles,
+            magnifierConfiguration: widget.settings.magnifierConfiguration,
+            onDragStateChanged: (active) => _selectionHandleDragActive = active,
+            terminalBackground: widget.theme.background,
+            blockSelectionModifier: widget.settings.blockSelectionModifier,
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -118,6 +146,8 @@ final class _InteractionRegionState extends State<InteractionRegion> {
     super.didUpdateWidget(oldWidget);
     final attachmentChanged = widget.attachment != oldWidget.attachment;
     if (attachmentChanged) {
+      oldWidget.attachment.removeListener(_handleAttachmentChanged);
+      widget.attachment.addListener(_handleAttachmentChanged);
       _interactionPointer = null;
       _interactionTimeStamp = null;
       _terminalDragActive = false;
@@ -128,6 +158,9 @@ final class _InteractionRegionState extends State<InteractionRegion> {
       oldWidget.links.cancel();
     }
     if (widget.metrics != oldWidget.metrics || attachmentChanged) {
+      _selectionHandleDragActive = false;
+      _visibleHandleSelectionSnapshot = null;
+      _selectionHandlesVisible = false;
       final attachment = attachmentChanged
           ? oldWidget.attachment
           : widget.attachment;
@@ -135,13 +168,24 @@ final class _InteractionRegionState extends State<InteractionRegion> {
       if (!attachmentChanged) attachment.invalidateSelection();
     }
     if (attachmentChanged) _releaseTrackedPointers(oldWidget.attachment);
+    if (!widget.settings.touchSelectionHandles) {
+      _visibleHandleSelectionSnapshot = null;
+      _selectionHandlesVisible = false;
+    }
   }
 
   @override
   void dispose() {
+    widget.attachment.removeListener(_handleAttachmentChanged);
     _cancelSelectionInteraction(widget.attachment);
     _releaseTrackedPointers(widget.attachment);
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.attachment.addListener(_handleAttachmentChanged);
   }
 
   void _autoScrollTick(Timer timer) {
@@ -157,12 +201,14 @@ final class _InteractionRegionState extends State<InteractionRegion> {
       return;
     }
 
-    _attachment.updateSelectionAutoscroll(
-      SelectionAutoscrollInput(
-        cell: drag.cell,
-        pixelX: drag.localPosition.dx,
-        pixelY: drag.localPosition.dy,
-        rectangle: drag.lastRectangle,
+    _updateSelection(
+      () => _attachment.updateSelectionAutoscroll(
+        SelectionAutoscrollInput(
+          cell: drag.cell,
+          pixelX: drag.localPosition.dx,
+          pixelY: drag.localPosition.dy,
+          rectangle: drag.lastRectangle,
+        ),
       ),
     );
   }
@@ -263,6 +309,12 @@ final class _InteractionRegionState extends State<InteractionRegion> {
       beginPress: _pressCell == null,
       timeStamp: _interactionTimeStamp,
     );
+    if (widget.settings.touchSelectionHandles && !_selectionHandlesVisible) {
+      _visibleHandleSelectionSnapshot = _selectionSnapshotOf(
+        _attachment.terminal.selection,
+      );
+      setState(() => _selectionHandlesVisible = true);
+    }
   }
 
   bool _handleModifierKey(KeyEvent _) {
@@ -272,6 +324,7 @@ final class _InteractionRegionState extends State<InteractionRegion> {
   }
 
   void _handleScrollStart(PointerDeviceKind kind) {
+    _hideSelectionHandles();
     _cancelSelectionInteraction(_attachment, clearSelection: true);
     if (kind == .touch) {
       _attachment.requestFocus();
@@ -282,23 +335,26 @@ final class _InteractionRegionState extends State<InteractionRegion> {
   void _handleSelectionPress(Offset position, Duration? timeStamp) {
     final settings = widget.settings;
     final cell = widget.metrics.cellAt(position);
-    _attachment.handleSelectionPress(
-      SelectionPressInput(
-        cell: cell,
-        pixelX: position.dx,
-        pixelY: position.dy,
-        behaviors: settings.selectionBehaviors,
-        wordBoundaries: settings.wordBoundaries,
-        repeatDistance: kDoubleTapSlop,
-        repeatInterval: kDoubleTapTimeout,
-        timeStamp: timeStamp ?? Duration.zero,
-        fullWidthLine: settings.lineSelectMode == .full,
+    _updateSelection(
+      () => _attachment.handleSelectionPress(
+        SelectionPressInput(
+          cell: cell,
+          pixelX: position.dx,
+          pixelY: position.dy,
+          behaviors: settings.selectionBehaviors,
+          wordBoundaries: settings.wordBoundaries,
+          repeatDistance: kDoubleTapSlop,
+          repeatInterval: kDoubleTapTimeout,
+          timeStamp: timeStamp ?? Duration.zero,
+          fullWidthLine: settings.lineSelectMode == .full,
+        ),
       ),
     );
     _pressCell = cell;
   }
 
   void _handleTapDown(TapDownDetails details, Duration timeStamp) {
+    _hideSelectionHandles();
     _attachment.requestFocus();
     if (_terminalOwnsInteraction) return;
     if (widget.links.handlePress(
@@ -421,17 +477,42 @@ final class _InteractionRegionState extends State<InteractionRegion> {
     }
   }
 
+  void _handleAttachmentChanged() {
+    if (!_selectionHandlesVisible) return;
+    final selectionSnapshot = _selectionSnapshotOf(
+      widget.attachment.terminal.selection,
+    );
+    if (_selectionGestureUpdate || _selectionHandleDragActive) {
+      _visibleHandleSelectionSnapshot = selectionSnapshot;
+      return;
+    }
+    if (selectionSnapshot != _visibleHandleSelectionSnapshot) {
+      _hideSelectionHandles();
+    }
+  }
+
+  void _hideSelectionHandles() {
+    if (!_selectionHandlesVisible) return;
+    _visibleHandleSelectionSnapshot = null;
+    setState(() => _selectionHandlesVisible = false);
+  }
+
+  ({Position? start, Position? end, bool rectangle})? _selectionSnapshotOf(
+    Selection? selection,
+  ) {
+    if (selection == null) return null;
+    return (
+      start: selection.start.positionIn(.viewport),
+      end: selection.end.positionIn(.viewport),
+      rectangle: selection.rectangle,
+    );
+  }
+
   bool _isBlockModifierPressed() {
-    final modifier = widget.settings.blockSelectionModifier;
-    if (modifier == null) return false;
-    final keyboard = HardwareKeyboard.instance;
-    final mods = _attachment.virtualMods;
-    return switch (modifier) {
-      .alt => keyboard.isAltPressed || mods.hasAlt,
-      .meta => keyboard.isMetaPressed || mods.hasSuper,
-      .shift => keyboard.isShiftPressed || mods.hasShift,
-      .control => keyboard.isControlPressed || mods.hasCtrl,
-    };
+    return isSelectionModifierPressed(
+      widget.settings.blockSelectionModifier,
+      _attachment.currentMods,
+    );
   }
 
   bool _isHoverKind(PointerDeviceKind kind) => switch (kind) {
@@ -448,9 +529,9 @@ final class _InteractionRegionState extends State<InteractionRegion> {
   MouseButton? _mouseButtonForBit(int button) => _mouseButtons[button];
 
   void _releaseSelectionPress([Position? cell]) {
-    cell ??= _pressCell;
-    if (cell == null) return;
-    _attachment.handleSelectionRelease(cell);
+    final releaseCell = cell ?? _pressCell;
+    if (releaseCell == null) return;
+    _updateSelection(() => _attachment.handleSelectionRelease(releaseCell));
     _pressCell = null;
   }
 
@@ -591,14 +672,25 @@ final class _InteractionRegionState extends State<InteractionRegion> {
     drag.lastCell = clampedCell;
     drag.lastRectangle = rectangle;
 
-    _attachment.updateSelectionDrag(
-      SelectionDragInput(
-        cell: clampedCell,
-        pixelX: position.dx,
-        pixelY: position.dy,
-        rectangle: rectangle,
+    _updateSelection(
+      () => _attachment.updateSelectionDrag(
+        SelectionDragInput(
+          cell: clampedCell,
+          pixelX: position.dx,
+          pixelY: position.dy,
+          rectangle: rectangle,
+        ),
       ),
     );
+  }
+
+  void _updateSelection(VoidCallback update) {
+    _selectionGestureUpdate = true;
+    try {
+      update();
+    } finally {
+      _selectionGestureUpdate = false;
+    }
   }
 
   void _updateMouseButtons(

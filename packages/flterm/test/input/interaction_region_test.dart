@@ -6,6 +6,8 @@ import 'dart:convert';
 import 'package:flterm/src/controller/terminal_controller.dart';
 import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/input/interaction_region.dart';
+import 'package:flterm/src/interaction/selection_session.dart'
+    show SelectionEndpoint;
 import 'package:flterm/src/links/link_interaction.dart';
 import 'package:flterm/src/links/link_settings.dart';
 import 'package:flterm/src/view/view_attachment.dart';
@@ -127,6 +129,7 @@ void main() {
           child: InteractionRegion(
             attachment: resolvedAttachment,
             metrics: metrics,
+            theme: TerminalTheme.dark(),
             interaction: resolvedAttachment.interaction.value,
             links: resolvedLinks,
             onLinkActivate: onLinkActivate,
@@ -664,6 +667,29 @@ void main() {
       });
 
       testWidgets(
+        'controller notification preserves touch handles before movement',
+        (tester) async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+          addTearDown(() => debugDefaultTargetPlatformOverride = null);
+          await tester.pumpWidget(buildHandler(controller: controller));
+          final gesture = await tester.startGesture(const Offset(40, 16));
+          await tester.pump(const Duration(milliseconds: 550));
+
+          controller.toggleMod(const Mods.ctrl());
+          await tester.pump();
+          await gesture.moveTo(const Offset(80, 32));
+          await gesture.up();
+          await tester.pump();
+          debugDefaultTargetPlatformOverride = null;
+
+          expect(
+            find.byKey(const ValueKey(SelectionEndpoint.start)),
+            findsOneWidget,
+          );
+        },
+      );
+
+      testWidgets(
         'touch move cancels long press if distance exceeds threshold',
         (tester) async {
           await tester.pumpWidget(buildHandler(controller: controller));
@@ -708,6 +734,30 @@ void main() {
     });
 
     group('gesture settings', () {
+      Future<TestGesture> startBlockLongPressHandleDrag(
+        WidgetTester tester,
+      ) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        await tester.pumpWidget(
+          buildHandler(
+            controller: controller,
+            gestureSettings: const TerminalGestureSettings(
+              longPressSelectionShape: .rectangle,
+            ),
+          ),
+        );
+        final selection = await tester.startGesture(const Offset(40, 16));
+        await tester.pump(const Duration(milliseconds: 550));
+        await selection.moveTo(const Offset(80, 32));
+        await selection.up();
+        await tester.pump();
+        final handle = find.byKey(const ValueKey(SelectionEndpoint.end));
+        debugDefaultTargetPlatformOverride = null;
+        final drag = await tester.startGesture(tester.getCenter(handle));
+        return drag;
+      }
+
       testWidgets('dragSelection false prevents drag selection', (
         tester,
       ) async {
@@ -895,25 +945,31 @@ void main() {
         expect(terminalFor(controller).selection, isNull);
       });
 
-      testWidgets('longPressSelectionShape block uses block mode', (
+      testWidgets('block long press follows inactive modifier during drag', (
         tester,
       ) async {
-        await tester.pumpWidget(
-          buildHandler(
-            controller: controller,
-            gestureSettings: const TerminalGestureSettings(
-              longPressSelectionShape: .rectangle,
-            ),
-          ),
-        );
-
-        final gesture = await tester.startGesture(const Offset(40, 16));
-        await tester.pump(const Duration(milliseconds: 550));
-        await gesture.moveTo(const Offset(80, 32));
-        await gesture.up();
+        final drag = await startBlockLongPressHandleDrag(tester);
+        await drag.moveBy(const Offset(8, 0));
+        await drag.up();
 
         final selection = terminalFor(controller).selection!;
-        expect(selection.mode, TerminalSelectionShape.rectangle);
+        expect(selection.mode, TerminalSelectionShape.normal);
+      });
+
+      testWidgets('modifier release changes a block long press to normal', (
+        tester,
+      ) async {
+        controller.toggleMod(const Mods.alt());
+        final drag = await startBlockLongPressHandleDrag(tester);
+
+        controller.toggleMod(const Mods.alt());
+        await drag.moveBy(const Offset(8, 0));
+        await drag.up();
+
+        expect(
+          terminalFor(controller).selection!.mode,
+          TerminalSelectionShape.normal,
+        );
       });
 
       testWidgets(

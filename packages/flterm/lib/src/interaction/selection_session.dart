@@ -76,6 +76,10 @@ final class SelectionDragInput {
   }
 }
 
+/// Identifies the stored endpoint changed by a touch selection handle.
+@internal
+enum SelectionEndpoint { start, end }
+
 /// A normalized terminal selection press.
 @immutable
 final class SelectionPressInput {
@@ -282,6 +286,26 @@ final class SelectionSession {
         start: .at(_terminal, start, pointTag: pointTag),
         end: .at(_terminal, end, pointTag: pointTag),
         rectangle: rectangle,
+      ),
+    );
+  }
+
+  void updateEndpoint(
+    SelectionEndpoint endpoint,
+    Position cell, {
+    bool? rectangle,
+  }) {
+    final selection = _terminal.selection;
+    if (selection == null) return;
+    final ref = _viewportRef(cell);
+    if (ref == null) return;
+
+    _gesture.reset();
+    _set(
+      Selection.fromRefs(
+        start: endpoint == .start ? ref : selection.start,
+        end: endpoint == .end ? ref : selection.end,
+        rectangle: rectangle ?? selection.rectangle,
       ),
     );
   }

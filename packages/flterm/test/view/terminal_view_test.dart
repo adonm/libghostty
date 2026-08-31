@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flterm/src/controller/terminal_controller.dart';
 import 'package:flterm/src/foundation.dart';
+import 'package:flterm/src/interaction/selection_session.dart'
+    show SelectionEndpoint;
 import 'package:flterm/src/links/link_settings.dart';
 import 'package:flterm/src/rendering.dart';
 import 'package:flterm/src/view/terminal_scope.dart';
@@ -167,8 +169,10 @@ void main() {
       double width = 800,
       double height = 480,
       Uint8List? fontData,
+      TargetPlatform? platform,
     }) {
       return MaterialApp(
+        theme: platform == null ? null : ThemeData(platform: platform),
         home: Scaffold(
           body: SizedBox(
             width: width,
@@ -1732,6 +1736,124 @@ void main() {
       final sel = activeSelection(controller);
       expect(sel, isNotNull);
       expect(sel!.mode, TerminalSelectionShape.normal);
+    });
+
+    group('touch selection handles', () {
+      const startHandle = ValueKey(SelectionEndpoint.start);
+      const endHandle = ValueKey(SelectionEndpoint.end);
+
+      Future<void> pumpSubject(
+        WidgetTester tester, {
+        TerminalGestureSettings settings = const TerminalGestureSettings(),
+        TerminalScrollController? scrollController,
+      }) async {
+        writeUtf8(controller, 'alpha bravo charlie delta echo foxtrot golf');
+        await tester.pumpWidget(
+          wrapInApp(
+            controller: controller,
+            gestureSettings: settings,
+            scrollController: scrollController,
+            showKeyboard: false,
+            platform: TargetPlatform.android,
+            width: 320,
+            height: 96,
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      Future<void> createTouchSelection(WidgetTester tester) async {
+        final origin = tester.getTopLeft(find.byType(TerminalView));
+        final gesture = await tester.startGesture(
+          origin + const Offset(24, 16),
+        );
+        await tester.pump(const Duration(milliseconds: 600));
+        await gesture.moveBy(const Offset(96, 24));
+        await gesture.up();
+        await tester.pump();
+        await tester.pump();
+      }
+
+      testWidgets('shows both handles after long-press selection', (
+        tester,
+      ) async {
+        await pumpSubject(tester);
+
+        await createTouchSelection(tester);
+
+        expect(find.byKey(startHandle), findsOneWidget);
+        expect(find.byKey(endHandle), findsOneWidget);
+      });
+
+      testWidgets('keeps handles hidden when disabled', (tester) async {
+        await pumpSubject(
+          tester,
+          settings: const TerminalGestureSettings(touchSelectionHandles: false),
+        );
+
+        await createTouchSelection(tester);
+
+        expect(find.byKey(startHandle), findsNothing);
+      });
+
+      testWidgets('keeps handles hidden after mouse selection', (tester) async {
+        await pumpSubject(tester);
+        final origin = tester.getTopLeft(find.byType(TerminalView));
+        final gesture = await tester.startGesture(
+          origin + const Offset(24, 16),
+          kind: PointerDeviceKind.mouse,
+        );
+
+        await gesture.moveBy(const Offset(96, 24));
+        await gesture.up();
+        await tester.pump();
+
+        expect(find.byKey(startHandle), findsNothing);
+      });
+
+      testWidgets('hides handles after programmatic selection', (tester) async {
+        await pumpSubject(tester);
+        await createTouchSelection(tester);
+
+        controller.selectRange(
+          start: const Position(row: 0, col: 0),
+          end: const Position(row: 0, col: 0),
+          pointTag: PointTag.viewport,
+        );
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.byKey(startHandle), findsNothing);
+      });
+
+      testWidgets('moves both handles with terminal viewport scrolling', (
+        tester,
+      ) async {
+        final scrollController = TerminalScrollController();
+        addTearDown(scrollController.dispose);
+        writeNumberedLines(80);
+        await pumpSubject(tester, scrollController: scrollController);
+        await createTouchSelection(tester);
+        final before = (
+          start: tester.getCenter(find.byKey(startHandle)),
+          end: tester.getCenter(find.byKey(endHandle)),
+        );
+        final cellHeight = renderer(tester).metrics.cellHeight;
+
+        scrollController.jumpTo(scrollController.offset - cellHeight);
+        await tester.pump();
+
+        expect(
+          (
+            start: tester.getCenter(find.byKey(startHandle)),
+            end: tester.getCenter(find.byKey(endHandle)),
+          ),
+          (
+            start: before.start.translate(0, cellHeight),
+            end: before.end.translate(0, cellHeight),
+          ),
+        );
+      });
     });
 
     group('scrolling', () {

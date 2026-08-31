@@ -199,6 +199,14 @@ final class ViewAttachment extends ChangeNotifier {
   void updateSelectionDrag(SelectionDragInput event) =>
       _controller.updateSelectionDrag(event);
 
+  void updateSelectionEndpoint(
+    SelectionEndpoint endpoint,
+    Position cell, {
+    required bool rectangle,
+  }) {
+    _controller.updateSelectionEndpoint(endpoint, cell, rectangle: rectangle);
+  }
+
   void _handleControllerChanged() {
     final next = _readInteractionState();
     if (_interaction.value != next) _interaction.value = next;
