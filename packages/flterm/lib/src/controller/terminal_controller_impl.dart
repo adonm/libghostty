@@ -559,6 +559,15 @@ final class TerminalControllerImpl extends TerminalController {
     _selection.handleDrag(event);
   }
 
+  void updateSelectionEndpoint(
+    SelectionEndpoint endpoint,
+    Position cell, {
+    required bool rectangle,
+  }) {
+    _checkNotDisposed();
+    _selection.updateEndpoint(endpoint, cell, rectangle: rectangle);
+  }
+
   @override
   void write(Uint8List data) {
     _checkNotDisposed();

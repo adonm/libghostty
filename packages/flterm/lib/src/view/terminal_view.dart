@@ -362,6 +362,7 @@ final class _TerminalViewState extends State<TerminalView>
         controller: _scrollController,
         physics: scrollPhysics,
         viewportBuilder: (_, offset) => InteractionRegion(
+          theme: _theme,
           links: _links,
           metrics: _metrics,
           attachment: _attachment,

@@ -16,6 +16,14 @@
   longer exported. Use `FocusNode`, `TerminalView.showKeyboard`, and the
   standard `ScrollPosition` interface.
 
+### Added
+
+- **Touch selection handles**: Android and iOS long-press selections expose
+  draggable platform-styled endpoint handles with adaptive magnifiers and edge
+  autoscroll. Toggling the configured block-selection modifier while dragging
+  switches between normal and rectangular selection. Configure or disable
+  magnification through `TerminalGestureSettings`.
+
 ### Changed
 
 - **Incremental rendering**: frame building uses libghostty's dirty-row
