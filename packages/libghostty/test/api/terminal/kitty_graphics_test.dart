@@ -357,44 +357,36 @@ void main() {
         },
       );
 
-      test(
-        'preserves stretched destination for an oversized source request',
-        () {
-          terminal.resize(
-            cols: 80,
-            rows: 24,
-            cellWidthPx: 10,
-            cellHeightPx: 20,
-          );
-          final payload = base64Encode(Uint8List(64));
-          terminal.write(
-            Uint8List.fromList(
-              '\x1b_Ga=t,t=d,f=32,i=14,s=4,v=4;$payload\x1b\\'.codeUnits,
-            ),
-          );
-          terminal.write(
-            Uint8List.fromList(
-              '\x1b_Ga=p,i=14,p=1,x=3,y=3,w=10,h=10;\x1b\\'.codeUnits,
-            ),
-          );
+      test('sizes the destination from the clipped source rectangle', () {
+        terminal.resize(cols: 80, rows: 24, cellWidthPx: 10, cellHeightPx: 20);
+        final payload = base64Encode(Uint8List(64));
+        terminal.write(
+          Uint8List.fromList(
+            '\x1b_Ga=t,t=d,f=32,i=14,s=4,v=4;$payload\x1b\\'.codeUnits,
+          ),
+        );
+        terminal.write(
+          Uint8List.fromList(
+            '\x1b_Ga=p,i=14,p=1,x=3,y=3,w=10,h=10;\x1b\\'.codeUnits,
+          ),
+        );
 
-          final renderInfo = KittyGraphics.of(
-            terminal,
-          )!.placements().single.renderInfo;
+        final renderInfo = KittyGraphics.of(
+          terminal,
+        )!.placements().single.renderInfo;
 
-          expect(
-            (
-              renderInfo.pixelWidth,
-              renderInfo.pixelHeight,
-              renderInfo.sourceX,
-              renderInfo.sourceY,
-              renderInfo.sourceWidth,
-              renderInfo.sourceHeight,
-            ),
-            (10, 10, 3, 3, 1, 1),
-          );
-        },
-      );
+        expect(
+          (
+            renderInfo.pixelWidth,
+            renderInfo.pixelHeight,
+            renderInfo.sourceX,
+            renderInfo.sourceY,
+            renderInfo.sourceWidth,
+            renderInfo.sourceHeight,
+          ),
+          (1, 1, 3, 3, 1, 1),
+        );
+      });
     });
   });
 }

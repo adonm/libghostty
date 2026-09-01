@@ -2466,7 +2466,14 @@ enum SnapshotDecoderData {
   /// This is not a count of all pages remaining in the snapshot.
   ///
   /// Output type: uint32_t *
-  progressRemaining(7);
+  progressRemaining(7),
+
+  /// Whether decoded continuation tracking is retained on returned terminals.
+  ///
+  /// This value is available in every non-failed decoder state.
+  ///
+  /// Output type: bool *
+  retainContinuation(8);
 
   final int value;
   const SnapshotDecoderData(this.value);
@@ -2480,6 +2487,7 @@ enum SnapshotDecoderData {
     5 => progressScreen,
     6 => progressRows,
     7 => progressRemaining,
+    8 => retainContinuation,
     _ => throw ArgumentError('Unknown value for SnapshotDecoderData: $value'),
   };
 }
@@ -2496,17 +2504,37 @@ enum SnapshotDecoderOption {
   /// state. The decoder default matches the largest built-in APC protocol
   /// buffer limit, currently 65 MiB.
   ///
-  /// This is an input validation limit only. It does not configure continuation
-  /// tracking on a terminal returned by the decoder.
+  /// This is primarily an input validation limit. When
+  /// GHOSTTY_SNAPSHOT_DECODER_OPT_RETAIN_CONTINUATION is true, the same value
+  /// also becomes the continuation tracking limit on the returned terminal.
   ///
   /// Input type: size_t *
-  continuationBytes(0);
+  maxContinuationBytes(0),
+
+  /// Retain the decoded continuation on the returned terminal.
+  ///
+  /// When true, terminals returned by ghostty_snapshot_decoder_ready() and
+  /// ghostty_snapshot_decoder_decode() use
+  /// GHOSTTY_SNAPSHOT_DECODER_OPT_MAX_CONTINUATION_BYTES as their continuation
+  /// tracking limit. The existing ghostty_terminal_continuation_* APIs can then
+  /// export the exact unfinished VT or UTF-8 input restored from the snapshot.
+  ///
+  /// This is false by default. A maximum continuation size of zero leaves
+  /// tracking disabled. With a nonzero maximum, tracking remains enabled even
+  /// when the decoded continuation is empty. Exporting an empty continuation
+  /// does not disable it. Callers that do not need ongoing tracking must still
+  /// set GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES to zero after export and
+  /// before writing post-snapshot input.
+  ///
+  /// Input type: bool *
+  retainContinuation(1);
 
   final int value;
   const SnapshotDecoderOption(this.value);
 
   static SnapshotDecoderOption fromValue(int value) => switch (value) {
-    0 => continuationBytes,
+    0 => maxContinuationBytes,
+    1 => retainContinuation,
     _ => throw ArgumentError('Unknown value for SnapshotDecoderOption: $value'),
   };
 }
@@ -3049,8 +3077,9 @@ enum TerminalOption {
   userdata(0),
 
   /// Callback invoked when the terminal needs to write data back
-  /// to the pty (e.g. in response to a DECRQM query or device
-  /// status report). Set to NULL to ignore such sequences.
+  /// to the pty (e.g. in response to a DECRQM query, device status
+  /// report, or VT-driven mode 2048 enable). Set to NULL to ignore such
+  /// sequences.
   ///
   /// Input type: TerminalWritePtyFn
   writePty(1),

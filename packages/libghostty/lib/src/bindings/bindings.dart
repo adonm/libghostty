@@ -6,6 +6,7 @@ import 'mouse/mouse.dart';
 import 'parser/parser.dart';
 import 'render/render.dart';
 import 'selection/selection.dart';
+import 'snapshot/snapshot.dart';
 import 'system/sys.dart';
 import 'terminal/terminal.dart';
 import 'utility/utility.dart';
@@ -43,6 +44,9 @@ final class Bindings {
   /// Render-state, row, cell, and grid-reference operations.
   final RenderBindings render;
 
+  /// Terminal snapshot encoding and restoration operations.
+  final SnapshotBindings snapshot;
+
   /// Selection and gesture operations.
   final SelectionBindings selection;
 
@@ -60,6 +64,7 @@ final class Bindings {
     required this.formatter,
     required this.utility,
     required this.render,
+    required this.snapshot,
     required this.selection,
     required this.kittyGraphics,
     required this.system,
