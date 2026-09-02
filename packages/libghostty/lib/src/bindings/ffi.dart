@@ -5,6 +5,7 @@ import 'kitty_graphics/ffi.dart';
 import 'mouse/ffi.dart';
 import 'parser/ffi.dart';
 import 'render/ffi.dart';
+import 'search/ffi.dart';
 import 'selection/ffi.dart';
 import 'snapshot/ffi.dart';
 import 'system/ffi.dart';
@@ -24,4 +25,5 @@ final bindings = Bindings(
   selection: FfiSelectionBindings(),
   kittyGraphics: FfiKittyGraphicsBindings(),
   system: FfiSystemBindings(),
+  search: const FfiSearchBindings(),
 );

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:libghostty/libghostty.dart';
@@ -853,16 +854,30 @@ void main() {
         expect(received?.contents, isEmpty);
       });
 
-      test('ignores clipboard read queries', () {
-        var count = 0;
-        terminal.onClipboardWrite = (_) {
-          count++;
-          return .success;
+      test('delivers clipboard read requests and replies with content', () {
+        ClipboardReadRequest? received;
+        final output = <Uint8List>[];
+        terminal.onWritePty = output.add;
+        terminal.onClipboardRead = (read) {
+          received = read;
+          return ClipboardReadReply(
+            result: .success,
+            contents: [
+              ClipboardContent(
+                mime: 'text/plain',
+                data: Uint8List.fromList('hello'.codeUnits),
+              ),
+            ],
+          );
         };
 
         terminal.write(Uint8List.fromList('\x1b]52;c;?\x07'.codeUnits));
 
-        expect(count, 0);
+        expect(received?.location, ClipboardLocation.standard);
+        expect(received?.mimes, ['text/plain']);
+        expect(received?.list, isFalse);
+        expect(output, hasLength(1));
+        expect(utf8.decode(output.single), '\x1b]52;c;aGVsbG8=\x07');
       });
 
       test('uses the replacement callback', () {
@@ -905,6 +920,45 @@ void main() {
           ),
           throwsA(same(error)),
         );
+      });
+    });
+
+    group('clipboardWriteMaxBytes', () {
+      test('gets, sets, and restores the clipboard limit', () {
+        final defaultLimit = terminal.clipboardWriteMaxBytes;
+        expect(defaultLimit, greaterThan(0));
+
+        terminal.clipboardWriteMaxBytes = 1024;
+        expect(terminal.clipboardWriteMaxBytes, 1024);
+
+        terminal.clipboardWriteMaxBytes = null;
+        expect(terminal.clipboardWriteMaxBytes, defaultLimit);
+      });
+    });
+
+    group('paste', () {
+      test('uses terminal paste policy and current mode', () {
+        final output = <Uint8List>[];
+        terminal.onWritePty = output.add;
+
+        terminal.paste('hello');
+
+        expect(utf8.decode(output.single), 'hello');
+      });
+
+      test('rejects unsafe text unless explicitly allowed', () {
+        final output = <Uint8List>[];
+        terminal.onWritePty = output.add;
+
+        expect(
+          () => terminal.paste('rm -rf /\n'),
+          throwsA(isA<RejectedException>()),
+        );
+        expect(output, isEmpty);
+
+        terminal.paste('rm -rf /\n', allowUnsafe: true);
+
+        expect(utf8.decode(output.single), 'rm -rf /\r');
       });
     });
 

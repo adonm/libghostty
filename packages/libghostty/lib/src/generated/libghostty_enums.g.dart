@@ -280,10 +280,39 @@ enum ClipboardLocation {
   };
 }
 
-/// Result of a clipboard write callback.
+/// Result of a clipboard read reply.
 ///
-/// Protocols without write acknowledgements, including OSC 52 and iTerm2
-/// OSC 1337 Copy, ignore this result.
+/// @ingroup terminal
+enum ClipboardReadResult {
+  /// The clipboard was read; the reply carries its contents.
+  success(0),
+
+  /// The clipboard read was denied by policy or the user.
+  denied(1),
+
+  /// The embedder cannot read this clipboard.
+  unsupported(2),
+
+  /// The clipboard is temporarily unavailable.
+  busy(3),
+
+  /// Reading the clipboard failed due to an I/O error.
+  ioError(4);
+
+  final int value;
+  const ClipboardReadResult(this.value);
+
+  static ClipboardReadResult fromValue(int value) => switch (value) {
+    0 => success,
+    1 => denied,
+    2 => unsupported,
+    3 => busy,
+    4 => ioError,
+    _ => throw ArgumentError('Unknown value for ClipboardReadResult: $value'),
+  };
+}
+
+/// Result of a clipboard write reply.
 ///
 /// @ingroup terminal
 enum ClipboardWriteResult {
@@ -922,6 +951,12 @@ enum KittyGraphicsImageData {
   /// time, before the image is stored. Consumers can upload this
   /// directly to the GPU without any decode step.
   ///
+  /// For an animated image (Kitty graphics animation, actions a=f/a=a)
+  /// this is the pixel data of the current animation frame. The
+  /// image's GHOSTTY_KITTY_IMAGE_DATA_GENERATION changes whenever the
+  /// current frame changes, so generation-keyed caches remain
+  /// coherent.
+  ///
   /// Output type: const uint8_t **
   dataPtr(7),
 
@@ -1454,7 +1489,8 @@ enum OscCommandType {
   kittyTextSizing(22),
   kittyClipboardProtocol(23),
   kittyDndProtocol(24),
-  contextSignal(25);
+  contextSignal(25),
+  kittyDesktopNotification(26);
 
   final int value;
   const OscCommandType(this.value);
@@ -1486,7 +1522,29 @@ enum OscCommandType {
     23 => kittyClipboardProtocol,
     24 => kittyDndProtocol,
     25 => contextSignal,
+    26 => kittyDesktopNotification,
     _ => throw ArgumentError('Unknown value for OscCommandType: $value'),
+  };
+}
+
+/// Why a paste happened.
+enum PasteSource {
+  /// The user pasted from a clipboard: keybind, menu, middle click.
+  clipboard(0),
+
+  /// Text inserted some other way: IME commit, drag and drop, scripted
+  /// input. Always written as text, never as a paste event, matching
+  /// kitty. This is not a way to opt out of paste events; an embedder
+  /// that doesn't want them doesn't install a clipboard_read callback.
+  text(1);
+
+  final int value;
+  const PasteSource(this.value);
+
+  static PasteSource fromValue(int value) => switch (value) {
+    0 => clipboard,
+    1 => text,
+    _ => throw ArgumentError('Unknown value for PasteSource: $value'),
   };
 }
 
@@ -1867,7 +1925,12 @@ enum Result {
   ioError(-5),
 
   /// Operation failed because encoded input exceeded a configured limit
-  limitExceeded(-6);
+  limitExceeded(-6),
+
+  /// Operation was rejected by a safety check (e.g. pasted text that could
+  /// inject commands). Nothing was done. Confirm with the user and retry
+  /// with the operation's allow flag set.
+  rejected(-7);
 
   final int value;
   const Result(this.value);
@@ -1880,6 +1943,7 @@ enum Result {
     -4 => noValue,
     -5 => ioError,
     -6 => limitExceeded,
+    -7 => rejected,
     _ => throw ArgumentError('Unknown value for Result: $value'),
   };
 }
@@ -1975,6 +2039,193 @@ enum RowSemanticPrompt {
     1 => prompt,
     2 => promptContinuation,
     _ => throw ArgumentError('Unknown value for RowSemanticPrompt: $value'),
+  };
+}
+
+/// Data fields readable with ghostty_search_get(). The output value
+/// type is documented per field.
+///
+/// All reads reflect the terminal's active screen as of the last feed.
+/// When the running application switches to the alternate screen, the
+/// next feed switches counts, matches, and selection to that screen's
+/// results. Primary screen results, including completed scrollback
+/// searches, are retained and restored on the way back.
+///
+/// @ingroup search
+enum SearchData {
+  /// Current search status: SearchStatus*.
+  status(0),
+
+  /// The needle this search is looking for: String*. The bytes
+  /// are borrowed from the search and remain valid until the needle is
+  /// changed or the search is freed. Returns GHOSTTY_NO_VALUE when no
+  /// needle is set.
+  needle(1),
+
+  /// Total matches found so far on the active screen: size_t*. Zero
+  /// until the first feed.
+  totalMatches(2),
+
+  /// Index of the selected match: size_t*. This indexes the newest to
+  /// oldest ordering of GHOSTTY_SEARCH_DATA_MATCHES, where 0 is the
+  /// newest match, so a "k of n" find bar renders index + 1 of
+  /// GHOSTTY_SEARCH_DATA_TOTAL_MATCHES. Returns GHOSTTY_NO_VALUE when
+  /// nothing is selected.
+  selectedIndex(3),
+
+  /// The selected match: Selection*. This is an untracked
+  /// snapshot with standard Selection lifetime rules. Returns
+  /// GHOSTTY_NO_VALUE when nothing is selected.
+  selectedMatch(4),
+
+  /// All matches on the active screen, ordered newest to oldest, from
+  /// the bottom of the active area up through scrollback:
+  /// SelectionBuffer*. Set ptr to NULL with cap 0 to query the
+  /// required capacity. An undersized buffer returns
+  /// GHOSTTY_OUT_OF_SPACE with the required capacity in len.
+  matches(5),
+
+  /// Matches on the pages covering the viewport, for drawing highlight
+  /// rectangles: SelectionBuffer*. The list is computed during
+  /// feeds and cached, so it reflects the viewport as of the last
+  /// feed.
+  ///
+  /// Matches are found a page at a time, so the list can include
+  /// matches slightly outside the visible viewport when they share a
+  /// page with it. 's own renderer behaves the same way.
+  /// Converting each match to viewport coordinates with
+  /// ghostty_terminal_point_from_grid_ref() clips this naturally: skip
+  /// matches that fail the conversion or whose row is beyond the
+  /// visible row count.
+  viewportMatches(6),
+
+  /// Current scroll policy: SearchScroll*.
+  selectScroll(7);
+
+  final int value;
+  const SearchData(this.value);
+
+  static SearchData fromValue(int value) => switch (value) {
+    0 => status,
+    1 => needle,
+    2 => totalMatches,
+    3 => selectedIndex,
+    4 => selectedMatch,
+    5 => matches,
+    6 => viewportMatches,
+    7 => selectScroll,
+    _ => throw ArgumentError('Unknown value for SearchData: $value'),
+  };
+}
+
+/// Options writable with ghostty_search_set(). The value type, and
+/// what a NULL value means, is documented per option.
+///
+/// @ingroup search
+enum SearchOption {
+  /// Set the needle to search for: const String*. The bytes are
+  /// copied, so the caller's memory does not need to outlive the call.
+  /// Matching is byte-exact except ASCII letters, which compare
+  /// case-insensitively.
+  ///
+  /// Changing the needle restarts the search from scratch and drops
+  /// all results. As an exception, setting a needle equal to the current
+  /// one (compared the same way as matching) keeps existing results,
+  /// so find bars can resubmit freely. A NULL or empty value clears
+  /// the needle and returns the search to idle.
+  ///
+  /// Replacing or clearing a needle releases tracked state held
+  /// within the terminal, so the caller must serialize this with all
+  /// other access to the same terminal. Returns GHOSTTY_INVALID_VALUE
+  /// after the terminal was freed.
+  needle(0),
+
+  /// Select the next match, moving toward older content: from the
+  /// bottom of the screen upward into history, the direction a search
+  /// from the prompt usually wants. Wraps around past the oldest
+  /// match.
+  ///
+  /// The value must be NULL. It is reserved for future use.
+  ///
+  /// This catches up with the terminal first, so it is safe to call at
+  /// any time relative to feeds. The viewport scrolls to the newly
+  /// selected match according to GHOSTTY_SEARCH_OPT_SELECT_SCROLL.
+  /// This reads the terminal, so the caller must serialize it with all
+  /// other access to the same terminal. Returns GHOSTTY_NO_VALUE when
+  /// there are no matches.
+  selectNext(1),
+
+  /// Select the previous match, moving toward newer content, wrapping
+  /// around past the newest match. Otherwise identical to
+  /// GHOSTTY_SEARCH_OPT_SELECT_NEXT.
+  selectPrev(2),
+
+  /// Set the scroll policy applied by the select options: const
+  /// SearchScroll*. The policy persists until changed. A NULL
+  /// value resets it to GHOSTTY_SEARCH_SCROLL_IF_NEEDED. This only
+  /// modifies search-owned state and never reads the terminal.
+  selectScroll(3);
+
+  final int value;
+  const SearchOption(this.value);
+
+  static SearchOption fromValue(int value) => switch (value) {
+    0 => needle,
+    1 => selectNext,
+    2 => selectPrev,
+    3 => selectScroll,
+    _ => throw ArgumentError('Unknown value for SearchOption: $value'),
+  };
+}
+
+/// Scroll policy applied when a match becomes selected via
+/// GHOSTTY_SEARCH_OPT_SELECT_NEXT or GHOSTTY_SEARCH_OPT_SELECT_PREV.
+///
+/// @ingroup search
+enum SearchScroll {
+  /// Scroll the viewport so the match is visible, only if it is not
+  /// already visible. This is the default.
+  ifNeeded(0),
+
+  /// Never scroll the viewport.
+  none(1);
+
+  final int value;
+  const SearchScroll(this.value);
+
+  static SearchScroll fromValue(int value) => switch (value) {
+    0 => ifNeeded,
+    1 => none,
+    _ => throw ArgumentError('Unknown value for SearchScroll: $value'),
+  };
+}
+
+/// Progress state of a search.
+///
+/// @ingroup search
+enum SearchStatus {
+  /// ghostty_search_tick() can make progress without terminal access.
+  running(0),
+
+  /// Blocked until ghostty_search_feed(). This is also the state right
+  /// after a needle is set, since the search has not yet seen the
+  /// terminal.
+  feedRequired(1),
+
+  /// Caught up with the terminal state as of the last feed. This never
+  /// means finished forever, since later terminal writes require
+  /// another feed to be seen. A search with no needle set also reports
+  /// complete, since there is nothing to look for.
+  complete(2);
+
+  final int value;
+  const SearchStatus(this.value);
+
+  static SearchStatus fromValue(int value) => switch (value) {
+    0 => running,
+    1 => feedRequired,
+    2 => complete,
+    _ => throw ArgumentError('Unknown value for SearchStatus: $value'),
   };
 }
 
@@ -2612,7 +2863,20 @@ enum SysOption {
   /// never reach the callback.
   ///
   /// Input type: SysLogFn (function pointer, or NULL)
-  log(2);
+  log(2),
+
+  /// Override the secure random source.
+  ///
+  /// By default the library draws secure random bytes from the
+  /// platform (getrandom or arc4random_buf on POSIX, CNG on Windows).
+  /// Targets without one, such as wasm32-freestanding, have no default
+  /// and operations that need entropy fail with GHOSTTY_IO_ERROR until
+  /// this is set. When set,
+  /// it is used instead of the platform source on every target. When
+  /// cleared (NULL value), the platform default is restored.
+  ///
+  /// Input type: SysRandomSecureFn (function pointer, or NULL)
+  randomSecure(3);
 
   final int value;
   const SysOption(this.value);
@@ -2621,6 +2885,7 @@ enum SysOption {
     0 => userdata,
     1 => decodePng,
     2 => log,
+    3 => randomSecure,
     _ => throw ArgumentError('Unknown value for SysOption: $value'),
   };
 }
@@ -3014,7 +3279,14 @@ enum TerminalData {
   /// is active.
   ///
   /// Output type: bool *
-  cursorAtPrompt(39);
+  cursorAtPrompt(39),
+
+  /// The configured maximum decoded bytes per Kitty clipboard protocol
+  /// (OSC 5522) write transaction. See
+  /// GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE_MAX_BYTES.
+  ///
+  /// Output type: size_t *
+  clipboardWriteMaxBytes(40);
 
   final int value;
   const TerminalData(this.value);
@@ -3060,6 +3332,7 @@ enum TerminalData {
     37 => mode,
     38 => vtGround,
     39 => cursorAtPrompt,
+    40 => clipboardWriteMaxBytes,
     _ => throw ArgumentError('Unknown value for TerminalData: $value'),
   };
 }
@@ -3272,10 +3545,11 @@ enum TerminalOption {
   pwdChanged(25),
 
   /// Callback invoked when the running program performs a clipboard write.
-  /// OSC 52 and iTerm2 OSC 1337 Copy writes are normalized to an atomic set
-  /// of decoded MIME representations. Set to NULL to ignore clipboard writes.
-  /// Clipboard read requests are always ignored; see
-  /// TerminalClipboardWriteFn.
+  /// OSC 52, iTerm2 OSC 1337 Copy, and Kitty clipboard (OSC 5522) writes
+  /// are normalized to an atomic set of decoded MIME representations. Set
+  /// to NULL to ignore clipboard writes (Kitty clipboard writes are then
+  /// refused with ENOSYS). Clipboard read requests are delivered to
+  /// GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ instead.
   ///
   /// Input type: TerminalClipboardWriteFn
   clipboardWrite(26),
@@ -3413,7 +3687,37 @@ enum TerminalOption {
   /// libghostty is advertising itself as.
   ///
   /// Input type: String*
-  terminfoName(37);
+  terminfoName(37),
+
+  /// Callback invoked when the running program requests clipboard contents
+  /// via OSC 52 with a "?" payload or a Kitty clipboard (OSC 5522) read. The
+  /// read is synchronous and must be answered before the callback returns.
+  /// Set to NULL (the default) to ignore OSC 52 read requests and refuse
+  /// OSC 5522 reads with EPERM.
+  ///
+  /// Input type: TerminalClipboardReadFn
+  clipboardRead(38),
+
+  /// Set the maximum total decoded bytes a single Kitty clipboard protocol
+  /// (OSC 5522) write transaction may accumulate. The limit is captured
+  /// when a transaction begins; an in-flight transaction keeps the limit
+  /// it started with.
+  ///
+  /// Data beyond the limit fails the whole transaction with EFBIG. The
+  /// transaction is discarded, later write-related packets are ignored
+  /// until a new write begins, and nothing reaches the clipboard write
+  /// callback.
+  ///
+  /// Transactions are buffered in memory, so this limit bounds how much
+  /// memory a single write can make the terminal allocate. Pass SIZE_MAX
+  /// to remove the limit. A NULL value pointer reverts to the built-in
+  /// default of 64MiB, the minimum required by the protocol.
+  ///
+  /// This limit doesn't apply to OSC 52 writes, which are bounded by the
+  /// maximum length of an escape sequence instead.
+  ///
+  /// Input type: size_t*
+  clipboardWriteMaxBytes(39);
 
   final int value;
   const TerminalOption(this.value);
@@ -3457,6 +3761,8 @@ enum TerminalOption {
     35 => unknownSequence,
     36 => unknownMaxBytes,
     37 => terminfoName,
+    38 => clipboardRead,
+    39 => clipboardWriteMaxBytes,
     _ => throw ArgumentError('Unknown value for TerminalOption: $value'),
   };
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi' as ffi;
 import 'dart:ffi';
 import 'dart:isolate';
 import 'dart:typed_data';
@@ -34,8 +35,10 @@ final class FfiSystemBindings implements SystemBindings {
   NativeCallable? _sysLogTransport;
   NativeCallable? _sysStderrCallable;
   NativeCallable? _sysDecodePngCallable;
+  NativeCallable? _sysRandomSecureCallable;
   SysLogCallback? _sysLogCallback;
   PngDecoder? _pngDecoder;
+  SysRandomSecureCallback? _sysRandomSecure;
   Zone? _sysLogZone;
 
   FfiSystemBindings();
@@ -53,6 +56,13 @@ final class FfiSystemBindings implements SystemBindings {
     final result = ghostty_sys_set(.decodePng, nullptr);
     checkResultCode(result.value, operation: 'ghostty_sys_set(decodePng)');
     _pngDecoder = null;
+  }
+
+  @override
+  void sysClearRandomSecure() {
+    final result = ghostty_sys_set(.randomSecure, nullptr);
+    checkResultCode(result.value, operation: 'ghostty_sys_set(randomSecure)');
+    _sysRandomSecure = null;
   }
 
   @override
@@ -107,6 +117,36 @@ final class FfiSystemBindings implements SystemBindings {
       checkResultCode(result.value, operation: 'ghostty_sys_set(decodePng)');
     } on Object {
       _pngDecoder = previous;
+      rethrow;
+    }
+  }
+
+  @override
+  void sysSetRandomSecure(SysRandomSecureCallback callback) {
+    _sysRandomSecure = callback;
+    final callable = _sysRandomSecureCallable ??=
+        NativeCallable<
+          Bool Function(Pointer<Void>, Pointer<Uint8>, Size)
+        >.isolateLocal((
+          ffi.Pointer<ffi.Void> _,
+          ffi.Pointer<ffi.Uint8> buffer,
+          int length,
+        ) {
+          try {
+            final callback = _sysRandomSecure;
+            return callback != null && callback(buffer.asTypedList(length));
+          } on Object {
+            return false;
+          }
+        }, exceptionalReturn: false);
+    try {
+      final result = ghostty_sys_set(
+        .randomSecure,
+        callable.nativeFunction.cast(),
+      );
+      checkResultCode(result.value, operation: 'ghostty_sys_set(randomSecure)');
+    } on Object {
+      _sysRandomSecure = null;
       rethrow;
     }
   }

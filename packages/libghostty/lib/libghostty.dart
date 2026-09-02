@@ -49,6 +49,7 @@ export 'src/api/terminal/terminal.dart'
         RenderState,
         RowIterator,
         RowSelectionRange,
+        Search,
         Selection,
         SelectionGesture,
         SelectionGestureBehaviors,
@@ -65,6 +66,7 @@ export 'src/bindings/bindings.dart' show initializeForWeb;
 export 'src/generated/libghostty_enums.g.dart'
     show
         ClipboardLocation,
+        ClipboardReadResult,
         ClipboardWriteResult,
         ColorScheme,
         FocusEvent,
@@ -80,6 +82,8 @@ export 'src/generated/libghostty_enums.g.dart'
         OptionAsAlt,
         OscCommandType,
         PointTag,
+        SearchScroll,
+        SearchStatus,
         SelectionAdjust,
         SelectionGestureAutoscroll,
         SelectionGestureBehavior,
@@ -95,11 +99,13 @@ export 'src/generated/libghostty_enums.g.dart'
 export 'src/listenable.dart' show Listenable;
 export 'src/types/aliases.dart'
     show
+        ClipboardReadCallback,
         ClipboardWriteCallback,
         ContinuationWriter,
         DesktopNotificationCallback,
         PngDecoder,
         SysLogCallback,
+        SysRandomSecureCallback,
         TerminalCursorShape,
         TerminalProgressCallback,
         TerminalUnknownSequenceCallback,
@@ -111,6 +117,8 @@ export 'src/types/types.dart'
         CellColor,
         CellWidth,
         ClipboardContent,
+        ClipboardReadReply,
+        ClipboardReadRequest,
         ClipboardWrite,
         CursorShape,
         DecodedImage,
@@ -137,6 +145,7 @@ export 'src/types/types.dart'
         OutOfSpaceException,
         PaletteColor,
         Position,
+        RejectedException,
         RenderStateCursor,
         RgbColor,
         Scrollbar,

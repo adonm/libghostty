@@ -12,6 +12,7 @@ import '../kitty_graphics/wasm.dart' as kitty_graphics;
 import '../mouse/wasm.dart' as mouse;
 import '../parser/wasm.dart' as parser;
 import '../render/wasm.dart' as render;
+import '../search/wasm.dart' as search;
 import '../selection/wasm.dart' as selection;
 import '../snapshot/wasm.dart' as snapshot;
 import '../system/wasm.dart' as system;
@@ -103,6 +104,7 @@ Future<void> _initialize(Uri wasmUri) async {
       selection: selection.WasmSelectionBindings(exports, layout),
       formatter: formatter.WasmFormatterBindings(exports, layout),
       kittyGraphics: kitty_graphics.WasmKittyGraphicsBindings(exports, layout),
+      search: search.WasmSearchBindings(exports, layout),
     );
     _initializedUri = wasmUri;
   } catch (_) {

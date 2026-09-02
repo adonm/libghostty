@@ -1479,6 +1479,9 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// GHOSTTY_OUT_OF_SPACE and sets the required size in @p out_written.
   /// The caller can then retry with a sufficiently sized buffer.
   ///
+  /// This is the encoder ghostty_terminal_paste() uses for a text paste;
+  /// use it directly when there is no terminal to paste into.
+  ///
   /// @param data The paste data to encode (modified in place, may be NULL)
   /// @param data_len The length of the input data in bytes
   /// @param bracketed Whether bracketed paste mode is active
@@ -1505,7 +1508,9 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// to exit bracketed paste mode and inject commands
   ///
   /// This check is conservative and considers data unsafe regardless of
-  /// current terminal state.
+  /// current terminal state. ghostty_terminal_paste() applies the
+  /// terminal-state-aware rule itself (newlines are safe inside a
+  /// bracketed paste); use this to apply the stricter rule on top.
   ///
   /// @param data The paste data to check (must not be NULL)
   /// @param len The length of the data in bytes
@@ -1939,6 +1944,178 @@ extension type GhosttyExports(JSObject _) implements JSObject {
     Pointer values,
     Pointer out_written,
   );
+
+  /// Read the terminal to update the search.
+  ///
+  /// Each feed catches the search up with the terminal: it reconciles
+  /// the tracked screens against the live ones, re-scans the active
+  /// area, refreshes the viewport match list, gives the scrollback
+  /// searcher its next chunk of data, and prunes results that scrollback
+  /// eviction invalidated. Feeding is also the only way the search
+  /// learns about terminal changes, so keep feeding periodically while
+  /// the search is in use, even after it reports complete.
+  ///
+  /// This reads the terminal, so the caller must serialize it with all
+  /// other access to the same terminal. Each call does a bounded amount
+  /// of work so that any caller-held terminal lock is held only briefly.
+  ///
+  /// @param search Search handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @return GHOSTTY_SUCCESS on success, or GHOSTTY_INVALID_VALUE if
+  /// search is NULL or the terminal was freed
+  ///
+  /// @ingroup search
+  external int ghostty_search_feed(int search);
+
+  /// Free a search.
+  ///
+  /// If the bound terminal is still alive, this releases tracked state
+  /// the search holds within it, so the caller must serialize this call
+  /// with all other access to the same terminal. If the terminal was
+  /// already freed, the search has been detached and this releases only
+  /// search-owned memory. Passing NULL is allowed and is a no-op.
+  ///
+  /// @param search Search handle to free
+  ///
+  /// @ingroup search
+  external void ghostty_search_free(int search);
+
+  /// Read a data field from a search.
+  ///
+  /// The output value type depends on data and is documented by
+  /// GhosttySearchData. This never reads the terminal, so it is safe to
+  /// call while another thread modifies the terminal. Returned
+  /// selections are untracked snapshots with standard GhosttySelection
+  /// lifetime rules.
+  ///
+  /// @param search Search handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param data Data field to read
+  /// @param value Output pointer whose type depends on data
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_NO_VALUE if the
+  /// requested data has no value, GHOSTTY_OUT_OF_SPACE if a
+  /// provided GhosttySelectionBuffer is too small (required
+  /// capacity in its len), GHOSTTY_OUT_OF_MEMORY if collecting
+  /// viewport matches fails, or GHOSTTY_INVALID_VALUE if search,
+  /// data, or value is invalid
+  ///
+  /// @ingroup search
+  external int ghostty_search_get(int search, int data, Pointer value);
+
+  /// Read multiple data fields from a search in a single call.
+  ///
+  /// This is an optimization over calling ghostty_search_get() multiple
+  /// times. Each entry in values must point to storage of the type
+  /// documented by the corresponding GhosttySearchData key.
+  ///
+  /// If any individual read fails, the function returns that error and
+  /// writes the index of the failing key to out_written when out_written
+  /// is non-NULL. Earlier keys have already been written. On success,
+  /// out_written receives count when non-NULL. A too-small
+  /// GhosttySelectionBuffer stops the batch with GHOSTTY_OUT_OF_SPACE at
+  /// that key's index with the required capacity in its len, so order
+  /// buffer-valued keys after scalar keys.
+  ///
+  /// @param search Search handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param count Number of data fields to read
+  /// @param keys Data fields to read (must not be NULL)
+  /// @param values Output pointers corresponding to keys (must not be NULL)
+  /// @param out_written Optional number of fields read, or failing index
+  /// on error
+  /// @return GHOSTTY_SUCCESS on success, or the first failing read's
+  /// result
+  ///
+  /// @ingroup search
+  external int ghostty_search_get_multi(
+    int search,
+    int count,
+    Pointer keys,
+    Pointer values,
+    Pointer out_written,
+  );
+
+  /// Create a search bound to a terminal.
+  ///
+  /// The search borrows the terminal and never frees it. The search and
+  /// the terminal can be freed in either order; see ghostty_search_free().
+  ///
+  /// The search starts idle with no needle: it reports
+  /// GHOSTTY_SEARCH_STATUS_COMPLETE and finds nothing. Set
+  /// GHOSTTY_SEARCH_OPT_NEEDLE to start searching.
+  ///
+  /// Creation is cheap and does not read terminal contents, but it
+  /// registers the search with the terminal so the two can be freed in
+  /// any order. The caller must serialize this call with all other
+  /// access to the same terminal.
+  ///
+  /// @param allocator Allocator, or NULL for the default allocator
+  /// @param out_search Receives the created search handle
+  /// @param terminal Terminal to bind the search to
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if
+  /// out_search or terminal is invalid, or GHOSTTY_OUT_OF_MEMORY
+  /// if allocation fails
+  ///
+  /// @ingroup search
+  external int ghostty_search_new(
+    Pointer allocator,
+    Pointer out_search,
+    int terminal,
+  );
+
+  /// Feed and tick until the search is caught up with the terminal.
+  ///
+  /// This is a blocking convenience for one-shot and single-threaded
+  /// embedders. It always performs at least one feed, so it also picks
+  /// up any terminal changes since the last feed, then loops until the
+  /// status is GHOSTTY_SEARCH_STATUS_COMPLETE. Searching a large
+  /// scrollback can take a while, so interactive embedders should drive
+  /// ghostty_search_tick() and ghostty_search_feed() themselves.
+  ///
+  /// This reads the terminal for the entire call, so the caller must
+  /// serialize it with all other access to the same terminal.
+  ///
+  /// @param search Search handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @return GHOSTTY_SUCCESS on success, or GHOSTTY_INVALID_VALUE if
+  /// search is NULL or the terminal was freed
+  ///
+  /// @ingroup search
+  external int ghostty_search_run(int search);
+
+  /// Write an option to a search.
+  ///
+  /// The value type, and what a NULL value means, depends on the option
+  /// and is documented by GhosttySearchOption. The needle and select
+  /// options touch the terminal, so the caller must serialize those
+  /// calls with all other access to the same terminal.
+  /// GHOSTTY_SEARCH_OPT_SELECT_SCROLL only modifies search-owned state.
+  ///
+  /// @param search Search handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param option Option to write
+  /// @param value Pointer to the input value for the option. The meaning
+  /// of NULL is documented per option.
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_NO_VALUE if a select
+  /// option found no matches, GHOSTTY_OUT_OF_MEMORY if
+  /// allocation fails, or GHOSTTY_INVALID_VALUE if search,
+  /// option, or value is invalid or the option needs a terminal
+  /// that was already freed
+  ///
+  /// @ingroup search
+  external int ghostty_search_set(int search, int option, Pointer value);
+
+  /// Make a bounded amount of search progress.
+  ///
+  /// This only works on data the search has already copied and never
+  /// reads the terminal, so it is safe to call while another thread
+  /// modifies the terminal. Call it in a loop while the status is
+  /// GHOSTTY_SEARCH_STATUS_RUNNING. When the status becomes
+  /// GHOSTTY_SEARCH_STATUS_FEED_REQUIRED, call ghostty_search_feed() to
+  /// unblock it.
+  ///
+  /// @param search Search handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param[out] out_status Receives the status after the tick (may be NULL)
+  /// @return GHOSTTY_SUCCESS on success, or GHOSTTY_INVALID_VALUE if
+  /// search is NULL
+  ///
+  /// @ingroup search
+  external int ghostty_search_tick(int search, Pointer out_status);
 
   /// Apply a selection gesture event and return the resulting selection snapshot.
   ///
@@ -2895,6 +3072,38 @@ extension type GhosttyExports(JSObject _) implements JSObject {
     Pointer terminal,
     int cols,
     int rows,
+  );
+
+  /// Paste into the terminal according to its current state: a Kitty
+  /// clipboard protocol paste event if mode 5522 is enabled and a
+  /// clipboard_read callback is installed, otherwise the text framed per
+  /// mode 2004. See the group documentation for the full behavior. Output
+  /// streams through the write_pty callback in chunks. The viewport is not
+  /// scrolled; that is up to the embedder, as for key input.
+  ///
+  /// A paste event records a session grant for its one-time password only
+  /// once the event is written; a failed call never leaves a grant for an
+  /// event that was never sent.
+  ///
+  /// @param terminal The terminal handle
+  /// @param paste The paste request, borrowed for the duration of the call
+  /// @param[out] out_written On success, whether anything was written to
+  /// the pty (the encoded text or a paste event). False means
+  /// there was nothing to paste: no non-empty text
+  /// representation. May be NULL.
+  /// @return GHOSTTY_SUCCESS on success (see @p out_written);
+  /// GHOSTTY_REJECTED if the text could inject commands and
+  /// GhosttyPaste::allow_unsafe is false (nothing was written);
+  /// GHOSTTY_INVALID_VALUE for a NULL terminal or paste, MIME
+  /// types without a reader, or when no write_pty callback is
+  /// installed; GHOSTTY_OUT_OF_MEMORY; GHOSTTY_IO_ERROR if the
+  /// reader failed or there is no secure entropy source to mint a
+  /// paste event password (wasm32-freestanding without
+  /// GHOSTTY_SYS_OPT_RANDOM_SECURE set). Errors write nothing.
+  external int ghostty_terminal_paste(
+    int terminal,
+    Pointer paste,
+    Pointer out_written,
   );
 
   /// Convert a grid reference back to a point in the given coordinate system.

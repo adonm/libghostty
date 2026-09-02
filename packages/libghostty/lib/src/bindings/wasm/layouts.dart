@@ -208,6 +208,56 @@ final class Layouts {
   late final int clipboardWriteLocation;
   late final int clipboardWriteContents;
   late final int clipboardWriteContentsLen;
+  late final int clipboardWriteName;
+  late final int clipboardWriteGranted;
+  late final int clipboardWriteCanRemember;
+  late final int clipboardWriteCtx;
+  late final int clipboardWriteReply;
+
+  // GhosttyClipboardRead
+  late final int clipboardReadSize;
+  late final int clipboardReadLocation;
+  late final int clipboardReadMimes;
+  late final int clipboardReadMimesLen;
+  late final int clipboardReadList;
+  late final int clipboardReadName;
+  late final int clipboardReadGranted;
+  late final int clipboardReadCanRemember;
+  late final int clipboardReadCtx;
+  late final int clipboardReadReply;
+
+  // GhosttyClipboardWriteReply
+  late final int clipboardWriteReplySize;
+  late final int clipboardWriteReplySizeField;
+  late final int clipboardWriteReplyResult;
+  late final int clipboardWriteReplyRemember;
+
+  // GhosttyClipboardReadReply
+  late final int clipboardReadReplySize;
+  late final int clipboardReadReplySizeField;
+  late final int clipboardReadReplyResult;
+  late final int clipboardReadReplyContents;
+  late final int clipboardReadReplyContentsLen;
+  late final int clipboardReadReplyAvailable;
+  late final int clipboardReadReplyAvailableLen;
+  late final int clipboardReadReplyRemember;
+
+  // GhosttyPaste
+  late final int pasteSize;
+  late final int pasteSizeField;
+  late final int pasteLocation;
+  late final int pasteSource;
+  late final int pasteMimes;
+  late final int pasteMimesLen;
+  late final int pasteReader;
+  late final int pasteReaderUserdata;
+  late final int pasteAllowUnsafe;
+
+  // GhosttySelectionBuffer
+  late final int selectionBufferSize;
+  late final int selectionBufferPtr;
+  late final int selectionBufferCap;
+  late final int selectionBufferLen;
 
   // GhosttyTerminalDesktopNotification
   late final int desktopNotificationSize;
@@ -540,6 +590,57 @@ final class Layouts {
     clipboardWriteLocation = struct['location'];
     clipboardWriteContents = struct['contents'];
     clipboardWriteContentsLen = struct['contents_len'];
+    clipboardWriteName = struct['name'];
+    clipboardWriteGranted = struct['granted'];
+    clipboardWriteCanRemember = struct['can_remember'];
+    clipboardWriteCtx = struct['ctx'];
+    clipboardWriteReply = struct['reply'];
+
+    struct = _Struct(types, 'GhosttyClipboardRead');
+    clipboardReadSize = struct.size;
+    clipboardReadLocation = struct['location'];
+    clipboardReadMimes = struct['mimes'];
+    clipboardReadMimesLen = struct['mimes_len'];
+    clipboardReadList = struct['list'];
+    clipboardReadName = struct['name'];
+    clipboardReadGranted = struct['granted'];
+    clipboardReadCanRemember = struct['can_remember'];
+    clipboardReadCtx = struct['ctx'];
+    clipboardReadReply = struct['reply'];
+
+    struct = _Struct(types, 'GhosttyClipboardWriteReply');
+    clipboardWriteReplySize = struct.size;
+    clipboardWriteReplySizeField = struct['size'];
+    clipboardWriteReplyResult = struct['result'];
+    clipboardWriteReplyRemember = struct['remember'];
+
+    struct = _Struct(types, 'GhosttyClipboardReadReply');
+    clipboardReadReplySize = struct.size;
+    clipboardReadReplySizeField = struct['size'];
+    clipboardReadReplyResult = struct['result'];
+    clipboardReadReplyContents = struct['contents'];
+    clipboardReadReplyContentsLen = struct['contents_len'];
+    clipboardReadReplyAvailable = struct['available'];
+    clipboardReadReplyAvailableLen = struct['available_len'];
+    clipboardReadReplyRemember = struct['remember'];
+
+    struct = _Struct(types, 'GhosttyPaste');
+    pasteSize = struct.size;
+    pasteSizeField = struct['size'];
+    pasteLocation = struct['location'];
+    pasteSource = struct['source'];
+    pasteMimes = struct['mimes'];
+    pasteMimesLen = struct['mimes_len'];
+    final pasteReaderStruct = _Struct(types, 'GhosttyMimeReader');
+    pasteReader = struct['reader'] + pasteReaderStruct['read'];
+    pasteReaderUserdata = struct['reader'] + pasteReaderStruct['userdata'];
+    pasteAllowUnsafe = struct['allow_unsafe'];
+
+    struct = _Struct(types, 'GhosttySelectionBuffer');
+    selectionBufferSize = struct.size;
+    selectionBufferPtr = struct['ptr'];
+    selectionBufferCap = struct['cap'];
+    selectionBufferLen = struct['len'];
 
     struct = _Struct(types, 'GhosttyTerminalDesktopNotification');
     desktopNotificationSize = struct.size;

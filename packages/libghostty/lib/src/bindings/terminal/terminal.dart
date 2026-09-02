@@ -19,6 +19,7 @@ abstract interface class TerminalBindings {
 
   void terminalFree(LibGhosttyHandle terminal);
   TerminalScreen terminalGetActiveScreen(LibGhosttyHandle terminal);
+  int terminalGetClipboardWriteMaxBytes(LibGhosttyHandle terminal);
   RgbColor? terminalGetColorBackground(LibGhosttyHandle terminal);
   RgbColor? terminalGetColorBackgroundDefault(LibGhosttyHandle terminal);
   RgbColor? terminalGetColorCursor(LibGhosttyHandle terminal);
@@ -69,7 +70,13 @@ abstract interface class TerminalBindings {
   });
 
   LibGhosttyHandle terminalNew(int cols, int rows);
+  bool terminalPasteText(
+    LibGhosttyHandle terminal,
+    String text, {
+    required bool allowUnsafe,
+  });
   void terminalReset(LibGhosttyHandle terminal);
+
   void terminalResize(
     LibGhosttyHandle terminal,
     int cols,
@@ -77,13 +84,13 @@ abstract interface class TerminalBindings {
     int cellWidthPx,
     int cellHeightPx,
   );
-
   void terminalScrollViewport(
     LibGhosttyHandle terminal,
     TerminalScrollViewportTag tag,
     int delta,
   );
   void terminalSetApcBufferLimit(LibGhosttyHandle terminal, int? bytes);
+  void terminalSetClipboardWriteMaxBytes(LibGhosttyHandle terminal, int? bytes);
   void terminalSetColorBackground(LibGhosttyHandle terminal, RgbColor? color);
   void terminalSetColorCursor(LibGhosttyHandle terminal, RgbColor? color);
   void terminalSetColorForeground(LibGhosttyHandle terminal, RgbColor? color);
@@ -91,7 +98,6 @@ abstract interface class TerminalBindings {
     LibGhosttyHandle terminal,
     List<RgbColor>? palette,
   );
-
   void terminalSetContinuationMaxBytes(LibGhosttyHandle terminal, int? bytes);
   void terminalSetDefaultCursorBlink(
     LibGhosttyHandle terminal, {
@@ -120,6 +126,10 @@ abstract interface class TerminalBindings {
   );
   void terminalSetKittyImageStorageLimit(LibGhosttyHandle terminal, int? limit);
   void terminalSetOnBell(LibGhosttyHandle terminal, VoidCallback? callback);
+  void terminalSetOnClipboardRead(
+    LibGhosttyHandle terminal,
+    ClipboardReadCallback? callback,
+  );
   void terminalSetOnClipboardWrite(
     LibGhosttyHandle terminal,
     ClipboardWriteCallback? callback,
@@ -136,7 +146,6 @@ abstract interface class TerminalBindings {
     LibGhosttyHandle terminal,
     ValueGetter<DeviceAttributesResponse?>? callback,
   );
-
   void terminalSetOnEnquiry(
     LibGhosttyHandle terminal,
     ValueGetter<Uint8List>? callback,

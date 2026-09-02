@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ffi' as ffi;
 import 'dart:ffi';
 import 'dart:typed_data';
 
@@ -10,6 +11,22 @@ import '../../types/types.dart';
 import '../result_helpers.dart';
 import '../types.dart';
 import 'terminal.dart';
+
+void _invokeOpaqueReply(
+  ffi.Pointer<
+    ffi.NativeFunction<
+      ffi.Void Function(ffi.Pointer<ffi.Void>, ffi.Pointer<ffi.Void>)
+    >
+  >
+  callback,
+  ffi.Pointer<ffi.Void> request,
+  ffi.Pointer<ffi.Void> reply,
+) {
+  callback
+      .asFunction<
+        void Function(ffi.Pointer<ffi.Void>, ffi.Pointer<ffi.Void>)
+      >()(request, reply);
+}
 
 final class FfiTerminalBindings implements TerminalBindings {
   final _callbacks = <int, Map<TerminalOption, NativeCallable>>{};
@@ -176,6 +193,10 @@ final class FfiTerminalBindings implements TerminalBindings {
     checkRequiredCode(result.value, operation: 'ghostty_terminal_get');
     return .fromValue(_outI32.value);
   }
+
+  @override
+  int terminalGetClipboardWriteMaxBytes(LibGhosttyHandle terminal) =>
+      _getU64(terminal, .clipboardWriteMaxBytes)!;
 
   @override
   RgbColor? terminalGetColorBackground(LibGhosttyHandle terminal) =>
@@ -402,6 +423,71 @@ final class FfiTerminalBindings implements TerminalBindings {
   }
 
   @override
+  bool terminalPasteText(
+    LibGhosttyHandle terminal,
+    String text, {
+    required bool allowUnsafe,
+  }) {
+    return using((arena) {
+      final encoded = utf8.encode(text);
+      final data = arena<Uint8>(encoded.isEmpty ? 1 : encoded.length);
+      if (encoded.isNotEmpty) {
+        data.asTypedList(encoded.length).setAll(0, encoded);
+      }
+      final mimeData = 'text/plain'.codeUnits;
+      final mimeBytes = arena<Uint8>(mimeData.length);
+      mimeBytes.asTypedList(mimeData.length).setAll(0, mimeData);
+      final mimes = arena<native.String>();
+      mimes.ref
+        ..ptr = mimeBytes
+        ..len = mimeData.length;
+      final reader =
+          NativeCallable<
+            Bool Function(Pointer<Void>, native.String, native.Writer)
+          >.isolateLocal((
+            Pointer<Void> _,
+            native.String mime,
+            native.Writer writer,
+          ) {
+            if (_readString(mime) != 'text/plain') {
+              return false;
+            }
+            final write = writer.write
+                .asFunction<
+                  bool Function(Pointer<Void>, Pointer<Uint8>, int)
+                >();
+            return write(writer.userdata, data, encoded.length);
+          }, exceptionalReturn: false);
+      try {
+        final readerStruct = native.MimeReader.$allocate(
+          arena,
+          read: reader.nativeFunction.cast(),
+          userdata: nullptr,
+        );
+        final paste = arena<native.Paste>();
+        paste.ref
+          ..size = sizeOf<native.Paste>()
+          ..location = ClipboardLocation.standard
+          ..source = PasteSource.text
+          ..mimes = mimes
+          ..mimes_len = 1
+          ..reader = readerStruct.ref
+          ..allow_unsafe = allowUnsafe;
+        final written = arena<Bool>();
+        final result = native.ghostty_terminal_paste(
+          .fromAddress(terminal.value),
+          paste,
+          written,
+        );
+        checkResultCode(result.value, operation: 'ghostty_terminal_paste');
+        return written.value;
+      } finally {
+        reader.close();
+      }
+    });
+  }
+
+  @override
   void terminalReset(LibGhosttyHandle terminal) {
     native.ghostty_terminal_reset(.fromAddress(terminal.value));
   }
@@ -464,6 +550,12 @@ final class FfiTerminalBindings implements TerminalBindings {
   @override
   void terminalSetApcBufferLimit(LibGhosttyHandle terminal, int? bytes) =>
       _setSize(terminal, .apcMaxBytes, bytes);
+
+  @override
+  void terminalSetClipboardWriteMaxBytes(
+    LibGhosttyHandle terminal,
+    int? bytes,
+  ) => _setSize(terminal, .clipboardWriteMaxBytes, bytes);
 
   @override
   void terminalSetColorBackground(LibGhosttyHandle terminal, RgbColor? color) =>
@@ -572,6 +664,49 @@ final class FfiTerminalBindings implements TerminalBindings {
   }
 
   @override
+  void terminalSetOnClipboardRead(
+    LibGhosttyHandle terminal,
+    ClipboardReadCallback? callback,
+  ) {
+    final callable = callback == null
+        ? null
+        : NativeCallable<
+            Void Function(
+              native.Terminal,
+              Pointer<Void>,
+              Pointer<native.ClipboardRead>,
+            )
+          >.isolateLocal((
+            native.Terminal terminal,
+            Pointer<Void> userdata,
+            Pointer<native.ClipboardRead> pointer,
+          ) {
+            try {
+              final read = pointer.ref;
+              final request = ClipboardReadRequest(
+                location: read.location,
+                mimes: [
+                  for (var i = 0; i < read.mimes_len; i++)
+                    _readString(read.mimes[i]),
+                ],
+                list: read.list,
+                name: _readString(read.name),
+                granted: read.granted,
+                canRemember: read.can_remember,
+              );
+              _replyClipboardRead(pointer, callback(request));
+            } on Object catch (error, stackTrace) {
+              _captureCallbackError(error, stackTrace);
+              _replyClipboardRead(
+                pointer,
+                const ClipboardReadReply(result: .ioError),
+              );
+            }
+          });
+    _replaceCallback(terminal, .clipboardRead, callable);
+  }
+
+  @override
   void terminalSetOnClipboardWrite(
     LibGhosttyHandle terminal,
     ClipboardWriteCallback? callback,
@@ -579,7 +714,7 @@ final class FfiTerminalBindings implements TerminalBindings {
     final callable = callback == null
         ? null
         : NativeCallable<
-            UnsignedInt Function(
+            Void Function(
               native.Terminal,
               Pointer<Void>,
               Pointer<native.ClipboardWrite>,
@@ -606,17 +741,45 @@ final class FfiTerminalBindings implements TerminalBindings {
                     ),
                   ),
               ];
-              return callback(
+              final result = callback(
                 ClipboardWrite(
                   location: write.location,
                   contents: List.unmodifiable(contents),
+                  name: _readString(write.name),
+                  granted: write.granted,
+                  canRemember: write.can_remember,
                 ),
-              ).value;
+              );
+              using((arena) {
+                final reply = native.ClipboardWriteReply.$allocate(
+                  arena,
+                  size: sizeOf<native.ClipboardWriteReply>(),
+                  result: result,
+                  remember: false,
+                );
+                _invokeOpaqueReply(
+                  write.reply.cast(),
+                  pointer.cast(),
+                  reply.cast(),
+                );
+              });
             } on Object catch (error, stackTrace) {
               _captureCallbackError(error, stackTrace);
-              return 5;
+              using((arena) {
+                final reply = native.ClipboardWriteReply.$allocate(
+                  arena,
+                  size: sizeOf<native.ClipboardWriteReply>(),
+                  result: .ioError,
+                  remember: false,
+                );
+                _invokeOpaqueReply(
+                  pointer.ref.reply.cast(),
+                  pointer.cast(),
+                  reply.cast(),
+                );
+              });
             }
-          }, exceptionalReturn: 5);
+          });
     _replaceCallback(terminal, .clipboardWrite, callable);
   }
 
@@ -1189,6 +1352,68 @@ final class FfiTerminalBindings implements TerminalBindings {
     buffer.string.ref
       ..ptr = data
       ..len = bytes.length;
+  }
+
+  void _replyClipboardRead(
+    Pointer<native.ClipboardRead> pointer,
+    ClipboardReadReply value,
+  ) {
+    using((arena) {
+      final contents = arena<native.ClipboardContent>(value.contents.length);
+      for (var i = 0; i < value.contents.length; i++) {
+        final content = value.contents[i];
+        final mime = utf8.encode(content.mime);
+        final mimePointer = arena<Uint8>(mime.isEmpty ? 1 : mime.length);
+        if (mime.isNotEmpty) {
+          mimePointer.asTypedList(mime.length).setAll(0, mime);
+        }
+        final dataPointer = arena<Uint8>(
+          content.data.isEmpty ? 1 : content.data.length,
+        );
+        if (content.data.isNotEmpty) {
+          dataPointer.asTypedList(content.data.length).setAll(0, content.data);
+        }
+        contents[i]
+          ..mime = (native.String.$allocate(
+            arena,
+            ptr: mimePointer,
+            len: mime.length,
+          )).ref
+          ..data = (native.String.$allocate(
+            arena,
+            ptr: dataPointer,
+            len: content.data.length,
+          )).ref;
+      }
+      final available = arena<native.String>(value.available.length);
+      for (var i = 0; i < value.available.length; i++) {
+        final bytes = utf8.encode(value.available[i]);
+        final bytesPointer = arena<Uint8>(bytes.isEmpty ? 1 : bytes.length);
+        if (bytes.isNotEmpty) {
+          bytesPointer.asTypedList(bytes.length).setAll(0, bytes);
+        }
+        available[i] = native.String.$allocate(
+          arena,
+          ptr: bytesPointer,
+          len: bytes.length,
+        ).ref;
+      }
+      final reply = native.ClipboardReadReply.$allocate(
+        arena,
+        size: sizeOf<native.ClipboardReadReply>(),
+        result: value.result,
+        contents: contents,
+        contents_len: value.contents.length,
+        available: available,
+        available_len: value.available.length,
+        remember: value.remember,
+      );
+      _invokeOpaqueReply(
+        pointer.ref.reply.cast(),
+        pointer.cast(),
+        reply.cast(),
+      );
+    });
   }
 
   void _rethrowCallbackError() {

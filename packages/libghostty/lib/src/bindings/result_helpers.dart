@@ -19,6 +19,8 @@ void checkResultCode(int code, {String? operation}) {
       throw IoException(operation: operation);
     case -6:
       throw LimitExceededException(operation: operation);
+    case -7:
+      throw RejectedException(operation: operation);
     default:
       throw UnknownResultException(code, operation: operation);
   }
