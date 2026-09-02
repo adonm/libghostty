@@ -21,6 +21,7 @@ part 'grid_ref.dart';
 part 'kitty_graphics.dart';
 part 'render_state.dart';
 part 'row_iterator.dart';
+part 'search.dart';
 part 'selection.dart';
 part 'selection_gesture.dart';
 part 'snapshot.dart';
@@ -45,6 +46,7 @@ part 'tracked_grid_ref.dart';
 /// - [TrackedGridRef.at] for grid references that survive terminal mutations
 /// - [KittyGraphics.of] for Kitty graphics storage access
 /// - [Formatter] for extracting terminal content
+/// - [Search] for incremental content searches
 /// - [SnapshotDecoder] for restoring state encoded by [encodeSnapshot]
 /// - [KeyEncoder] / [MouseEncoder] for encoding input events
 ///
@@ -1078,4 +1080,6 @@ final class Terminal with Listenable {
       throw ArgumentError.value(ref, name, 'must belong to this terminal');
     }
   }
+
+  void _notifyListenersFromSearch() => notifyListeners();
 }

@@ -208,6 +208,11 @@ final class Layouts {
   late final int clipboardWriteLocation;
   late final int clipboardWriteContents;
   late final int clipboardWriteContentsLen;
+  // GhosttySelectionBuffer
+  late final int selectionBufferSize;
+  late final int selectionBufferPtr;
+  late final int selectionBufferCap;
+  late final int selectionBufferLen;
 
   // GhosttyTerminalDesktopNotification
   late final int desktopNotificationSize;
@@ -540,6 +545,11 @@ final class Layouts {
     clipboardWriteLocation = struct['location'];
     clipboardWriteContents = struct['contents'];
     clipboardWriteContentsLen = struct['contents_len'];
+    struct = _Struct(types, 'GhosttySelectionBuffer');
+    selectionBufferSize = struct.size;
+    selectionBufferPtr = struct['ptr'];
+    selectionBufferCap = struct['cap'];
+    selectionBufferLen = struct['len'];
 
     struct = _Struct(types, 'GhosttyTerminalDesktopNotification');
     desktopNotificationSize = struct.size;

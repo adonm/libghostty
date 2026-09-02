@@ -5,6 +5,7 @@ import 'kitty_graphics/kitty_graphics.dart';
 import 'mouse/mouse.dart';
 import 'parser/parser.dart';
 import 'render/render.dart';
+import 'search/search.dart';
 import 'selection/selection.dart';
 import 'snapshot/snapshot.dart';
 import 'system/sys.dart';
@@ -56,6 +57,9 @@ final class Bindings {
   /// Process-global system operations.
   final SystemBindings system;
 
+  /// Terminal search operations.
+  final SearchBindings search;
+
   const Bindings({
     required this.terminal,
     required this.key,
@@ -68,5 +72,6 @@ final class Bindings {
     required this.selection,
     required this.kittyGraphics,
     required this.system,
+    required this.search,
   });
 }
