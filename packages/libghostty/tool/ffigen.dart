@@ -117,6 +117,7 @@ const _nonLeafFunctions = {
   'ghostty_terminal_resize',
   'ghostty_terminal_vt_write',
   'ghostty_terminal_continuation_write',
+  'ghostty_terminal_paste',
   'ghostty_terminal_set',
 };
 

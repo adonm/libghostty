@@ -2394,6 +2394,9 @@ external void ghostty_osc_reset(OscParser parser);
 /// GHOSTTY_OUT_OF_SPACE and sets the required size in @p out_written.
 /// The caller can then retry with a sufficiently sized buffer.
 ///
+/// This is the encoder ghostty_terminal_paste() uses for a text paste;
+/// use it directly when there is no terminal to paste into.
+///
 /// @param data The paste data to encode (modified in place, may be NULL)
 /// @param data_len The length of the input data in bytes
 /// @param bracketed Whether bracketed paste mode is active
@@ -2443,7 +2446,9 @@ Result ghostty_paste_encode(
 /// to exit bracketed paste mode and inject commands
 ///
 /// This check is conservative and considers data unsafe regardless of
-/// current terminal state.
+/// current terminal state. ghostty_terminal_paste() applies the
+/// terminal-state-aware rule itself (newlines are safe inside a
+/// bracketed paste); use this to apply the stricter rule on top.
 ///
 /// @param data The paste data to check (must not be NULL)
 /// @param len The length of the data in bytes
@@ -3156,6 +3161,273 @@ Result ghostty_row_get_multi(
   return Result.fromValue(
     _ghostty_row_get_multi(row, count, keys, values, out_written),
   );
+}
+
+/// Read the terminal to update the search.
+///
+/// Each feed catches the search up with the terminal: it reconciles
+/// the tracked screens against the live ones, re-scans the active
+/// area, refreshes the viewport match list, gives the scrollback
+/// searcher its next chunk of data, and prunes results that scrollback
+/// eviction invalidated. Feeding is also the only way the search
+/// learns about terminal changes, so keep feeding periodically while
+/// the search is in use, even after it reports complete.
+///
+/// This reads the terminal, so the caller must serialize it with all
+/// other access to the same terminal. Each call does a bounded amount
+/// of work so that any caller-held terminal lock is held only briefly.
+///
+/// @param search Search handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @return GHOSTTY_SUCCESS on success, or GHOSTTY_INVALID_VALUE if
+/// search is NULL or the terminal was freed
+///
+/// @ingroup search
+@ffi.Native<ffi.Int Function(Search)>(
+  symbol: 'ghostty_search_feed',
+  isLeaf: true,
+)
+external int _ghostty_search_feed(Search search);
+
+Result ghostty_search_feed(Search search) {
+  return Result.fromValue(_ghostty_search_feed(search));
+}
+
+/// Free a search.
+///
+/// If the bound terminal is still alive, this releases tracked state
+/// the search holds within it, so the caller must serialize this call
+/// with all other access to the same terminal. If the terminal was
+/// already freed, the search has been detached and this releases only
+/// search-owned memory. Passing NULL is allowed and is a no-op.
+///
+/// @param search Search handle to free
+///
+/// @ingroup search
+@ffi.Native<ffi.Void Function(Search)>(isLeaf: true)
+external void ghostty_search_free(Search search);
+
+/// Read a data field from a search.
+///
+/// The output value type depends on data and is documented by
+/// SearchData. This never reads the terminal, so it is safe to
+/// call while another thread modifies the terminal. Returned
+/// selections are untracked snapshots with standard Selection
+/// lifetime rules.
+///
+/// @param search Search handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @param data Data field to read
+/// @param value Output pointer whose type depends on data
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_NO_VALUE if the
+/// requested data has no value, GHOSTTY_OUT_OF_SPACE if a
+/// provided SelectionBuffer is too small (required
+/// capacity in its len), GHOSTTY_OUT_OF_MEMORY if collecting
+/// viewport matches fails, or GHOSTTY_INVALID_VALUE if search,
+/// data, or value is invalid
+///
+/// @ingroup search
+@ffi.Native<ffi.Int Function(Search, ffi.UnsignedInt, ffi.Pointer<ffi.Void>)>(
+  symbol: 'ghostty_search_get',
+  isLeaf: true,
+)
+external int _ghostty_search_get(
+  Search search,
+  int data,
+  ffi.Pointer<ffi.Void> value,
+);
+
+Result ghostty_search_get(
+  Search search,
+  SearchData data,
+  ffi.Pointer<ffi.Void> value,
+) {
+  return Result.fromValue(_ghostty_search_get(search, data.value, value));
+}
+
+/// Read multiple data fields from a search in a single call.
+///
+/// This is an optimization over calling ghostty_search_get() multiple
+/// times. Each entry in values must point to storage of the type
+/// documented by the corresponding SearchData key.
+///
+/// If any individual read fails, the function returns that error and
+/// writes the index of the failing key to out_written when out_written
+/// is non-NULL. Earlier keys have already been written. On success,
+/// out_written receives count when non-NULL. A too-small
+/// SelectionBuffer stops the batch with GHOSTTY_OUT_OF_SPACE at
+/// that key's index with the required capacity in its len, so order
+/// buffer-valued keys after scalar keys.
+///
+/// @param search Search handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @param count Number of data fields to read
+/// @param keys Data fields to read (must not be NULL)
+/// @param values Output pointers corresponding to keys (must not be NULL)
+/// @param out_written Optional number of fields read, or failing index
+/// on error
+/// @return GHOSTTY_SUCCESS on success, or the first failing read's
+/// result
+///
+/// @ingroup search
+@ffi.Native<
+  ffi.Int Function(
+    Search,
+    ffi.Size,
+    ffi.Pointer<ffi.UnsignedInt>,
+    ffi.Pointer<ffi.Pointer<ffi.Void>>,
+    ffi.Pointer<ffi.Size>,
+  )
+>(symbol: 'ghostty_search_get_multi', isLeaf: true)
+external int _ghostty_search_get_multi(
+  Search search,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+);
+
+Result ghostty_search_get_multi(
+  Search search,
+  int count,
+  ffi.Pointer<ffi.UnsignedInt> keys,
+  ffi.Pointer<ffi.Pointer<ffi.Void>> values,
+  ffi.Pointer<ffi.Size> out_written,
+) {
+  return Result.fromValue(
+    _ghostty_search_get_multi(search, count, keys, values, out_written),
+  );
+}
+
+/// Create a search bound to a terminal.
+///
+/// The search borrows the terminal and never frees it. The search and
+/// the terminal can be freed in either order; see ghostty_search_free().
+///
+/// The search starts idle with no needle: it reports
+/// GHOSTTY_SEARCH_STATUS_COMPLETE and finds nothing. Set
+/// GHOSTTY_SEARCH_OPT_NEEDLE to start searching.
+///
+/// Creation is cheap and does not read terminal contents, but it
+/// registers the search with the terminal so the two can be freed in
+/// any order. The caller must serialize this call with all other
+/// access to the same terminal.
+///
+/// @param allocator Allocator, or NULL for the default allocator
+/// @param out_search Receives the created search handle
+/// @param terminal Terminal to bind the search to
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if
+/// out_search or terminal is invalid, or GHOSTTY_OUT_OF_MEMORY
+/// if allocation fails
+///
+/// @ingroup search
+@ffi.Native<
+  ffi.Int Function(ffi.Pointer<Allocator>, ffi.Pointer<Search>, Terminal)
+>(symbol: 'ghostty_search_new', isLeaf: true)
+external int _ghostty_search_new(
+  ffi.Pointer<Allocator> allocator,
+  ffi.Pointer<Search> out_search,
+  Terminal terminal,
+);
+
+Result ghostty_search_new(
+  ffi.Pointer<Allocator> allocator,
+  ffi.Pointer<Search> out_search,
+  Terminal terminal,
+) {
+  return Result.fromValue(_ghostty_search_new(allocator, out_search, terminal));
+}
+
+/// Feed and tick until the search is caught up with the terminal.
+///
+/// This is a blocking convenience for one-shot and single-threaded
+/// embedders. It always performs at least one feed, so it also picks
+/// up any terminal changes since the last feed, then loops until the
+/// status is GHOSTTY_SEARCH_STATUS_COMPLETE. Searching a large
+/// scrollback can take a while, so interactive embedders should drive
+/// ghostty_search_tick() and ghostty_search_feed() themselves.
+///
+/// This reads the terminal for the entire call, so the caller must
+/// serialize it with all other access to the same terminal.
+///
+/// @param search Search handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @return GHOSTTY_SUCCESS on success, or GHOSTTY_INVALID_VALUE if
+/// search is NULL or the terminal was freed
+///
+/// @ingroup search
+@ffi.Native<ffi.Int Function(Search)>(
+  symbol: 'ghostty_search_run',
+  isLeaf: true,
+)
+external int _ghostty_search_run(Search search);
+
+Result ghostty_search_run(Search search) {
+  return Result.fromValue(_ghostty_search_run(search));
+}
+
+/// Write an option to a search.
+///
+/// The value type, and what a NULL value means, depends on the option
+/// and is documented by SearchOption. The needle and select
+/// options touch the terminal, so the caller must serialize those
+/// calls with all other access to the same terminal.
+/// GHOSTTY_SEARCH_OPT_SELECT_SCROLL only modifies search-owned state.
+///
+/// @param search Search handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @param option Option to write
+/// @param value Pointer to the input value for the option. The meaning
+/// of NULL is documented per option.
+/// @return GHOSTTY_SUCCESS on success, GHOSTTY_NO_VALUE if a select
+/// option found no matches, GHOSTTY_OUT_OF_MEMORY if
+/// allocation fails, or GHOSTTY_INVALID_VALUE if search,
+/// option, or value is invalid or the option needs a terminal
+/// that was already freed
+///
+/// @ingroup search
+@ffi.Native<ffi.Int Function(Search, ffi.UnsignedInt, ffi.Pointer<ffi.Void>)>(
+  symbol: 'ghostty_search_set',
+  isLeaf: true,
+)
+external int _ghostty_search_set(
+  Search search,
+  int option,
+  ffi.Pointer<ffi.Void> value,
+);
+
+Result ghostty_search_set(
+  Search search,
+  SearchOption option,
+  ffi.Pointer<ffi.Void> value,
+) {
+  return Result.fromValue(_ghostty_search_set(search, option.value, value));
+}
+
+/// Make a bounded amount of search progress.
+///
+/// This only works on data the search has already copied and never
+/// reads the terminal, so it is safe to call while another thread
+/// modifies the terminal. Call it in a loop while the status is
+/// GHOSTTY_SEARCH_STATUS_RUNNING. When the status becomes
+/// GHOSTTY_SEARCH_STATUS_FEED_REQUIRED, call ghostty_search_feed() to
+/// unblock it.
+///
+/// @param search Search handle (NULL returns GHOSTTY_INVALID_VALUE)
+/// @param[out] out_status Receives the status after the tick (may be NULL)
+/// @return GHOSTTY_SUCCESS on success, or GHOSTTY_INVALID_VALUE if
+/// search is NULL
+///
+/// @ingroup search
+@ffi.Native<ffi.Int Function(Search, ffi.Pointer<ffi.UnsignedInt>)>(
+  symbol: 'ghostty_search_tick',
+  isLeaf: true,
+)
+external int _ghostty_search_tick(
+  Search search,
+  ffi.Pointer<ffi.UnsignedInt> out_status,
+);
+
+Result ghostty_search_tick(
+  Search search,
+  ffi.Pointer<ffi.UnsignedInt> out_status,
+) {
+  return Result.fromValue(_ghostty_search_tick(search, out_status));
 }
 
 /// Apply a selection gesture event and return the resulting selection snapshot.
@@ -4694,6 +4966,51 @@ Result ghostty_terminal_new(
   );
 }
 
+/// Paste into the terminal according to its current state: a Kitty
+/// clipboard protocol paste event if mode 5522 is enabled and a
+/// clipboard_read callback is installed, otherwise the text framed per
+/// mode 2004. See the group documentation for the full behavior. Output
+/// streams through the write_pty callback in chunks. The viewport is not
+/// scrolled; that is up to the embedder, as for key input.
+///
+/// A paste event records a session grant for its one-time password only
+/// once the event is written; a failed call never leaves a grant for an
+/// event that was never sent.
+///
+/// @param terminal The terminal handle
+/// @param paste The paste request, borrowed for the duration of the call
+/// @param[out] out_written On success, whether anything was written to
+/// the pty (the encoded text or a paste event). False means
+/// there was nothing to paste: no non-empty text
+/// representation. May be NULL.
+/// @return GHOSTTY_SUCCESS on success (see @p out_written);
+/// GHOSTTY_REJECTED if the text could inject commands and
+/// Paste::allow_unsafe is false (nothing was written);
+/// GHOSTTY_INVALID_VALUE for a NULL terminal or paste, MIME
+/// types without a reader, or when no write_pty callback is
+/// installed; GHOSTTY_OUT_OF_MEMORY; GHOSTTY_IO_ERROR if the
+/// reader failed or there is no secure entropy source to mint a
+/// paste event password (wasm32-freestanding without
+/// GHOSTTY_SYS_OPT_RANDOM_SECURE set). Errors write nothing.
+@ffi.Native<
+  ffi.Int Function(Terminal, ffi.Pointer<Paste>, ffi.Pointer<ffi.Bool>)
+>(symbol: 'ghostty_terminal_paste')
+external int _ghostty_terminal_paste(
+  Terminal terminal,
+  ffi.Pointer<Paste> paste,
+  ffi.Pointer<ffi.Bool> out_written,
+);
+
+Result ghostty_terminal_paste(
+  Terminal terminal,
+  ffi.Pointer<Paste> paste,
+  ffi.Pointer<ffi.Bool> out_written,
+) {
+  return Result.fromValue(
+    _ghostty_terminal_paste(terminal, paste, out_written),
+  );
+}
+
 /// Convert a grid reference back to a point in the given coordinate system.
 ///
 /// This is the inverse of ghostty_terminal_grid_ref(): given a grid reference,
@@ -5797,7 +6114,8 @@ external int ghostty_unicode_grapheme_width(
 /// For functions that take an allocator pointer, a NULL pointer indicates
 /// that the default allocator should be used. The default allocator will
 /// be libc malloc/free if we're linking to libc. If libc isn't linked,
-/// a custom allocator is used (currently Zig's SMP allocator).
+/// a custom allocator is used (currently Zig's SMP allocator). On native
+/// freestanding targets, the default allocator always fails instead.
 ///
 /// @ingroup allocator
 ///
@@ -5836,7 +6154,8 @@ final class Allocator extends ffi.Struct {
 ///
 /// If you're not going to use a custom allocator, you can ignore all of
 /// this. All functions that take an allocator pointer allow NULL to use a
-/// default allocator.
+/// default allocator. Native freestanding builds must provide an allocator
+/// for operations that allocate memory.
 ///
 /// The interface is based on the Zig allocator interface. I'll say up front
 /// that it is easy to look at this interface and think "wow, this is really
@@ -6112,7 +6431,159 @@ final class ClipboardContent extends ffi.Struct {
   external String data;
 }
 
-/// A semantic, atomic clipboard write.
+/// A synchronous request to read clipboard contents.
+///
+/// This is a sized struct. The callback must only access fields present in the
+/// size reported by `size`. The request is borrowed and valid only for the
+/// callback duration.
+///
+/// The read is answered by calling `reply` with this request and a
+/// ClipboardReadReply. This must happen before the callback returns;
+/// the request is invalid afterwards. Calling `reply` more than once is
+/// ignored. Returning without replying answers the program with an empty
+/// clipboard (OSC 52) or EPERM (OSC 5522).
+///
+/// @ingroup terminal
+final class ClipboardRead extends ffi.Struct {
+  /// Size of this struct in bytes.
+  @ffi.Size()
+  external int size;
+
+  /// Clipboard to read.
+  @ffi.UnsignedInt()
+  external int locationAsInt;
+
+  ClipboardLocation get location => ClipboardLocation.fromValue(locationAsInt);
+  set location(ClipboardLocation value) => locationAsInt = value.value;
+
+  /// Borrowed array of the MIME types the program wants, in order of
+  /// preference. Protocols that only carry text (OSC 52) request
+  /// "text/plain". NULL when mimes_len is zero.
+  external ffi.Pointer<String> mimes;
+
+  /// Number of entries in mimes.
+  @ffi.Size()
+  external int mimes_len;
+
+  /// True if the program also wants the list of MIME types available on the
+  /// clipboard, delivered through ClipboardReadReply::available.
+  @ffi.Bool()
+  external bool list;
+
+  /// Name of the requesting program for permission prompts, if the protocol
+  /// carries one. Empty otherwise.
+  external String name;
+
+  /// True if the terminal already holds a session grant for this request
+  /// (kitty clipboard protocol passwords). The embedder should skip any
+  /// permission prompt and serve the read.
+  ///
+  /// Always false when mimes_len is zero: such a request is served
+  /// without a prompt (see the callback docs), so the terminal never
+  /// consults grants for it and a one-time password is preserved for
+  /// the follow-up data read.
+  @ffi.Bool()
+  external bool granted;
+
+  /// True if the program supplied a session password, so the embedder may
+  /// offer to remember the user's decision through
+  /// ClipboardReadReply::remember. When false, remember is ignored.
+  @ffi.Bool()
+  external bool can_remember;
+
+  /// Terminal-owned reply state. Do not access.
+  external ffi.Pointer<ffi.Void> ctx;
+
+  /// Answer the read; see the struct documentation.
+  external ClipboardReadReplyFn reply;
+}
+
+/// The reply to a clipboard read request.
+///
+/// This is a sized struct; set `size` to `sizeof(ClipboardReadReply)`.
+/// All arrays and the strings they point to are borrowed only for the
+/// duration of the reply call and may be freed as soon as it returns.
+///
+/// Any result other than GHOSTTY_CLIPBOARD_READ_RESULT_SUCCESS answers the
+/// program with an empty clipboard (OSC 52) or the matching protocol status
+/// (OSC 5522: EPERM, ENOSYS, EBUSY, EIO); the other fields are ignored in
+/// that case. On success, `contents` should carry one representation per
+/// requested MIME type (ClipboardRead::mimes) that the clipboard
+/// has; unrequested representations are ignored. Protocols that carry a
+/// single text value (OSC 52) use the first entry with a text MIME type
+/// such as "text/plain".
+///
+/// @ingroup terminal
+final class ClipboardReadReply extends ffi.Struct {
+  /// Size of this struct in bytes.
+  @ffi.Size()
+  external int size;
+
+  /// Outcome of the read.
+  @ffi.UnsignedInt()
+  external int resultAsInt;
+
+  ClipboardReadResult get result => ClipboardReadResult.fromValue(resultAsInt);
+  set result(ClipboardReadResult value) => resultAsInt = value.value;
+
+  /// Borrowed array of MIME representations of the clipboard contents.
+  external ffi.Pointer<ClipboardContent> contents;
+
+  /// Number of entries in contents.
+  @ffi.Size()
+  external int contents_len;
+
+  /// Borrowed array of all MIME types available on the clipboard. Only
+  /// used when ClipboardRead::list is set; may be NULL otherwise.
+  external ffi.Pointer<String> available;
+
+  /// Number of entries in available.
+  @ffi.Size()
+  external int available_len;
+
+  /// Record a session grant so future requests from the same program skip
+  /// the permission prompt. Only honored on success when
+  /// ClipboardRead::can_remember is set.
+  @ffi.Bool()
+  external bool remember;
+
+  static ffi.Pointer<ClipboardReadReply> $allocate(
+    ffi.Allocator $allocator, {
+    required int size,
+    required ClipboardReadResult result,
+    required ffi.Pointer<ClipboardContent> contents,
+    required int contents_len,
+    required ffi.Pointer<String> available,
+    required int available_len,
+    required bool remember,
+  }) => $allocator<ClipboardReadReply>()
+    ..ref.size = size
+    ..ref.result = result
+    ..ref.contents = contents
+    ..ref.contents_len = contents_len
+    ..ref.available = available
+    ..ref.available_len = available_len
+    ..ref.remember = remember;
+}
+
+/// Function type used to answer a clipboard read request. Obtained from
+/// ClipboardRead::reply; see that struct for the contract.
+///
+/// @param read The request being answered
+/// @param reply The reply, borrowed only for the duration of this call
+///
+/// @ingroup terminal
+typedef ClipboardReadReplyFn =
+    ffi.Pointer<
+      ffi.NativeFunction<
+        ffi.Void Function(
+          ffi.Pointer<ClipboardRead> read,
+          ffi.Pointer<ClipboardReadReply> reply,
+        )
+      >
+    >;
+
+/// A synchronous request to write clipboard contents.
 ///
 /// This is a sized struct. The callback must only access fields present in the
 /// size reported by `size`. The request, contents array, MIME strings, and
@@ -6122,6 +6593,12 @@ final class ClipboardContent extends ffi.Struct {
 /// and must be committed atomically. A `contents_len` of zero requests that
 /// the destination be cleared. This is distinct from a content entry whose data
 /// has zero length.
+///
+/// The write is answered by calling `reply` with this request and a
+/// ClipboardWriteReply. This must happen within the clipboard write
+/// request callback. This struct is only valid during that time. Calling
+/// `reply` more than once is safely ignored. Returning without replying
+/// denies the write.
 ///
 /// @ingroup terminal
 final class ClipboardWrite extends ffi.Struct {
@@ -6143,18 +6620,87 @@ final class ClipboardWrite extends ffi.Struct {
   @ffi.Size()
   external int contents_len;
 
-  static ffi.Pointer<ClipboardWrite> $allocate(
+  /// Name of the writing program for permission prompts, if the protocol
+  /// carries one. Empty otherwise.
+  external String name;
+
+  /// True if the terminal already holds a session grant for this request
+  /// The embedder should skip any permission prompt and perform the write.
+  @ffi.Bool()
+  external bool granted;
+
+  /// True if the program supplied a session password, so the embedder may
+  /// offer to remember the user's decision through
+  /// ClipboardWriteReply::remember. When false, remember is ignored.
+  @ffi.Bool()
+  external bool can_remember;
+
+  /// Terminal-owned reply state. Do not access.
+  external ffi.Pointer<ffi.Void> ctx;
+
+  /// Answer the write; see the struct documentation.
+  external ClipboardWriteReplyFn reply;
+}
+
+/// The reply to a clipboard write request.
+///
+/// This is a sized struct; set `size` to `sizeof(ClipboardWriteReply)`.
+/// The reply is borrowed only for the duration of the reply call and may be
+/// freed as soon as it returns.
+///
+/// The result answers the program with the matching protocol status for
+/// protocols with a write acknowledgement (OSC 5522: DONE, EPERM, ENOSYS,
+/// EBUSY, EINVAL, EIO); protocols without one (OSC 52, OSC 1337 Copy)
+/// discard the reply. `remember` is ignored on any result other than
+/// GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS.
+///
+/// @ingroup terminal
+final class ClipboardWriteReply extends ffi.Struct {
+  /// Size of this struct in bytes.
+  @ffi.Size()
+  external int size;
+
+  /// Outcome of the write.
+  @ffi.UnsignedInt()
+  external int resultAsInt;
+
+  ClipboardWriteResult get result =>
+      ClipboardWriteResult.fromValue(resultAsInt);
+  set result(ClipboardWriteResult value) => resultAsInt = value.value;
+
+  /// Record a session grant so future requests from the same program skip
+  /// the permission prompt. Only honored on success when
+  /// ClipboardWrite::can_remember is set.
+  @ffi.Bool()
+  external bool remember;
+
+  static ffi.Pointer<ClipboardWriteReply> $allocate(
     ffi.Allocator $allocator, {
     required int size,
-    required ClipboardLocation location,
-    required ffi.Pointer<ClipboardContent> contents,
-    required int contents_len,
-  }) => $allocator<ClipboardWrite>()
+    required ClipboardWriteResult result,
+    required bool remember,
+  }) => $allocator<ClipboardWriteReply>()
     ..ref.size = size
-    ..ref.location = location
-    ..ref.contents = contents
-    ..ref.contents_len = contents_len;
+    ..ref.result = result
+    ..ref.remember = remember;
 }
+
+/// Function type used to answer a clipboard write request. Obtained from
+/// ClipboardWrite::reply; see that struct for the contract.
+///
+/// @param write The request being answered
+/// @param reply The reply, borrowed only for the duration of this call
+///
+/// @ingroup terminal
+typedef ClipboardWriteReplyFn =
+    ffi.Pointer<
+      ffi.NativeFunction<
+        ffi.Void Function(
+          ffi.Pointer<ClipboardWrite> write,
+          ffi.Pointer<ClipboardWriteReply> reply,
+        )
+      >
+    >;
 
 /// A borrowed list of Unicode scalar values.
 ///
@@ -6636,6 +7182,60 @@ final class KittyGraphicsPlacementRenderInfo extends ffi.Struct {
 typedef KittyKeyFlags = ffi.Uint8;
 typedef DartKittyKeyFlags = int;
 
+/// A MIME-typed content source callback and its opaque context.
+///
+/// The struct is passed by value. @p read must be non-NULL.
+final class MimeReader extends ffi.Struct {
+  external MimeReaderFn read;
+
+  external ffi.Pointer<ffi.Void> userdata;
+
+  static ffi.Pointer<MimeReader> $allocate(
+    ffi.Allocator $allocator, {
+    required MimeReaderFn read,
+    required ffi.Pointer<ffi.Void> userdata,
+  }) => $allocator<MimeReader>()
+    ..ref.read = read
+    ..ref.userdata = userdata;
+}
+
+/// Read one MIME-typed representation of some content, streaming its
+/// bytes to a writer.
+///
+/// The library calls this with the MIME type of the representation it
+/// needs. The callback writes all of that representation's data to
+/// @p writer, in as many calls to `writer.write(writer.userdata, data,
+/// len)` as is convenient (one call with everything or many small
+/// pieces both work), and returns true. Nothing written is retained
+/// beyond each write call, so the data may be borrowed from anywhere:
+/// a pasteboard item, a file being read, a stream.
+///
+/// Returning false reports that the data could not be read. If the
+/// writer refuses a write (returns false), stop and return false
+/// without writing more.
+///
+/// All pointer arguments, the mime, and the writer are borrowed and
+/// valid only for the duration of the callback. The callback is
+/// invoked synchronously on the calling thread. The API receiving the
+/// MimeReader defines which MIME types are requested, how many
+/// times, and any consistency requirements across repeated reads.
+///
+/// @param userdata Opaque userdata from MimeReader
+/// @param mime The MIME type of the representation to read
+/// @param writer Where to write the data; valid only during this call
+/// @return true once all the data was written, false if it could not
+/// be read or the writer refused a write
+typedef MimeReaderFn =
+    ffi.Pointer<
+      ffi.NativeFunction<
+        ffi.Bool Function(
+          ffi.Pointer<ffi.Void> userdata,
+          String mime,
+          Writer writer,
+        )
+      >
+    >;
+
 /// A packed 16-bit terminal mode.
 ///
 /// Encodes a mode value (bits 0–14) and an ANSI flag (bit 15) into a
@@ -6785,6 +7385,63 @@ final class OscCommandImpl extends ffi.Opaque {}
 typedef OscParser = ffi.Pointer<OscParserImpl>;
 
 final class OscParserImpl extends ffi.Opaque {}
+
+/// A paste of clipboard contents into the terminal.
+///
+/// This is a sized struct; set `size` to `sizeof(Paste)`. The
+/// MIME type array and the strings it points to are borrowed only for
+/// the duration of the ghostty_terminal_paste() call, as is everything
+/// the reader produces.
+final class Paste extends ffi.Struct {
+  /// Size of this struct in bytes.
+  @ffi.Size()
+  external int size;
+
+  /// The clipboard the contents came from. Reported to the program on a
+  /// paste event (the selection and primary locations are both reported
+  /// as the primary selection, the protocol knows only two); no effect
+  /// on a text paste.
+  @ffi.UnsignedInt()
+  external int locationAsInt;
+
+  ClipboardLocation get location => ClipboardLocation.fromValue(locationAsInt);
+  set location(ClipboardLocation value) => locationAsInt = value.value;
+
+  /// Why this paste happened.
+  @ffi.UnsignedInt()
+  external int sourceAsInt;
+
+  PasteSource get source => PasteSource.fromValue(sourceAsInt);
+  set source(PasteSource value) => sourceAsInt = value.value;
+
+  /// Borrowed array of the MIME types of the representations available,
+  /// in preferred order. A text paste reads and writes the first entry
+  /// with a text MIME type such as "text/plain" and ignores the rest. A
+  /// paste event lists every entry and reads none. May be NULL when
+  /// mimes_len is zero, which is nothing to paste.
+  external ffi.Pointer<String> mimes;
+
+  /// Number of entries in mimes.
+  @ffi.Size()
+  external int mimes_len;
+
+  /// Produces the data of a representation on demand. Required when
+  /// mimes_len is nonzero.
+  ///
+  /// Called at most once per ghostty_terminal_paste() call: for the
+  /// text representation being pasted, never for anything else and
+  /// never for a paste event. The MIME type requested is always an
+  /// entry of `mimes`, passed through exactly as given there (the same
+  /// pointer and length), so the callback may identify the
+  /// representation by pointer or by content. A false return fails the
+  /// paste with GHOSTTY_IO_ERROR.
+  external MimeReader reader;
+
+  /// Write text that could inject commands. Call with false, confirm
+  /// with the user on GHOSTTY_REJECTED, and call again with true.
+  @ffi.Bool()
+  external bool allow_unsafe;
+}
 
 /// Tagged union for a point in the terminal grid.
 ///
@@ -7059,6 +7716,19 @@ final class RenderStateRowSelection extends ffi.Struct {
 typedef Row = ffi.Uint64;
 typedef DartRow = int;
 
+/// Opaque handle to a terminal search.
+///
+/// A search is bound to the terminal it was created with. It borrows the
+/// terminal, so it never frees it, and the search must be freed with
+/// ghostty_search_free(). If the terminal is freed first, the search
+/// detects this: calls that need the terminal fail cleanly and the
+/// search can still be freed.
+///
+/// @ingroup search
+typedef Search = ffi.Pointer<SearchImpl>;
+
+final class SearchImpl extends ffi.Opaque {}
+
 /// A snapshot selection range defined by two grid references.
 ///
 /// Both endpoints are inclusive. The endpoints preserve selection direction
@@ -7097,6 +7767,39 @@ final class Selection extends ffi.Struct {
   /// rather than a linear selection.
   @ffi.Bool()
   external bool rectangle;
+}
+
+/// A caller-provided buffer of selections.
+///
+/// This follows the same conventions as Buffer: ptr may be NULL with
+/// cap 0 to query the required capacity. APIs that fill this type set len to
+/// the number of entries written on GHOSTTY_SUCCESS, or to the required entry
+/// capacity on GHOSTTY_OUT_OF_SPACE.
+///
+/// @ingroup selection
+final class SelectionBuffer extends ffi.Struct {
+  /// Destination buffer for selections. May be NULL when cap is 0 to query
+  /// the required capacity.
+  external ffi.Pointer<Selection> ptr;
+
+  /// Capacity of ptr in entries.
+  @ffi.Size()
+  external int cap;
+
+  /// Entries written on success, or required entry capacity on
+  /// GHOSTTY_OUT_OF_SPACE.
+  @ffi.Size()
+  external int len;
+
+  static ffi.Pointer<SelectionBuffer> $allocate(
+    ffi.Allocator $allocator, {
+    required ffi.Pointer<Selection> ptr,
+    required int cap,
+    required int len,
+  }) => $allocator<SelectionBuffer>()
+    ..ref.ptr = ptr
+    ..ref.cap = cap
+    ..ref.len = len;
 }
 
 /// Opaque handle to state for interpreting terminal selection gestures.
@@ -7564,6 +8267,28 @@ typedef SysLogFn =
       >
     >;
 
+/// Callback type for secure random bytes.
+///
+/// Fills @p buf with @p len cryptographically secure random bytes. The
+/// library uses this for secrets, so it must be a real CSPRNG (getrandom,
+/// arc4random_buf, BCryptGenRandom, crypto.getRandomValues, ...); a
+/// predictable source is a security hole.
+///
+/// @param userdata The userdata pointer set via GHOSTTY_SYS_OPT_USERDATA
+/// @param buf      Buffer to fill
+/// @param len      Number of bytes to fill
+/// @return true if the buffer was filled, false if no entropy is available
+typedef SysRandomSecureFn =
+    ffi.Pointer<
+      ffi.NativeFunction<
+        ffi.Bool Function(
+          ffi.Pointer<ffi.Void> userdata,
+          ffi.Pointer<ffi.Uint8> buf,
+          ffi.Size len,
+        )
+      >
+    >;
+
 /// Opaque handle to a terminal instance.
 ///
 /// @ingroup terminal
@@ -7584,25 +8309,76 @@ typedef TerminalBellFn =
       >
     >;
 
+/// Callback function type for clipboard_read.
+///
+/// Called synchronously when the running program requests clipboard contents
+/// via OSC 52 with a "?" payload or a Kitty clipboard (OSC 5522) read.
+/// Answering lets the program read the user's clipboard, so the embedder is
+/// expected to mediate consent. Because the read is synchronous, an embedder
+/// that needs to ask the user must block (for example by running a modal
+/// prompt) until it has an answer; the VT stream waits until the callback
+/// returns.
+///
+/// Answer by calling `read->reply(read, &reply)` before returning. See
+/// ClipboardRead for the full contract.
+///
+/// OSC 5522 requests carry the program's MIME list, name, and password grant
+/// state; a reply that sets `remember` records a session grant so later
+/// requests with the same password arrive with `granted` set. Kitty itself
+/// serves a request for only the targets listing (`list` with no `mimes`)
+/// without prompting, and embedders are expected to do the same; the
+/// terminal never consults grants for such requests (`granted` is false
+/// and one-time passwords are not consumed).
+///
+/// Installing this callback also enables Kitty paste events (mode 5522):
+/// ghostty_terminal_paste() sends the program an event instead of the text,
+/// and the program's follow-up read arrives here with `granted` set since
+/// the user already pasted. See ghostty_terminal_paste().
+///
+/// @param terminal The terminal handle
+/// @param userdata The userdata pointer set via GHOSTTY_TERMINAL_OPT_USERDATA
+/// @param read Borrowed clipboard read request
+///
+/// @ingroup terminal
+typedef TerminalClipboardReadFn =
+    ffi.Pointer<
+      ffi.NativeFunction<
+        ffi.Void Function(
+          Terminal terminal,
+          ffi.Pointer<ffi.Void> userdata,
+          ffi.Pointer<ClipboardRead> read,
+        )
+      >
+    >;
+
 /// Callback function type for clipboard_write.
 ///
-/// Called synchronously for a complete logical clipboard write. Protocol
-/// details such as OSC 52 selectors, base64 encoding, multipart chunks,
-/// aliases, and terminators are normalized before this callback is invoked.
-/// OSC 52 and iTerm2 OSC 1337 Copy writes therefore use the same callback
-/// shape. OSC 52 clipboard read requests ("?") are always ignored and never
-/// forwarded to this callback.
+/// The embedder may ask for permission to write or perform the write
+/// async, but the callback itself is synchronous and the reply function
+/// must be called during the lifetime of this function. While this callback
+/// is active the VT stream is paused.
+///
+/// Answer by calling `write->reply(write, &reply)` before returning. See
+/// ClipboardWrite for the full contract.
+///
+/// The request may carry an optional program name requesting the write
+/// and the state of prior permission granted. If `can_remember` is set
+/// the response may set the `remember` flag and future requests from this
+/// same program will be "granted" and the embedder can skip permission
+/// requests.
+///
+/// Clipboard read requests (OSC 52 "?" and OSC 5522 reads) are delivered
+/// to TerminalClipboardReadFn instead.
 ///
 /// @param terminal The terminal handle
 /// @param userdata The userdata pointer set via GHOSTTY_TERMINAL_OPT_USERDATA
 /// @param write Borrowed atomic clipboard write request
-/// @return The result of attempting the clipboard write
 ///
 /// @ingroup terminal
 typedef TerminalClipboardWriteFn =
     ffi.Pointer<
       ffi.NativeFunction<
-        ffi.UnsignedInt Function(
+        ffi.Void Function(
           Terminal terminal,
           ffi.Pointer<ffi.Void> userdata,
           ffi.Pointer<ClipboardWrite> write,
