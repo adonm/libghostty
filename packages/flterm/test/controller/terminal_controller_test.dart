@@ -795,16 +795,28 @@ void main() {
         expect(received?.contents, isEmpty);
       });
 
-      test('ignores clipboard read queries', () {
-        var count = 0;
-        controller.onClipboardWrite = (_) {
-          count++;
-          return .success;
+      test('forwards clipboard read queries and replies with content', () {
+        ClipboardReadRequest? received;
+        final output = <Uint8List>[];
+        controller.onOutput = output.add;
+        controller.onClipboardRead = (read) {
+          received = read;
+          return ClipboardReadReply(
+            result: .success,
+            contents: [
+              ClipboardContent(
+                mime: 'text/plain',
+                data: Uint8List.fromList('hello'.codeUnits),
+              ),
+            ],
+          );
         };
 
         writeControllerUtf8(controller, '\x1b]52;c;?\x07');
 
-        expect(count, 0);
+        expect(received?.mimes, ['text/plain']);
+        expect(output, hasLength(1));
+        expect(utf8.decode(output.single), '\x1b]52;c;aGVsbG8=\x07');
       });
 
       test('uses the replacement callback', () {
@@ -1331,6 +1343,7 @@ void main() {
             scrollbackMaxLines: 10,
             kittyImageStorageLimit: 1 << 20,
             apcBufferLimit: 1,
+            clipboardWriteMaxBytes: 1024,
             cursorStyle: CursorShape.underline,
             cursorBlink: true,
           ),
@@ -1341,6 +1354,7 @@ void main() {
 
         expect(custom.terminal.scrollbackMaxBytes, 1024);
         expect(custom.terminal.scrollbackMaxLines, 10);
+        expect(custom.terminal.clipboardWriteMaxBytes, 1024);
 
         custom.write(transmitRedPixel(id: 91));
 

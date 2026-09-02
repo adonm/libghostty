@@ -9,6 +9,9 @@ export 'package:libghostty/libghostty.dart'
     show
         ClipboardContent,
         ClipboardLocation,
+        ClipboardReadReply,
+        ClipboardReadRequest,
+        ClipboardReadResult,
         ClipboardWrite,
         ClipboardWriteCallback,
         ClipboardWriteResult,

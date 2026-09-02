@@ -36,6 +36,7 @@ final class TerminalControllerImpl extends TerminalController {
   var _disposed = false;
   late _Observation _observation;
   ClipboardWriteCallback? _onClipboardWrite;
+  ClipboardReadCallback? _onClipboardRead;
   ValueChanged<Uint8List>? _onOutput;
   VoidCallback? _onPwdChanged;
   OnResize? _onResize;
@@ -105,6 +106,14 @@ final class TerminalControllerImpl extends TerminalController {
   set onBell(VoidCallback? value) {
     _checkNotDisposed();
     _terminal.onBell = value;
+  }
+
+  @override
+  set onClipboardRead(ClipboardReadCallback? value) {
+    _checkNotDisposed();
+    if (identical(_onClipboardRead, value)) return;
+    _onClipboardRead = value;
+    _terminal.onClipboardRead = value;
   }
 
   @override
@@ -586,6 +595,7 @@ final class TerminalControllerImpl extends TerminalController {
     _terminal.scrollbackMaxBytes = _config.scrollbackMaxBytes;
     _terminal.scrollbackMaxLines = _config.scrollbackMaxLines;
     _terminal.kittyImageStorageLimit = _config.kittyImageStorageLimit;
+    _terminal.clipboardWriteMaxBytes = _config.clipboardWriteMaxBytes;
     _terminal.setApcBufferLimit(_config.apcBufferLimit);
     _terminal.setGlyphProtocol(enabled: _config.glyphProtocol);
     _terminal.defaultCursorShape = .fromValue(_config.cursorStyle.value);

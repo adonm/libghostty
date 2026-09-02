@@ -99,14 +99,22 @@ abstract class TerminalController extends ChangeNotifier {
   /// to null to ignore BEL events.
   set onBell(VoidCallback? value);
 
+  /// Handles a clipboard read requested by terminal content.
+  ///
+  /// The callback receives the requested MIME types and must return a
+  /// [ClipboardReadReply]. Requests are ignored when this is null. Apply an
+  /// explicit trust and platform policy because requests originate in
+  /// untrusted terminal content.
+  set onClipboardRead(ClipboardReadCallback? callback);
+
   /// Handles a clipboard write requested by terminal content.
   ///
   /// Requests are ignored when this is null. OSC 52 and iTerm2 Copy writes are
   /// normalized into the same binary-safe request. Every content entry is a
   /// representation of one logical value and must be committed atomically; no
   /// entries means clear the destination, while an entry containing no bytes
-  /// means write an empty representation. Clipboard read requests are never
-  /// forwarded.
+  /// means write an empty representation. The callback result is used for
+  /// protocols that support write acknowledgements.
   ///
   /// The callback fires synchronously during [write]. Its result describes the
   /// attempted write, although OSC 52 and iTerm2 Copy do not acknowledge it to

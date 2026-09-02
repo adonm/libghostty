@@ -118,6 +118,12 @@ class TerminalConfig {
   /// Defaults to 65 MiB. Set to 0 to reject APC payload data.
   final int apcBufferLimit;
 
+  /// Maximum decoded bytes accepted in one Kitty clipboard write.
+  ///
+  /// Defaults to libghostty's 64 MiB limit. Set to null to restore that
+  /// default.
+  final int? clipboardWriteMaxBytes;
+
   /// Whether Glyph Protocol APC handling is enabled.
   ///
   /// Defaults to false. Enable to parse Glyph Protocol image payloads in
@@ -170,6 +176,7 @@ class TerminalConfig {
     this.cursorBlink,
     this.glyphProtocol = false,
     this.apcBufferLimit = defaultApcBufferLimit,
+    this.clipboardWriteMaxBytes,
     this.enquiryResponse = '',
     this.modes = defaultModes,
     this.cursorStyle = .block,
@@ -193,7 +200,11 @@ class TerminalConfig {
          kittyImageStorageLimit >= 0,
          'kittyImageStorageLimit must be non-negative',
        ),
-       assert(apcBufferLimit >= 0, 'apcBufferLimit must be non-negative');
+       assert(apcBufferLimit >= 0, 'apcBufferLimit must be non-negative'),
+       assert(
+         clipboardWriteMaxBytes == null || clipboardWriteMaxBytes >= 0,
+         'clipboardWriteMaxBytes must be non-negative',
+       );
 
   @override
   int get hashCode => Object.hash(
@@ -203,6 +214,7 @@ class TerminalConfig {
     scrollbackMaxLines,
     kittyImageStorageLimit,
     apcBufferLimit,
+    clipboardWriteMaxBytes,
     glyphProtocol,
     cursorStyle,
     cursorBlink,
@@ -223,6 +235,7 @@ class TerminalConfig {
           scrollbackMaxLines == other.scrollbackMaxLines &&
           kittyImageStorageLimit == other.kittyImageStorageLimit &&
           apcBufferLimit == other.apcBufferLimit &&
+          clipboardWriteMaxBytes == other.clipboardWriteMaxBytes &&
           glyphProtocol == other.glyphProtocol &&
           cursorStyle == other.cursorStyle &&
           cursorBlink == other.cursorBlink &&
@@ -240,6 +253,7 @@ class TerminalConfig {
     int? scrollbackMaxLines,
     int? kittyImageStorageLimit,
     int? apcBufferLimit,
+    int? clipboardWriteMaxBytes,
     bool? glyphProtocol,
     CursorShape? cursorStyle,
     bool? cursorBlink,
@@ -257,6 +271,8 @@ class TerminalConfig {
       kittyImageStorageLimit:
           kittyImageStorageLimit ?? this.kittyImageStorageLimit,
       apcBufferLimit: apcBufferLimit ?? this.apcBufferLimit,
+      clipboardWriteMaxBytes:
+          clipboardWriteMaxBytes ?? this.clipboardWriteMaxBytes,
       glyphProtocol: glyphProtocol ?? this.glyphProtocol,
       cursorStyle: cursorStyle ?? this.cursorStyle,
       cursorBlink: cursorBlink ?? this.cursorBlink,
