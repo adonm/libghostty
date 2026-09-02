@@ -203,6 +203,10 @@ final class WasmTerminalBindings implements TerminalBindings {
       .fromValue(_getI32(terminal, .activeScreen, 'ghostty_terminal_get'));
 
   @override
+  int terminalGetClipboardWriteMaxBytes(LibGhosttyHandle terminal) =>
+      _getU32(terminal, .clipboardWriteMaxBytes, 'ghostty_terminal_get');
+
+  @override
   RgbColor? terminalGetColorBackground(LibGhosttyHandle terminal) =>
       _getOptionalColor(terminal, .colorBackground);
 
@@ -243,12 +247,12 @@ final class WasmTerminalBindings implements TerminalBindings {
       _getU32(terminal, .continuationMaxBytes, 'ghostty_terminal_get');
 
   @override
-  bool terminalGetCursorPendingWrap(LibGhosttyHandle terminal) =>
-      _getBool(terminal, .cursorPendingWrap, 'ghostty_terminal_get');
-
-  @override
   bool terminalGetCursorAtPrompt(LibGhosttyHandle terminal) =>
       _getBool(terminal, .cursorAtPrompt, 'ghostty_terminal_get');
+
+  @override
+  bool terminalGetCursorPendingWrap(LibGhosttyHandle terminal) =>
+      _getBool(terminal, .cursorPendingWrap, 'ghostty_terminal_get');
 
   @override
   Style terminalGetCursorStyle(LibGhosttyHandle terminal) =>
@@ -400,12 +404,12 @@ final class WasmTerminalBindings implements TerminalBindings {
       _getBool(terminal, .viewportActive, 'ghostty_terminal_get');
 
   @override
-  bool terminalGetVtProcessingError(LibGhosttyHandle terminal) =>
-      _getBool(terminal, .vtProcessingError, 'ghostty_terminal_get');
-
-  @override
   bool terminalGetVtGround(LibGhosttyHandle terminal) =>
       _getBool(terminal, .vtGround, 'ghostty_terminal_get');
+
+  @override
+  bool terminalGetVtProcessingError(LibGhosttyHandle terminal) =>
+      _getBool(terminal, .vtProcessingError, 'ghostty_terminal_get');
 
   @override
   int terminalGetWidthPx(LibGhosttyHandle terminal) =>
@@ -455,6 +459,95 @@ final class WasmTerminalBindings implements TerminalBindings {
       return .fromAddress(_exports.ghostty_wasm_take_opaque(out));
     } finally {
       _exports.freeOpaque(out);
+    }
+  }
+
+  @override
+  bool terminalPasteText(
+    LibGhosttyHandle terminal,
+    String text, {
+    required bool allowUnsafe,
+  }) {
+    final textBytes = utf8.encode(text);
+    final mimeBytes = utf8.encode('text/plain');
+    final dataPointer = _allocateBytes(
+      textBytes.isEmpty ? 1 : textBytes.length,
+    );
+    final mimeDataPointer = _allocateBytes(mimeBytes.length);
+    final mimesPointer = _allocateBytes(_layout.stringSize);
+    final pastePointer = _allocateBytes(_layout.pasteSize);
+    try {
+      if (textBytes.isNotEmpty) _memory.writeBytes(dataPointer, textBytes);
+      _memory.writeBytes(mimeDataPointer, mimeBytes);
+      _memory.writePtr(mimesPointer, mimeDataPointer);
+      _memory.writeU32(mimesPointer + _layout.stringLen, mimeBytes.length);
+      final readerIndex = _registerCallback(
+        ((int _, int mimePointer, int writerPointer) {
+          try {
+            if (_readString(mimePointer) != 'text/plain') {
+              return 0;
+            }
+            final writerIndex = _memory.readPtr(
+              writerPointer + _layout.writerWrite,
+            );
+            final writerUserdata = _memory.readPtr(
+              writerPointer + _layout.writerUserdata,
+            );
+            return _callTable3(
+              writerIndex,
+              writerUserdata,
+              dataPointer,
+              textBytes.length,
+            );
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
+            return 0;
+          }
+        }).toJS,
+        ['i32', 'i32', 'i32'],
+        results: ['i32'],
+      );
+      try {
+        _memory.writeU32(
+          pastePointer + _layout.pasteSizeField,
+          _layout.pasteSize,
+        );
+        _memory.writeU32(
+          pastePointer + _layout.pasteLocation,
+          ClipboardLocation.standard.value,
+        );
+        _memory.writeU32(
+          pastePointer + _layout.pasteSource,
+          PasteSource.text.value,
+        );
+        _memory.writePtr(pastePointer + _layout.pasteMimes, mimesPointer);
+        _memory.writeU32(pastePointer + _layout.pasteMimesLen, 1);
+        _memory.writeU32(pastePointer + _layout.pasteReader, readerIndex);
+        _memory.writeU32(pastePointer + _layout.pasteReaderUserdata, 0);
+        _memory.writeU8(
+          pastePointer + _layout.pasteAllowUnsafe,
+          allowUnsafe ? 1 : 0,
+        );
+        final written = _allocateBytes(1);
+        try {
+          final result = _exports.ghostty_terminal_paste(
+            terminal.value,
+            pastePointer,
+            written,
+          );
+          checkResultCode(result, operation: 'ghostty_terminal_paste');
+          return _memory.readU8(written) != 0;
+        } finally {
+          _exports.freeBytes(written, 1);
+        }
+      } finally {
+        _releaseTableIndex(readerIndex);
+      }
+    } finally {
+      _exports.freeBytes(dataPointer, textBytes.isEmpty ? 1 : textBytes.length);
+      _exports.freeBytes(mimeDataPointer, mimeBytes.length);
+      _exports.freeBytes(mimesPointer, _layout.stringSize);
+      _exports.freeBytes(pastePointer, _layout.pasteSize);
     }
   }
 
@@ -520,6 +613,14 @@ final class WasmTerminalBindings implements TerminalBindings {
   @override
   void terminalSetApcBufferLimit(LibGhosttyHandle terminal, int? bytes) {
     _setU32(terminal, .apcMaxBytes, bytes);
+  }
+
+  @override
+  void terminalSetClipboardWriteMaxBytes(
+    LibGhosttyHandle terminal,
+    int? bytes,
+  ) {
+    _setU32(terminal, .clipboardWriteMaxBytes, bytes);
   }
 
   @override
@@ -657,6 +758,62 @@ final class WasmTerminalBindings implements TerminalBindings {
   }
 
   @override
+  void terminalSetOnClipboardRead(
+    LibGhosttyHandle terminal,
+    ClipboardReadCallback? callback,
+  ) {
+    _setCallback(
+      terminal,
+      .clipboardRead,
+      callback,
+      (reuseIndex) => _registerCallback(
+        ((int _, int _, int readPointer) {
+          try {
+            if (_memory.readU32(readPointer) < _layout.clipboardReadSize) {
+              return;
+            }
+            final mimesPointer = _memory.readPtr(
+              readPointer + _layout.clipboardReadMimes,
+            );
+            final mimesLength = _memory.readU32(
+              readPointer + _layout.clipboardReadMimesLen,
+            );
+            final request = ClipboardReadRequest(
+              location: .fromValue(
+                _memory.readU32(readPointer + _layout.clipboardReadLocation),
+              ),
+              mimes: [
+                for (var i = 0; i < mimesLength; i++)
+                  _readString(mimesPointer + i * _layout.stringSize),
+              ],
+              list:
+                  _memory.readU8(readPointer + _layout.clipboardReadList) != 0,
+              name: _readString(readPointer + _layout.clipboardReadName),
+              granted:
+                  _memory.readU8(readPointer + _layout.clipboardReadGranted) !=
+                  0,
+              canRemember:
+                  _memory.readU8(
+                    readPointer + _layout.clipboardReadCanRemember,
+                  ) !=
+                  0,
+            );
+            _replyClipboardRead(readPointer, callback!(request));
+          } on Object catch (error, stackTrace) {
+            _captureCallbackError(error, stackTrace);
+            _replyClipboardRead(
+              readPointer,
+              const ClipboardReadReply(result: .ioError),
+            );
+          }
+        }).toJS,
+        ['i32', 'i32', 'i32'],
+        reuseIndex: reuseIndex,
+      ),
+    );
+  }
+
+  @override
   void terminalSetOnClipboardWrite(
     LibGhosttyHandle terminal,
     ClipboardWriteCallback? callback,
@@ -669,7 +826,7 @@ final class WasmTerminalBindings implements TerminalBindings {
         ((int _, int _, int writePointer) {
           try {
             if (_memory.readU32(writePointer) < _layout.clipboardWriteSize) {
-              return ClipboardWriteResult.ioError.value;
+              return;
             }
             final contentsPointer = _memory.readPtr(
               writePointer + _layout.clipboardWriteContents,
@@ -683,7 +840,7 @@ final class WasmTerminalBindings implements TerminalBindings {
                   contentsPointer + i * _layout.clipboardContentSize,
                 ),
             ];
-            return callback!(
+            final result = callback!(
               ClipboardWrite(
                 location: .fromValue(
                   _memory.readU32(
@@ -691,15 +848,26 @@ final class WasmTerminalBindings implements TerminalBindings {
                   ),
                 ),
                 contents: List.unmodifiable(contents),
+                name: _readString(writePointer + _layout.clipboardWriteName),
+                granted:
+                    _memory.readU8(
+                      writePointer + _layout.clipboardWriteGranted,
+                    ) !=
+                    0,
+                canRemember:
+                    _memory.readU8(
+                      writePointer + _layout.clipboardWriteCanRemember,
+                    ) !=
+                    0,
               ),
-            ).value;
+            );
+            _replyClipboardWrite(writePointer, result);
           } on Object catch (error, stackTrace) {
             _captureCallbackError(error, stackTrace);
-            return ClipboardWriteResult.ioError.value;
+            _replyClipboardWrite(writePointer, .ioError);
           }
         }).toJS,
         ['i32', 'i32', 'i32'],
-        results: ['i32'],
         reuseIndex: reuseIndex,
       ),
     );
@@ -1104,14 +1272,6 @@ final class WasmTerminalBindings implements TerminalBindings {
   }
 
   @override
-  void terminalSetUnknownSequenceMaxBytes(
-    LibGhosttyHandle terminal,
-    int? bytes,
-  ) {
-    _setU32(terminal, .unknownMaxBytes, bytes);
-  }
-
-  @override
   void terminalSetTerminfoName(LibGhosttyHandle terminal, String? name) {
     _setString(terminal, .terminfoName, name);
   }
@@ -1127,6 +1287,14 @@ final class WasmTerminalBindings implements TerminalBindings {
     required bool enabled,
   }) {
     _setBool(terminal, .titleReport, enabled);
+  }
+
+  @override
+  void terminalSetUnknownSequenceMaxBytes(
+    LibGhosttyHandle terminal,
+    int? bytes,
+  ) {
+    _setU32(terminal, .unknownMaxBytes, bytes);
   }
 
   @override
@@ -1226,6 +1394,26 @@ final class WasmTerminalBindings implements TerminalBindings {
       throw StateError('libghostty WASM allocator returned misaligned memory.');
     }
     return pointer;
+  }
+
+  (int, int, int) _allocateUtf8(String value) {
+    final bytes = utf8.encode(value);
+    final allocationLength = bytes.isEmpty ? 1 : bytes.length;
+    final pointer = _allocateBytes(allocationLength);
+    if (bytes.isNotEmpty) _memory.writeBytes(pointer, bytes);
+    return (pointer, bytes.length, allocationLength);
+  }
+
+  void _callTable2(int index, int first, int second) {
+    final function = _table.get(index)! as JSFunction;
+    function.callAsFunction(null, first.toJS, second.toJS);
+  }
+
+  int _callTable3(int index, int first, int second, int third) {
+    final function = _table.get(index)! as JSFunction;
+    return (function.callAsFunction(null, first.toJS, second.toJS, third.toJS)!
+            as JSNumber)
+        .toDartInt;
   }
 
   void _captureCallbackError(Object error, StackTrace stackTrace) {
@@ -1545,6 +1733,119 @@ final class WasmTerminalBindings implements TerminalBindings {
       _exports.freeBytes(previous.$1, previous.$2);
     }
     map[option] = (pointer, allocationLength);
+  }
+
+  void _replyClipboardRead(int pointer, ClipboardReadReply value) {
+    final replyPointer = _allocateBytes(_layout.clipboardReadReplySize);
+    final contentPointer = _allocateBytes(
+      value.contents.isEmpty
+          ? 1
+          : value.contents.length * _layout.clipboardContentSize,
+    );
+    final availablePointer = _allocateBytes(
+      value.available.isEmpty ? 1 : value.available.length * _layout.stringSize,
+    );
+    final allocations = <(int, int)>[];
+    try {
+      for (var i = 0; i < value.contents.length; i++) {
+        final content = value.contents[i];
+        final contentOffset = contentPointer + i * _layout.clipboardContentSize;
+        final mime = _allocateUtf8(content.mime);
+        final data = _allocateBytes(
+          content.data.isEmpty ? 1 : content.data.length,
+        );
+        allocations
+          ..add((mime.$1, mime.$3))
+          ..add((data, content.data.isEmpty ? 1 : content.data.length));
+        _memory.writeBytes(data, content.data);
+        _memory.writePtr(contentOffset + _layout.clipboardContentMime, mime.$1);
+        _memory.writeU32(contentOffset + _layout.stringLen, mime.$2);
+        _memory.writePtr(contentOffset + _layout.clipboardContentData, data);
+        _memory.writeU32(
+          contentOffset + _layout.clipboardContentData + _layout.stringLen,
+          content.data.length,
+        );
+      }
+      for (var i = 0; i < value.available.length; i++) {
+        final available = _allocateUtf8(value.available[i]);
+        allocations.add((available.$1, available.$3));
+        final offset = availablePointer + i * _layout.stringSize;
+        _memory.writePtr(offset, available.$1);
+        _memory.writeU32(offset + _layout.stringLen, available.$2);
+      }
+      _memory.writeU32(
+        replyPointer + _layout.clipboardReadReplySizeField,
+        _layout.clipboardReadReplySize,
+      );
+      _memory.writeU32(
+        replyPointer + _layout.clipboardReadReplyResult,
+        value.result.value,
+      );
+      _memory.writePtr(
+        replyPointer + _layout.clipboardReadReplyContents,
+        contentPointer,
+      );
+      _memory.writeU32(
+        replyPointer + _layout.clipboardReadReplyContentsLen,
+        value.contents.length,
+      );
+      _memory.writePtr(
+        replyPointer + _layout.clipboardReadReplyAvailable,
+        availablePointer,
+      );
+      _memory.writeU32(
+        replyPointer + _layout.clipboardReadReplyAvailableLen,
+        value.available.length,
+      );
+      _memory.writeU8(
+        replyPointer + _layout.clipboardReadReplyRemember,
+        value.remember ? 1 : 0,
+      );
+      _callTable2(
+        _memory.readPtr(pointer + _layout.clipboardReadReply),
+        pointer,
+        replyPointer,
+      );
+    } finally {
+      for (final (pointer, length) in allocations) {
+        _exports.freeBytes(pointer, length);
+      }
+      _exports.freeBytes(replyPointer, _layout.clipboardReadReplySize);
+      _exports.freeBytes(
+        contentPointer,
+        value.contents.isEmpty
+            ? 1
+            : value.contents.length * _layout.clipboardContentSize,
+      );
+      _exports.freeBytes(
+        availablePointer,
+        value.available.isEmpty
+            ? 1
+            : value.available.length * _layout.stringSize,
+      );
+    }
+  }
+
+  void _replyClipboardWrite(int pointer, ClipboardWriteResult result) {
+    final replyPointer = _allocateBytes(_layout.clipboardWriteReplySize);
+    try {
+      _memory.writeU32(
+        replyPointer + _layout.clipboardWriteReplySizeField,
+        _layout.clipboardWriteReplySize,
+      );
+      _memory.writeU32(
+        replyPointer + _layout.clipboardWriteReplyResult,
+        result.value,
+      );
+      _memory.writeU8(replyPointer + _layout.clipboardWriteReplyRemember, 0);
+      _callTable2(
+        _memory.readPtr(pointer + _layout.clipboardWriteReply),
+        pointer,
+        replyPointer,
+      );
+    } finally {
+      _exports.freeBytes(replyPointer, _layout.clipboardWriteReplySize);
+    }
   }
 
   int _requirePointer(int pointer) {

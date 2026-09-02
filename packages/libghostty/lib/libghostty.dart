@@ -66,6 +66,7 @@ export 'src/bindings/bindings.dart' show initializeForWeb;
 export 'src/generated/libghostty_enums.g.dart'
     show
         ClipboardLocation,
+        ClipboardReadResult,
         ClipboardWriteResult,
         ColorScheme,
         FocusEvent,
@@ -98,6 +99,7 @@ export 'src/generated/libghostty_enums.g.dart'
 export 'src/listenable.dart' show Listenable;
 export 'src/types/aliases.dart'
     show
+        ClipboardReadCallback,
         ClipboardWriteCallback,
         ContinuationWriter,
         DesktopNotificationCallback,
@@ -114,6 +116,8 @@ export 'src/types/types.dart'
         CellColor,
         CellWidth,
         ClipboardContent,
+        ClipboardReadReply,
+        ClipboardReadRequest,
         ClipboardWrite,
         CursorShape,
         DecodedImage,

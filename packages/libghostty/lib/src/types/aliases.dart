@@ -33,10 +33,15 @@ typedef VoidCallback = void Function();
 typedef ContinuationWriter = bool Function(Uint8List data);
 
 /// Handles an atomic clipboard write requested synchronously by terminal
-/// content. The result is ignored by protocols without acknowledgements,
-/// including OSC 52 and iTerm2 OSC 1337 Copy.
+/// content. The result answers protocols with write acknowledgements and is
+/// ignored by protocols without them, including OSC 52 and iTerm2 OSC 1337
+/// Copy.
 typedef ClipboardWriteCallback =
     ClipboardWriteResult Function(ClipboardWrite write);
+
+/// Handles a synchronous clipboard read requested by terminal content.
+typedef ClipboardReadCallback =
+    ClipboardReadReply Function(ClipboardReadRequest read);
 
 /// Handles a desktop notification requested synchronously by terminal content.
 typedef DesktopNotificationCallback = void Function(DesktopNotification value);

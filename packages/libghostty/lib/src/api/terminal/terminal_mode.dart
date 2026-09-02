@@ -142,6 +142,9 @@ extension type const TerminalMode._(int value) {
   /// DEC private mode 2048: in-band size reports.
   const TerminalMode.inBandResize() : value = 2048;
 
+  /// DEC private mode 5522: Kitty clipboard paste events.
+  const TerminalMode.pasteEvents() : value = 5522;
+
   /// ANSI mode 2: keyboard action (disable keyboard).
   const TerminalMode.kam() : value = 2 | (1 << 15);
 

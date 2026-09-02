@@ -21,20 +21,90 @@ final class ClipboardContent {
   const ClipboardContent({required this.mime, required this.data});
 }
 
+/// The synchronous answer to a [ClipboardReadRequest].
+@immutable
+final class ClipboardReadReply {
+  /// Whether a successful credentialed request should be remembered.
+  final bool remember;
+
+  /// MIME types available on the clipboard when requested.
+  final List<String> available;
+
+  /// Outcome of the read.
+  final ClipboardReadResult result;
+
+  /// Clipboard representations returned to the terminal program.
+  final List<ClipboardContent> contents;
+
+  const ClipboardReadReply({
+    required this.result,
+    this.remember = false,
+    this.contents = const [],
+    this.available = const [],
+  });
+}
+
+/// A synchronous request to read clipboard representations.
+@immutable
+final class ClipboardReadRequest {
+  /// Whether the program requested the complete available MIME list.
+  final bool list;
+
+  /// Name of the requesting program, when supplied by the protocol.
+  final String name;
+
+  /// Whether the terminal already granted this program permission.
+  final bool granted;
+
+  /// Whether this request supplied credentials that can be remembered.
+  final bool canRemember;
+
+  /// MIME types requested by the terminal program, in preference order.
+  final List<String> mimes;
+
+  /// Clipboard source.
+  final ClipboardLocation location;
+
+  const ClipboardReadRequest({
+    required this.list,
+    required this.name,
+    required this.mimes,
+    required this.granted,
+    required this.location,
+    required this.canRemember,
+  });
+}
+
 /// A protocol-neutral request to replace or clear clipboard contents.
 ///
 /// Every entry in [contents] represents the same logical value and should be
 /// committed atomically. Empty [contents] requests that [location] be cleared.
-/// OSC 52 and iTerm2 OSC 1337 writes use this same normalized representation.
+/// OSC 52, iTerm2 OSC 1337, and Kitty OSC 5522 writes use this same normalized
+/// representation.
 @immutable
 final class ClipboardWrite {
+  /// Name of the program requesting the write, when supplied by the protocol.
+  final String name;
+
+  /// Whether the terminal already granted this program permission.
+  final bool granted;
+
+  /// Whether this request supplied credentials that can be remembered.
+  final bool canRemember;
+
   /// Clipboard destination.
   final ClipboardLocation location;
 
   /// Representations of the value to commit atomically.
   final List<ClipboardContent> contents;
 
-  const ClipboardWrite({required this.location, required this.contents});
+  const ClipboardWrite({
+    required this.location,
+    required this.contents,
+    this.name = '',
+    this.granted = false,
+    this.canRemember = false,
+  });
 }
 
 /// An image decoded from PNG into top-to-bottom RGBA pixel bytes.

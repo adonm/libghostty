@@ -13,6 +13,8 @@ import '../bindings/bindings.dart';
 ///
 /// Use [pasteIsSafe] first to check whether the data should be pasted at all
 /// (e.g. to prompt the user for confirmation on multi-line pastes).
+/// Applications with a [Terminal] can call its [Terminal.paste] method to
+/// have libghostty apply the current bracketed-paste mode and safety policy.
 ///
 /// ```dart
 /// final encoded = pasteEncode('hello\nworld', bracketed: true);

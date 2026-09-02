@@ -151,6 +151,17 @@ final class Terminal with Listenable {
     return bindings.terminal.terminalGetColorBackgroundDefault(_terminalHandle);
   }
 
+  /// Maximum decoded bytes accepted in one Kitty clipboard write transaction.
+  ///
+  /// The default is 64 MiB. Setting this to null restores that default.
+  int get clipboardWriteMaxBytes {
+    return bindings.terminal.terminalGetClipboardWriteMaxBytes(_terminalHandle);
+  }
+
+  set clipboardWriteMaxBytes(int? value) {
+    bindings.terminal.terminalSetClipboardWriteMaxBytes(_terminalHandle, value);
+  }
+
   /// Opaque token that changes when scrollback compression may have new work.
   ///
   /// Terminal operations such as writes, resizing, and viewport movement may
@@ -384,13 +395,24 @@ final class Terminal with Listenable {
     bindings.terminal.terminalSetOnBell(_terminalHandle, value);
   }
 
+  /// Registers a callback for clipboard reads requested by terminal content.
+  ///
+  /// The callback runs synchronously while [write]. Return a
+  /// [ClipboardReadReply] containing the permitted representations. Set to
+  /// null to refuse reads. Requests originate in untrusted terminal content,
+  /// so applications should apply an explicit permission policy. A reply is
+  /// required before the callback returns.
+  set onClipboardRead(ClipboardReadCallback? value) {
+    bindings.terminal.terminalSetOnClipboardRead(_terminalHandle, value);
+  }
+
   /// Registers a callback for clipboard writes requested by terminal content.
   ///
-  /// OSC 52 and iTerm2 OSC 1337 Copy requests are decoded into
-  /// protocol-neutral, binary-safe [ClipboardWrite] values. OSC 52 clipboard
-  /// read requests are ignored and never reach this callback. Return the
-  /// result of committing the complete request. Fires synchronously during
-  /// [write]. Set to null to ignore clipboard writes.
+  /// OSC 52, iTerm2 OSC 1337 Copy, and Kitty OSC 5522 requests are decoded
+  /// into protocol-neutral, binary-safe [ClipboardWrite] values. The result
+  /// answers protocols with write acknowledgements and is ignored by
+  /// protocols without them. Fires synchronously during [write]. Set to null
+  /// to deny and ignore clipboard writes.
   ///
   /// ```dart
   /// terminal.onClipboardWrite = (request) {
@@ -754,6 +776,21 @@ final class Terminal with Listenable {
       mode.value,
       value: value,
     );
+  }
+
+  /// Pastes [text] according to the terminal's current modes.
+  ///
+  /// The text is supplied as a clipboard-like MIME representation and is
+  /// written through [onWritePty]. By default unsafe command-injecting text is
+  /// rejected before any output is written; set [allowUnsafe] only after the
+  /// application has confirmed the paste with the user.
+  void paste(String text, {bool allowUnsafe = false}) {
+    final written = bindings.terminal.terminalPasteText(
+      _terminalHandle,
+      text,
+      allowUnsafe: allowUnsafe,
+    );
+    if (written) notifyListeners();
   }
 
   /// Performs a full reset (RIS): resets modes, scrollback, scrolling region,
