@@ -86,6 +86,12 @@ final class LimitExceededException extends LibGhosttyException {
   }) : super(message, code: -6, operation: operation);
 }
 
+/// A safety check rejected an operation before it produced any output.
+final class RejectedException extends LibGhosttyException {
+  const RejectedException({super.operation})
+    : super('The operation was rejected by a safety check.', code: -7);
+}
+
 /// A result code not defined by the linked libghostty ABI.
 ///
 /// [code] preserves the exact numeric value so callers can diagnose a newer

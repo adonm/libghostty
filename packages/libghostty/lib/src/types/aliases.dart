@@ -43,6 +43,9 @@ typedef ClipboardWriteCallback =
 typedef ClipboardReadCallback =
     ClipboardReadReply Function(ClipboardReadRequest read);
 
+/// Supplies cryptographically secure random bytes to libghostty.
+typedef SysRandomSecureCallback = bool Function(Uint8List buffer);
+
 /// Handles a desktop notification requested synchronously by terminal content.
 typedef DesktopNotificationCallback = void Function(DesktopNotification value);
 

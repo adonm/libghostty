@@ -47,6 +47,9 @@ abstract final class LibGhostty {
   /// C ABI does not provide a quiescence operation for in-flight callbacks.
   static void clearPngDecoder() => bindings.system.sysClearPngDecoder();
 
+  /// Restores the platform-provided secure random source.
+  static void clearRandomSecure() => bindings.system.sysClearRandomSecure();
+
   /// Installs [logger] as the sink for internal libghostty log messages.
   ///
   /// Replaces any previously installed logger (including the one set by
@@ -84,6 +87,12 @@ abstract final class LibGhostty {
   /// ```
   static void setPngDecoder(PngDecoder decoder) =>
       bindings.system.sysSetPngDecoder(decoder);
+
+  /// Installs [callback] as libghostty's cryptographically secure random
+  /// source. The callback must fill the supplied buffer completely.
+  static void setRandomSecure(SysRandomSecureCallback callback) {
+    bindings.system.sysSetRandomSecure(callback);
+  }
 
   /// Installs the native library's built-in stderr log sink.
   ///

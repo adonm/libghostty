@@ -21,6 +21,7 @@ final class WasmSystemBindings implements SystemBindings {
   final _freeTableIndices = <int>[];
   int? _sysLogIndex;
   int? _sysDecodePngIndex;
+  int? _sysRandomSecureIndex;
 
   WasmSystemBindings(this._exports, this._layout)
     : _memory = Memory(_exports),
@@ -49,6 +50,15 @@ final class WasmSystemBindings implements SystemBindings {
   }
 
   @override
+  void sysClearRandomSecure() {
+    _exports.ghostty_sys_set(SysOption.randomSecure.value, 0);
+    if (_sysRandomSecureIndex case final index?) {
+      _releaseTableIndex(index);
+      _sysRandomSecureIndex = null;
+    }
+  }
+
+  @override
   void sysSetLogCallback(SysLogCallback callback) {
     _installSysLog((userdata, level, scope, scopeLen, message, messageLen) {
       try {
@@ -66,22 +76,6 @@ final class WasmSystemBindings implements SystemBindings {
 
   @override
   void sysSetLogToStderr() => _installSysLog(_sysLogStderr);
-
-  void _sysLogStderr(
-    int userdata,
-    int level,
-    int scope,
-    int scopeLen,
-    int message,
-    int messageLen,
-  ) => _exports.ghostty_sys_log_stderr(
-    userdata,
-    level,
-    scope,
-    scopeLen,
-    message,
-    messageLen,
-  );
 
   @override
   void sysSetPngDecoder(PngDecoder decoder) {
@@ -120,6 +114,24 @@ final class WasmSystemBindings implements SystemBindings {
     _exports.ghostty_sys_set(SysOption.decodePng.value, index);
   }
 
+  @override
+  void sysSetRandomSecure(SysRandomSecureCallback callback) {
+    final index = _registerCallback(
+      ((int _, int buffer, int length) {
+        try {
+          return callback(_memory.readBytes(buffer, length)) ? 1 : 0;
+        } on Object {
+          return 0;
+        }
+      }).toJS,
+      ['i32', 'i32', 'i32'],
+      results: ['i32'],
+      reuseIndex: _sysRandomSecureIndex,
+    );
+    _sysRandomSecureIndex = index;
+    _exports.ghostty_sys_set(SysOption.randomSecure.value, index);
+  }
+
   void _installSysLog(void Function(int, int, int, int, int, int) callback) {
     final index = _registerCallback(callback.toJS, [
       'i32',
@@ -153,4 +165,20 @@ final class WasmSystemBindings implements SystemBindings {
     _table.set(index);
     _freeTableIndices.add(index);
   }
+
+  void _sysLogStderr(
+    int userdata,
+    int level,
+    int scope,
+    int scopeLen,
+    int message,
+    int messageLen,
+  ) => _exports.ghostty_sys_log_stderr(
+    userdata,
+    level,
+    scope,
+    scopeLen,
+    message,
+    messageLen,
+  );
 }
