@@ -2,6 +2,7 @@ import 'package:libghostty/libghostty.dart';
 
 import 'atlas/atlas.dart';
 import 'codepoint_classification.dart';
+import 'kitty_unicode_placements.dart';
 
 /// Resolves terminal cell content to the atlas entry that should paint it.
 ///
@@ -27,6 +28,9 @@ final class CellContentResolver {
     if (graphemeLength == 0) return null;
 
     final codepoint = cell.codepoint;
+    // Kitty Unicode-placeholder cells are painted by the graphics layer;
+    // never emit a text glyph (tofu) for them.
+    if (codepoint == kKittyPlaceholderCodepoint) return null;
     if (graphemeLength == 1) {
       if (codepoint == 0x20) return null;
       if (_usesCodepointEntry(

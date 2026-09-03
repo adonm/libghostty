@@ -4,6 +4,7 @@ import 'package:libghostty/libghostty.dart';
 import 'package:meta/meta.dart';
 
 import 'kitty_image_cache.dart';
+import 'kitty_unicode_placements.dart';
 import 'paint_state.dart';
 
 /// Caches paint-safe snapshots of Kitty graphics placements.
@@ -14,6 +15,7 @@ import 'paint_state.dart';
 final class KittyPlacementCache {
   final TerminalPaintState _state;
   final KittyImageCache _images;
+  final _unicode = KittyUnicodePlacements();
   final List<KittyPlacementSnapshot> _snapshots = [];
   final Set<int> _liveImageIds = {};
   _SnapshotKey? _key;
@@ -52,8 +54,16 @@ final class KittyPlacementCache {
     if (!geometryDirty && _key == key) return false;
 
     _clear();
+    final virtualZ = <int, int>{};
     for (final placement in graphics.placements()) {
       _liveImageIds.add(placement.imageId);
+      if (placement.isVirtual) {
+        // Virtual (Unicode-placeholder) placements carry no display
+        // geometry; their z-index is applied to resolved placeholder runs
+        // below. Their render info is never viewport-visible by contract.
+        virtualZ[placement.imageId] ??= placement.z;
+        continue;
+      }
 
       final info = placement.renderInfo;
       if (!info.viewportVisible) continue;
@@ -83,6 +93,46 @@ final class KittyPlacementCache {
           z: placement.z,
         ),
       );
+    }
+
+    // Resolve Unicode-placeholder runs for virtual placements. Runs live in
+    // screen coordinates; destination rects are recomputed from current
+    // metrics and viewport offset on every sync so scrolling needs no
+    // rescan beyond this one.
+    if (virtualZ.isNotEmpty) {
+      final runs = _unicode.resolve(
+        terminal,
+        rows: key.rows,
+        cols: key.cols,
+        viewportOffset: key.viewportOffset,
+      );
+      for (final run in runs) {
+        final z = virtualZ[run.imageId];
+        if (z == null) continue;
+        final image = graphics.image(run.imageId);
+        if (image == null) continue;
+        _images.lookup(image);
+        final top = run.topRow - key.viewportOffset;
+        if (top + run.rowCount <= 0 || top >= key.rows) continue;
+        _snapshots.add(
+          KittyPlacementSnapshot(
+            imageId: run.imageId,
+            dst: Rect.fromLTWH(
+              run.leftCol * key.cellWidth,
+              top * key.cellHeight,
+              run.colCount * key.cellWidth,
+              run.rowCount * key.cellHeight,
+            ),
+            src: Rect.fromLTWH(
+              0,
+              0,
+              image.width.toDouble(),
+              image.height.toDouble(),
+            ),
+            z: z,
+          ),
+        );
+      }
     }
 
     if (_snapshots.length > 1) _snapshots.sort(_compareZ);
