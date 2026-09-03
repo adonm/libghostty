@@ -29,8 +29,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  image: ^4.8.0
-  libghostty: ^0.0.12
+  image: 4.2.0
+  libghostty: 0.0.12
   meta: ^1.18.0
 
 dev_dependencies:
