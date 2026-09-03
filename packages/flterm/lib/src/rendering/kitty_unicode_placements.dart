@@ -135,13 +135,17 @@ List<KittyPlaceholderRun> mergePlaceholderRuns(
 /// so the renderer must find the `U+10EEEE` placeholder cells the client
 /// wrote and map runs of same-id cells to paint rectangles. Row iteration
 /// skips rows without placeholders, so scans stay cheap when no images are
-/// on screen; callers re-resolve whenever the placement cache syncs (image
-/// traffic) or geometry changes (scroll/resize), and recompute destination
-/// rects from the stable screen-space runs otherwise.
+/// on screen.
 ///
-/// Only truecolor foreground ids are recognized (what yazi writes);
-/// palette-indexed ids cannot be recovered from resolved colors and are
-/// skipped.
+/// Callers must re-resolve on every placement-cache sync, not just when the
+/// Kitty storage generation changes: placeholder runs are plain grid text,
+/// so scrolling, redraws, or cursor movement relocate them without bumping
+/// the generation stamp. Resolve results are value-comparable so syncs can
+/// still early-return when nothing moved.
+///
+/// Both truecolor (`38;2;r;g;b`, what yazi writes) and palette-index
+/// (`38;5;n`) foreground ids are recognized; cells without a recoverable
+/// id are skipped.
 final class KittyUnicodePlacements {
   KittyUnicodePlacements()
     : _renderState = RenderState(),
@@ -155,8 +159,8 @@ final class KittyUnicodePlacements {
   /// Scans viewport rows `[0, rows)` for placeholder runs.
   ///
   /// Returns runs in screen coordinates with the image id read from each
-  /// run's foreground color. Runs whose foreground is not a truecolor RGB
-  /// value are skipped.
+  /// run's foreground color. Runs whose foreground is neither truecolor
+  /// RGB nor a palette index are skipped.
   ///
   /// Reads only: never mutates row dirty flags. Refreshing this handle's
   /// render state may consume the terminal's global dirty flag ahead of the
@@ -181,7 +185,7 @@ final class KittyUnicodePlacements {
         final col = _cells.col;
         if (col < 0 || col >= cols) continue;
         if (_cells.codepoint != kKittyPlaceholderCodepoint) continue;
-        final id = _placeholderImageId(_cells);
+        final id = _placeholderImageId(terminal, viewportRow, col);
         if (id == null) continue;
         cells.add((
           screenRow: viewportOffset + viewportRow,
@@ -193,12 +197,33 @@ final class KittyUnicodePlacements {
     return mergePlaceholderRuns(cells);
   }
 
-  /// Image id from a placeholder cell's truecolor foreground, or null when
-  /// the cell carries no recoverable id.
-  static int? _placeholderImageId(CellIterator cell) {
-    final argb = cell.foregroundArgb;
-    if (argb == null) return null;
-    final id = argb & 0x00FFFFFF;
+  /// Image id from a placeholder cell's raw foreground color.
+  ///
+  /// Truecolor foregrounds pack the id as RGB (what yazi writes);
+  /// palette-indexed foregrounds (`38;5;n`) carry the id as the index.
+  /// Returns null for default/unset foregrounds and for id zero, which the
+  /// protocol reserves. Reads through a viewport [GridRef] so palette
+  /// indices survive unresolved; out-of-range lookups also yield null.
+  static int? _placeholderImageId(Terminal terminal, int row, int col) {
+    GridRef ref;
+    try {
+      ref = GridRef.at(
+        terminal,
+        Position(row: row, col: col),
+        pointTag: .viewport,
+      );
+    } on Object {
+      return null;
+    }
+    final int id;
+    switch (ref.style.foreground) {
+      case RgbColor(:final r, :final g, :final b):
+        id = (r << 16) | (g << 8) | b;
+      case PaletteColor(:final index):
+        id = index;
+      case DefaultColor():
+        return null;
+    }
     return id == 0 ? null : id;
   }
 }

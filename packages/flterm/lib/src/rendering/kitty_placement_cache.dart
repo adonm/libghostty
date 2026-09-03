@@ -18,6 +18,7 @@ final class KittyPlacementCache {
   final _unicode = KittyUnicodePlacements();
   final List<KittyPlacementSnapshot> _snapshots = [];
   final Set<int> _liveImageIds = {};
+  List<KittyPlaceholderRun> _lastRuns = const [];
   _SnapshotKey? _key;
 
   KittyPlacementCache({required this._state, required this._images});
@@ -38,6 +39,7 @@ final class KittyPlacementCache {
       final changed = _key != null || _snapshots.isNotEmpty;
       _clear();
       _images.evict(_liveImageIds);
+      _lastRuns = const [];
       _key = null;
       return changed;
     }
@@ -51,20 +53,40 @@ final class KittyPlacementCache {
       rows: _state.rows,
       cols: _state.cols,
     );
-    if (!geometryDirty && _key == key) return false;
+    // Placeholder runs are grid text, invisible to the Kitty storage
+    // generation: scrolling, redraws, or cursor movement relocate them
+    // without bumping it. Resolve on every sync where virtual placements
+    // exist and fold the runs into the change detection, so moved runs
+    // rebuild instead of painting stale rects. The scan only walks rows
+    // flagged with placeholders.
+    final virtualZ = <int, int>{};
+    for (final placement in graphics.placements()) {
+      if (placement.isVirtual) {
+        virtualZ[placement.imageId] ??= placement.z;
+      }
+    }
+    var runs = const <KittyPlaceholderRun>[];
+    if (virtualZ.isNotEmpty) {
+      runs = _unicode.resolve(
+        terminal,
+        rows: key.rows,
+        cols: key.cols,
+        viewportOffset: key.viewportOffset,
+      );
+    }
+    if (!geometryDirty && _key == key && _runsEqual(_lastRuns, runs)) {
+      return false;
+    }
 
     _clear();
-    final virtualZ = <int, int>{};
     for (final placement in graphics.placements()) {
       _liveImageIds.add(placement.imageId);
       if (placement.isVirtual) {
         // Virtual (Unicode-placeholder) placements carry no display
         // geometry; their z-index is applied to resolved placeholder runs
         // below. Their render info is never viewport-visible by contract.
-        virtualZ[placement.imageId] ??= placement.z;
         continue;
       }
-
       final info = placement.renderInfo;
       if (!info.viewportVisible) continue;
       if (info.pixelWidth == 0 || info.pixelHeight == 0) continue;
@@ -99,13 +121,7 @@ final class KittyPlacementCache {
     // screen coordinates; destination rects are recomputed from current
     // metrics and viewport offset on every sync so scrolling needs no
     // rescan beyond this one.
-    if (virtualZ.isNotEmpty) {
-      final runs = _unicode.resolve(
-        terminal,
-        rows: key.rows,
-        cols: key.cols,
-        viewportOffset: key.viewportOffset,
-      );
+    if (runs.isNotEmpty) {
       for (final run in runs) {
         final z = virtualZ[run.imageId];
         if (z == null) continue;
@@ -137,6 +153,7 @@ final class KittyPlacementCache {
 
     if (_snapshots.length > 1) _snapshots.sort(_compareZ);
     _images.evict(_liveImageIds);
+    _lastRuns = runs;
     _key = key;
     return true;
   }
@@ -144,6 +161,18 @@ final class KittyPlacementCache {
   void _clear() {
     _snapshots.clear();
     _liveImageIds.clear();
+  }
+
+  static bool _runsEqual(
+    List<KittyPlaceholderRun> a,
+    List<KittyPlaceholderRun> b,
+  ) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   static int _compareZ(KittyPlacementSnapshot a, KittyPlacementSnapshot b) {

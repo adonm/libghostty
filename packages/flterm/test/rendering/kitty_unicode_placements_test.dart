@@ -105,6 +105,9 @@ void main() {
         rgba[i * 4] = 255;
         rgba[i * 4 + 3] = 255;
       }
+      // NOTE: terminal.write consumes UTF-8 bytes; the base64 payload is
+      // ASCII so codeUnits is safe here, but every placeholder write below
+      // must use utf8.encode (non-BMP) or cells arrive as U+FFFD.
       terminal.write(
         Uint8List.fromList(
           '\x1b_Gq=2,a=T,C=1,U=1,f=32,s=$size,v=$size,i=$id;'
@@ -157,13 +160,41 @@ void main() {
       expect(snapshot.src, const Rect.fromLTWH(0, 0, 8, 8));
     });
 
+    test('refreshes snapshots when runs move without image traffic', () {
+      writeVirtualImage();
+      writePlaceholderRow(0);
+      writePlaceholderRow(1);
+      expect(
+        placements.sync(terminal, geometryDirty: true),
+        isTrue,
+      );
+      expect(
+        placements.snapshots.single.dst,
+        const Rect.fromLTWH(0, 0, 32, 32),
+      );
+
+      // Placeholder cells are grid text: moving them bumps no Kitty
+      // generation, so the cache must notice the moved runs itself.
+      // NOTE: utf8.encode, here and everywhere — see writePlaceholderRow.
+      terminal.write(utf8.encode('\x1b[1;1H        \x1b[2;1H        '));
+      writePlaceholderRow(2);
+      expect(
+        placements.sync(terminal, geometryDirty: false),
+        isTrue,
+      );
+      expect(
+        placements.snapshots.single.dst,
+        const Rect.fromLTWH(0, 32, 32, 16),
+      );
+    });
+
     test('clears snapshots when placeholder cells are erased', () {
       writeVirtualImage();
       writePlaceholderRow(0);
       expect(placements.sync(terminal, geometryDirty: true), isTrue);
       expect(placements.snapshots, isNotEmpty);
 
-      terminal.write(Uint8List.fromList('\x1b[1;1H        '.codeUnits));
+      terminal.write(utf8.encode('\x1b[1;1H        '));
       expect(placements.sync(terminal, geometryDirty: true), isTrue);
       expect(placements.snapshots, isEmpty);
     });
@@ -176,6 +207,21 @@ void main() {
       expect(placements.sync(terminal, geometryDirty: true), isTrue);
       expect(placements.snapshots, isEmpty);
       expect(placements.sync(terminal, geometryDirty: false), isFalse);
+    });
+
+    test('recognizes palette-index foreground ids', () {
+      writeVirtualImage(id: 7);
+      // 38;5;7 packs the id as a palette index rather than truecolor RGB.
+      final esc = String.fromCharCode(0x1b);
+      terminal.write(utf8.encode('\x1b[1;1H'));
+      terminal.write(
+        utf8.encode('$esc[38;5;7m$placeholder\u{0305}\u{030D}$esc[39m'),
+      );
+
+      expect(placements.sync(terminal, geometryDirty: true), isTrue);
+      final snapshots = placements.snapshots.toList();
+      expect(snapshots, hasLength(1));
+      expect(snapshots.single.imageId, 7);
     });
   });
 }
