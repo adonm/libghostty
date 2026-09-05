@@ -14,6 +14,8 @@
 /// ```
 library;
 
+export 'package:listen/listen.dart' show Listenable;
+
 export 'src/api/build_info.dart' show LibGhosttyBuildInfo;
 export 'src/api/color.dart'
     show
@@ -96,7 +98,6 @@ export 'src/generated/libghostty_enums.g.dart'
         TerminalProgressState,
         TerminalScreen,
         TerminalUnknownSequenceTag;
-export 'src/listenable.dart' show Listenable;
 export 'src/types/aliases.dart'
     show
         ClipboardReadCallback,
