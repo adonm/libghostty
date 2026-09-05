@@ -1,11 +1,11 @@
 import 'dart:typed_data';
 
+import 'package:listen/listen.dart' show ChangeNotifier;
 import 'package:meta/meta.dart';
 
 import '../../bindings/bindings.dart';
 import '../../bindings/types.dart';
 import '../../generated/libghostty_enums.g.dart';
-import '../../listenable.dart';
 import '../../types/types.dart';
 import '../key/kitty_key_flags.dart';
 import '../key/mods.dart';
@@ -95,7 +95,7 @@ part 'tracked_grid_ref.dart';
 ///
 /// terminal.dispose();
 /// ```
-final class Terminal with Listenable {
+final class Terminal with ChangeNotifier {
   static final _finalizer = Finalizer(bindings.terminal.terminalFree);
 
   final LibGhosttyHandle _handle;
@@ -715,12 +715,13 @@ final class Terminal with Listenable {
   /// Calling [dispose] more than once is safe. Every other member throws a
   /// [StateError] after disposal. Do not call [dispose] from an active terminal
   /// callback.
+  @override
   void dispose() {
     if (_disposed) return;
     bindings.terminal.terminalFree(_handle);
     _finalizer.detach(this);
     _disposed = true;
-    clearListeners();
+    super.dispose();
   }
 
   /// Encodes the complete terminal state into a portable snapshot.
